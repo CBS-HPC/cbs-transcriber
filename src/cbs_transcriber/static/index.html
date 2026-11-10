@@ -129,7 +129,7 @@
           <div class="page-heading">
             <div class="project-heading-main">
               <div class="project-title-row">
-                <h1 id="project-title">Make room for the conversation.</h1>
+                <h1 id="project-title"></h1>
                 <button
                   id="project-rename"
                   type="button"
@@ -141,10 +141,7 @@
                   <span aria-hidden="true">✎</span>
                 </button>
               </div>
-              <p id="project-description">
-                Bring your recordings and transcripts together in one calm
-                workspace.
-              </p>
+              <p id="project-description" hidden></p>
               <details
                 id="project-notes-panel"
                 class="description-notes"
@@ -163,23 +160,14 @@
               </details>
             </div>
           </div>
-          <div id="welcome" class="welcome-card">
-            <div class="welcome-art" aria-hidden="true">
-              <span></span><span></span><span></span><span></span><span></span
-              ><span></span><span></span><span></span><span></span>
-            </div>
-            <span class="eyebrow">FROM RECORDING TO UNDERSTANDING</span>
-            <h2>Every conversation has a story.</h2>
-            <p>
-              Create a project, add a recording, and find the words that matter.
-            </p>
-            <button id="welcome-create" class="button primary">
-              Create your first project <span aria-hidden="true">↗</span>
-            </button>
-            <div class="welcome-features">
-              <span>◉ Audio & video</span><span>▤ UCloud imports</span
-              ><span>↓ NVivo export</span>
-            </div>
+          <div id="welcome" class="empty-library-brand">
+            <img
+              src="/static/brand/cbs-logo-vertical.svg"
+              alt="Copenhagen Business School"
+              width="134"
+              height="250"
+            />
+            <h1>Transcriber</h1>
           </div>
           <div id="project-content" hidden>
             <div class="library-toolbar">
@@ -742,12 +730,10 @@
           </button>
         </div>
         <p class="settings-note">
-          A library holds projects, transcripts and their history. Opening
-          another library restarts the app; finish or cancel queued and running
-          jobs first. The library you open is remembered for next time.
-          <strong>Remove from list</strong> only hides a library.
-          <strong>Delete permanently</strong> first shows exactly what would be
-          deleted and kept; nothing is deleted until you confirm.
+          A library contains your projects, transcripts and history. Finish or
+          cancel jobs before switching; opening another library restarts the app
+          and is remembered next time. Delete permanently shows a preview and
+          asks you to confirm before removing anything.
         </p>
         <ul class="library-list" data-library-list></ul>
         <section
@@ -2538,12 +2524,10 @@
           <details id="local-concurrency" class="enhance-rules">
             <summary>Parallel local tasks</summary>
             <p class="settings-note">
-              How many files this computer works on at once in each step. More
-              parallel tasks finish large batches sooner but use more processor
-              and memory, so other programs may feel slower meanwhile. Changes
-              apply to the next file a step starts; running files continue.
-              Provider requests also count against your provider's rate limits;
-              a rate-limited part stops its file until you retry it.
+              Set how many files each step handles at once. Higher limits use
+              more processor and memory and may slow other apps. Changes affect
+              new work; running files continue. Stay within your provider's rate
+              limits. Retry a file if a part is rate-limited.
             </p>
             <div class="form-columns">
               <label
@@ -2964,16 +2948,13 @@
               role="status"
             ></p>
             <p id="enhance-cloud-check-help" class="field-note">
-              When enabled, Check UCloud again can prepare the base CBS Runtime
-              and baseline public caches. Progress and Stop are in Activity.
-              Opening this tab only checks readiness. Additional selected ASR
-              profiles and gated speaker models are checked separately when
-              requested. Preparation may download several GB, take 20 minutes or
-              longer and incur UCloud charges. No recording is uploaded until
-              ready; your Hugging Face token stays on this computer. When
-              disabled, the app asks once per request. Automatic placement never
-              prepares. The connection shown above is the saved CBS Runtime
-              connection; save UCloud connection changes first.
+              Opening this tab only checks readiness. With preparation enabled,
+              Check UCloud again can download the base runtime and public
+              models. This may take 20+ minutes, several GB and UCloud credits;
+              use Activity to follow or stop it. Other models are checked when
+              requested. Recordings wait until ready; your Hugging Face token
+              stays here. Otherwise, each request asks first. Automatic never
+              prepares. Save connection changes first.
             </p>
           </fieldset>
           <div class="form-columns" id="response-options">

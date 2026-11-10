@@ -141,6 +141,57 @@
     "value": null
   },
   "post_mvp": {
-    "status": "separate checkpoints required; not included in MVP baseline"
+    "status": "in progress; cumulative token checkpoint available",
+    "phase": "Post-publication planning, usage documentation and development",
+    "after_utc": "2026-11-10T12:41:11Z",
+    "cutoff_utc": null,
+    "development_branch": "codex/post-mvp-work",
+    "tokens": null,
+    "actual_credits": null,
+    "actual_cost": null,
+    "limits": "Not included in the frozen MVP baseline. The phase remains open; cumulative checkpoints are not separate increments and must not be added together. Billing remains unknown, not zero.",
+    "checkpoints": [
+      {
+        "id": "codex-post-mvp-20261110T162013Z",
+        "provider": "Codex",
+        "kind": "cumulative since phase start; do not sum checkpoints",
+        "start_exclusive_utc": "2026-11-10T12:41:11Z",
+        "cutoff_inclusive_utc": "2026-11-10T16:20:13Z",
+        "cutoff_copenhagen": "2026-11-10T17:20:13+01:00",
+        "development_branch": "codex/post-mvp-work",
+        "base_commit": "708a27bef24430a7ce4e1a7e379f98f131f6dcd6",
+        "source_status": "work in progress at cutoff; not an installed release",
+        "model": "gpt-6.1-sol",
+        "tokens": {
+          "input": 207954580,
+          "cached_input_subset": 205716736,
+          "uncached_input": 2237844,
+          "output": 577236,
+          "reasoning_output_subset": 273476,
+          "total": 208531816
+        },
+        "by_role_total_tokens": {
+          "main": 86456758,
+          "subagents": 122075058
+        },
+        "contributing_sessions": {"main": 1, "subagents": 10},
+        "retained_project_sessions_scanned": 183,
+        "positive_usage_updates": 1023,
+        "duplicate_snapshots_excluded_in_window": 6,
+        "checks": {
+          "delta_equals_last_usage": true,
+          "model_and_role_totals_reconcile": true,
+          "frozen_mvp_prefixes_and_reports_unchanged": true,
+          "baseline_replay_matches": true,
+          "counter_or_arithmetic_anomalies": 0,
+          "missing_or_invalid_records": 0
+        },
+        "speed": null,
+        "credit_equivalent": null,
+        "actual_credits": null,
+        "actual_cost": null,
+        "limits": "Retained local usage observations only; later and in-flight updates excluded. No post-MVP speed/rate/billing claim or Claude estimate. Private source hashes and reproduction evidence retained outside Git."
+      }
+    ]
   }
 }

@@ -106,6 +106,23 @@ def selection(client, wav_bytes, remote, monkeypatch):
     )
     assert response.status_code == 201, response.text
     store = client.app.state.store
+    # Native protocol fixtures explicitly seed a successful synthetic Settings observation.
+    # They exercise submissions against the mocked remote below, never a real setup check.
+    from cbs_transcriber import provider_connection
+
+    configured = providers.profile(store, response.json()["id"])
+    settings = providers.Settings.model_validate(configured["settings"])
+    checks = provider_connection.Checks()
+    proof = checks.issue(settings, SECRET, checks.begin(settings))
+    providers.save_profile(
+        store,
+        client.app.state.credentials,
+        configured["name"],
+        settings,
+        identifier=configured["id"],
+        connection_check=proof,
+        connection_checks=checks,
+    )
     with store.library_lock():
         project = store.create_project("Synthetic batch")
         recordings = []

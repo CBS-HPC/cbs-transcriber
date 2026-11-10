@@ -144,6 +144,9 @@ def test_v10_fleurs_through_app_queue_playback_persistence_export(
     data = tmp_path / "library"
     app = create_app(data, credentials=credentials)
     with TestClient(app, headers={"X-CBS-Request": "1"}) as client:
+        from admission_support import checked_connection
+
+        checked_connection(app.state.store, credentials)
         report = RUNNER["run_app_suite"](
             client, SUITE, manifest, tmp_path / "run", timeout=30, poll_interval=0.02
         )

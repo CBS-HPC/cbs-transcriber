@@ -9,6 +9,7 @@ from test_portable_routes import capture, recording_with_original
 from test_portable_routes import served as served
 
 from cbs_transcriber import portable_semantics
+from cbs_transcriber import store as store_module
 from cbs_transcriber.transcripts import normalize_segments
 
 
@@ -33,7 +34,14 @@ def test_source_resource_normalizes_crlf_before_enforcing_byte_limit(tmp_path, m
         portable_semantics._resource("source.py", digest, len(canonical))
 
 
-def test_working_role_backup_receipt_keeps_schema18_bytes(served, monkeypatch):
+@pytest.fixture
+def schema18_served(request, monkeypatch):
+    monkeypatch.setattr(store_module, "SCHEMA_VERSION", 18)
+    return request.getfixturevalue("served")
+
+
+def test_working_role_backup_receipt_keeps_schema18_bytes(schema18_served, monkeypatch):
+    served = schema18_served
     store = served.app.state.store
     recording = recording_with_original(store)
     store.add_result(

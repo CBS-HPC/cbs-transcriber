@@ -488,7 +488,7 @@ def test_fresh_admission_complete_package_and_isolated_restore(
     Complete means the implemented portable inventory, not model/runtime restoration
     or verification of every historical transformation. No live HTTP/GPU/cloud call.
     """
-    from admission_support import inspect_and_materialize
+    from admission_support import checked_connection, inspect_and_materialize
 
     from cbs_transcriber import libraries, original_inspection, provider_capture, restored_owners
     from cbs_transcriber.store import Store
@@ -556,6 +556,7 @@ def test_fresh_admission_complete_package_and_isolated_restore(
             api_key=token,
             remember=False,
         )
+        checked_connection(source, credentials, profile["id"])
         response = client.post(
             "/api/transcriptions",
             json={"recording_ids": [fresh_id], "provider_ids": [profile["id"]]},

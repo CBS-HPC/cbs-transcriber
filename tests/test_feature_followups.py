@@ -2,7 +2,7 @@ import sqlite3
 import sys
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import checked_connection, inspect_and_materialize
 
 from cbs_transcriber import enhancement, enhancement_api, language_preferences, media, providers
 from cbs_transcriber.store import Store
@@ -14,6 +14,7 @@ def prepared(client, monkeypatch, wav_bytes):
     monkeypatch.setattr(enhancement, "check_runtime", lambda options, **kw: {"ready": True})
     client.put("/api/settings", json={"api_key": "synthetic", "remember": False})
     store = client.app.state.store
+    checked_connection(store, client.app.state.credentials, models=list(providers.OPENAI_MODELS))
     project = store.create_project("Feature choices")
     recording = store.create_recording(project["id"], "synthetic.wav")
     directory = store.directory(recording["id"])
@@ -290,6 +291,7 @@ def test_v45_compatible_backend_with_both_features_needs_no_enhancement(client, 
             "capability": "words_speakers",
         },
     ).json()
+    checked_connection(client.app.state.store, client.app.state.credentials, combined["id"])
     response = client.post(
         "/api/transcriptions",
         json=request(

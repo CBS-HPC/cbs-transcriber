@@ -5,6 +5,7 @@
 | Project | A collection of recordings belonging to one research activity. |
 | Classification | Standard or Protected; Protected projects require saved provider eligibility. |
 | Enabled model | A saved model shown in new-run selectors; independent of Protected approval and without cancelling frozen jobs when disabled. |
+| Checked connection | A saved operational observation of an explicit Settings connection check, bound to connection identity and credentials for new transcription; separate from model capability, institutional approval and frozen recovery. |
 | Provider approval | The user's permission to use an endpoint/model for a project classification; not institutional certification. |
 | Project folder | Chosen managed location for media, sources and readable result snapshots; SQLite remains authoritative. |
 | Recording | An imported audio or video source and its associated transcript. |
@@ -82,7 +83,7 @@
 | Transcription job | One requested operation producing text for a recording. |
 | Chunk / part | A bounded portion of a recording sent in one transcription request. |
 | Library | The user's locally managed projects, recordings, transcripts, and results. |
-| Remove from list | Hides a library from the main list; its files and work are kept (ADR 0128). |
+| Legacy list visibility | Retained hide/show API and identity-bound preferences (ADR 0128). Current Library UI retires Remove from list and displays previously hidden entries; files/work are unchanged. |
 | Permanent library deletion | Deletes an inactive library folder and the external project folders it exclusively owns, after a read-only preview and typed confirmation (ADR 0144). |
 | Deletion reservation | The record in the app folder that blocks opening or recreating a library folder until an interrupted permanent deletion is restored or finished. |
 | NVivo transcript export | A platform-specific timed text file for importing beside media in NVivo Windows or Mac. |

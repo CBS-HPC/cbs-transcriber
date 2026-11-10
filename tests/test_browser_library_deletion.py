@@ -67,6 +67,28 @@ def test_library_dialog_previews_confirms_and_deletes(page, tmp_path, monkeypatc
         expect(panel).to_contain_text("Will be kept")
         expect(panel).to_contain_text(str(shared))
         expect(panel).to_contain_text(f"Another library ({busy.root}) also uses this folder")
+        # Explanatory notes must not squeeze the confirmation into a vertical column.
+        for width in (1440, 390):
+            page.set_viewport_size({"width": width, "height": 1000})
+            field = panel.locator("label:has([data-library-delete-name])")
+            field.scroll_into_view_if_needed()
+            panel_box = panel.bounding_box()
+            field_box = field.bounding_box()
+            label_box = field.locator("span").bounding_box()
+            input_box = field.locator("input").bounding_box()
+            assert field_box["width"] >= panel_box["width"] * 0.85
+            assert input_box["width"] >= panel_box["width"] * 0.85
+            assert input_box["y"] >= label_box["y"] + label_box["height"]
+            assert input_box["x"] + input_box["width"] <= panel_box["x"] + panel_box["width"]
+            for note in panel.locator(":scope > .field-note").all():
+                note_box = note.bounding_box()
+                assert note_box["y"] + note_box["height"] <= field_box["y"]
+            for item in panel.locator("ul > li").all():
+                path_box = item.locator(".library-path").bounding_box()
+                facts_box = item.locator(".library-facts").bounding_box()
+                assert facts_box["y"] >= path_box["y"] + path_box["height"]
+            assert panel.evaluate("node => node.scrollWidth <= node.clientWidth + 1")
+        page.set_viewport_size({"width": 1440, "height": 1000})
         confirm = panel.get_by_role("button", name="Delete permanently", exact=True)
         expect(confirm).to_be_disabled()
         name = panel.get_by_label("type the folder name")

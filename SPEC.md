@@ -30,6 +30,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   approved coding. NVivo owns advanced thematic interpretation, matrices, code co-occurrence,
   cross-interview comparisons and research reporting. See docs/ai-analysis-nvivo-roadmap.md.
 - UI: action button captions omit trailing ellipses, including dialog launchers and busy states.
+- Post-MVP work stays on a separate local branch; no merge/push to main, installed-app reload
+  or release. Limit frontend decisions to explicit requests; broader choices await colleague
+  feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
+  project creation remains accessible through existing navigation at narrow widths too.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space
   permits, wrapping on narrow screens. Uncertainty controls follow Next to review.
 - UI: Text / Word and timing editor dropdown defaults to Text; audio/video switch retains position.
@@ -274,6 +278,16 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V209: New HTTP transcription selection/admission requires the saved connection's explicit
+  successful Settings check, bound to actual resolved identity and credential (ADR 0167).
+  Operational settings row 10 never enters provider versions, frozen jobs, provenance or public
+  credential diagnostics. Newer checks invalidate older save proofs; wrong drafts and late
+  responses cannot revoke another saved identity. Missing/stale/unavailable connections do not
+  hide results, Stop, Retry or recovery. No passive probes, expiry or ASR-readiness claim.
+- V210: Text-editor word following is an off-by-default local prototype. Only exact current
+  saved wording and verified intervals may highlight; differing drafts pause it. Native text
+  input retains focus, caret/selection, scroll choices and undo without value replacement or
+  invented timing. No duplicate saved-text panel, provider call or persisted transcript change.
 - V192: Next to review uses the current validated manual review snapshot and rendered passage
   order, skipping Checked and wrapping from the end. Zero model hints or hidden uncertainty
   controls cannot disable available manual work. Disable on all checked, unavailable/loading
@@ -418,12 +432,16 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   feature_disabled); reads, exports, Stop/Retry/Reconnect/cleanup and frozen jobs are unchanged.
   Without UCloud processing, Automatic freezes this computer and Repair all stays local; main
   ships full and tests pin full unless a run sets the profile explicitly (ADR 0145).
-- V177: Removing a non-current library from the main list is reversible presentation only;
-  retain its files, jobs and remote obligations in a visible Hidden libraries disclosure.
-  Bind suppression to directory/database identities so a replacement is discoverable; reject
-  stale actions and an open target. Corrupt visibility metadata never hides libraries.
-  Hiding never grants permanent-deletion authority; that is the separate V183 (ADR 0144).
+- V177: Legacy visibility APIs/preferences remain reversible presentation only, bound to
+  directory/database identities; reject stale actions and an open target. Current Library
+  UI offers no hide/show action or separate hidden disclosure: every discovered entry,
+  including previously hidden ones, is accessible without rewriting its stored preference.
+  Retain files, jobs and remote obligations. Corrupt visibility metadata cannot hide entries;
+  a legacy hide action never grants V183 permanent-deletion authority (ADRs 0128/0144).
 - V183: Delete permanently applies only to a listed, non-current library no server holds.
+  Its confirmation label/input, paths and counts stay readable within wide/narrow panels;
+  explanatory notes never squeeze the field into a shared column. The UI has no hide action;
+  previously hidden entries remain accessible without rewriting their visibility preferences.
   Its preview never opens the target database in place or creates/writes any target file
   (including `server.lock`): it reads a private copy with unchanged signatures and walks
   without following links. Unsettled jobs, UCloud/Runtime/preparation obligations, local
@@ -1104,6 +1122,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V116: concurrent runtime preparation rechecks the stamp under its lock and never rebuilds
   beneath active readers. Persistent reader-lock inode remains stable; destructive preparation
   requires exclusive ownership; legacy reader uncertainty refuses destructive rebuilding.
+  Release verifies this invocation's acquired directory/owner identities, exact marker and
+  absence of foreign contents; unlink only the marker and remove the empty directory. Changed
+  ownership preserves evidence, never recursive removal or age/terminal-owner reclaim (ADR 0168).
   Heartbeat/idle/deadline drain preserves exact accepted outcomes; cleanup requires durable
   local output/result receipts and a terminal allocation, targeting only its owned folder.
 - V117: stopping a native parent batch may cascade to a shared runtime follow-up only when
@@ -1760,6 +1781,12 @@ T124|x|Conservative Text v2 word-time retention, exact legacy replay and repinne
 T125|x|Individual proven deleted-passage restoration, lifecycle barriers and exact current Working edit; 173 backend/structure, seven MVP browser and complete portable-chain checks pass|V185,V186,V197,I.passage-delete-undo,ADR0157
 T126|x|Background project/recording ZIP Activity with frozen selection, cancellation, retained streaming download and source-operation fencing; 22 final backend/API, 99 broader (two setup skips) and 16 browser checks pass|V5,V8,V189,V193,V199,I.export-settings,ADR0158
 T127|x|Reviewed history/response/store fixes loaded in rc4; exact packaged 100/600 synthetic audits pass source/correctness, 0/48 sampled content actions above 3 s, long save median 2.69 s and Undo split 2.49 s; retain n=3/hardware/history limits and separate background times|V3,V8,V79,V149,V200,I.history,I.transcript,ADR0159
+T128|~|Post-MVP checked-provider new-work selectors/admission with identity/credential-bound operational receipts; independent review and focused regression gate in progress; branch only|V209,V8,I.providers,ADR0167
+T129|x|Branch-only short README/linked guides, requested blue-on-light empty state and Library hide removal/confirmation layout; local links and synthetic narrow/wide checks; no installed-app change|V183,V8,I.libraries
+T130|x|Off-by-default actual Text textarea playback-overlay prototype; 28 distinct scoped browser cases and independent review pass, with explicit Chromium/Windows limits; branch only|V210,V188,V59,I.transcript
+T131|x|Offline CBS Runtime release confined to acquired lock/marker identities and exact contents; no recursive removal or reclaim; synthetic checks with explicit Linux/symlink limits|V116,I.enhance-api,ADR0168
+T132|x|Audit seventeen hidden work areas, explicit missing-only native rerun/owned-folder inventory design and synthetic bilingual anonymisation review proofs; production/privacy/live acceptance remain open|V8,V18,V20,I.native-batch
+T133|.|Versioned whole-passage alignment-fit invalidation for fresh local/cloud realignment; reproduced unmarked and partial-map gaps; preserve legacy transforms, exact history and lost-reply successors|V89,V200,I.history,I.transcript
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1768,7 +1795,7 @@ T43l|x|bounded local timing artifacts and atomic idempotent same-result Apply pr
 T43m|~|actual Runtime accepted-request/preparation/stage bytes bound into producer creation provenance and verified offline; live producer acceptance remains|V151,V153,V154,I.history,I.enhance-api
 T43n|~|fresh API request descriptor/normalized output capture, creation binding, reports and portable roles/kernel verified offline; live provider acceptance remains; native capture delivered by T43o|V161,V144,I.history,I.providers
 T43o|~|fresh native Transcriber single/batch submission projection and exact output capture, journal-checked creation binding, reports and portable roles/kernel verified with mocked UCloud; live allocation acceptance remains|V164,V144,I.history,I.ucloud-transcriber
-T43p|~|bounded startup Working designation of an untouched sole existing result with owned-folder snapshot recovery; synthetic checks on an isolated branch, independent review and real-library activation remain|V149,V182,I.history
+T43p|~|Existing sole-result Working implementation is present but its schema18 guard refuses current schema19; genuine schema18/refusal tests pass; current-schema eligibility/recovery design and activation remain|V149,V182,I.history
 T85j|x|production finite resident Runtime cohorts with one identity-bound real model slot and exact stage/task receipts|V153,V154,I.enhance-api
 T85k|x|synthetic late-cohort/Stop/partial/child-loss/restart/constructor checks; real throughput remains T85e|V153,V154,I.enhance-api
 T80b|~|approved cancelled five-file Runtime folder moved to Trash through main; five legacy singleton obligations protected pending recovery/disposition|V118,V155,I.runtime-discard
@@ -1833,3 +1860,12 @@ B411|2026-11-10|Concurrent identical hint loads repeated GETs and hints arriving
 B412|2026-11-10|Save/Split repeatedly decoded and canonically encoded unchanged current mirrors and freshly generated successor history for Working validation|V200,V207; bounded format/binding facts retain fresh actual-byte hashes, strict JSON-origin seeding and the legacy cold fallback
 B413|2026-11-10|Conservative Text correspondence rejected ordinary manual changes including a repeated word appended at the end|V208; fresh versioned manual policy preserves proven timing and nulls uncertain words instead of blocking wording
 B414|2026-11-10|Split remained enabled inside a completely timed word and then failed on the server, while valid between-word splits depended on timing or a paused audio point|V208; lexical control/server boundaries and timing-independent fresh split policy, preserving legacy inverse behavior
+B415|2026-11-10|Library deletion preview inherited a floated field-note, squeezing confirmation into a 0–26px column|V183; scoped float clearing, full-width confirmation and separated path/count blocks; 1440/390px browser regression
+B416|2026-11-10|Runtime supervisor trusted only HOLDING_LOCK and recursively removed a changed/replaced .prepare-lock during release|V116; verify acquired directory/owner identities and exact contents, unlink marker then rmdir; no reclaim or claim to resolve historical runtime-busy
+B417|2026-11-10|Removing the duplicate empty-page Create action exposed an old mobile rule that hid the sole navigation action|V8; retain existing sidebar Create at narrow widths and verify creation from the new empty state
+B418|2026-11-10|New checked-provider admission correctly refused synthetic native fixtures that never performed Settings Check|V209; explicitly check/save mocked fixture connections, preserving fresh-work refusal and frozen recovery rather than blanket trust
+B419|2026-11-10|Unmarked same-result realignment keeps text-bound old alignment-fit hints; partial word maps can also leave omitted-word hints beyond per-word stale markers|V89,T133; reproduced offline; versioned whole-passage remedy designed, not implemented; never alter legacy successor reconstruction as a quick fix
+B420|2026-11-10|A retained native Retry mock rejected the existing request_timeout polling keyword, obscuring the survivor-recovery assertion|V8; align only the mock signature with the released polling contract and retain same-allocation/no-recreation assertions
+B421|2026-11-10|A Delete-stage test replaced shared shutil.rmtree globally, treating unrelated temporary-directory teardown as premature logical Delete|V183; scope the mock to Delete-owned targets while retaining transaction-boundary assertions
+B422|2026-11-10|Initial connection-check prototype allowed stale successful proofs or racing Save/failure observations to restore readiness, and malformed records could crash selectors|V209; resolved-identity generations, save/failure fencing and strict bounded observation validation; focused concurrent/replay/malformed regressions
+B423|2026-11-10|Private coverage audit normalized backslashes inside parameter IDs, collapsing two distinct cases although module execution included both|V8; preserve literal parameter tails/case/Unicode, normalize file prefixes only, use Pytest XML name mapping and assert fresh raw inventory/unique outcome equality

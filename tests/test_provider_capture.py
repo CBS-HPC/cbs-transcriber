@@ -8,7 +8,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import checked_connection, inspect_and_materialize
 from conftest import finish_media
 from report_support import selected_view_report
 
@@ -54,6 +54,7 @@ def fresh_api_job(client, wav_bytes):
         },
     )
     assert response.status_code == 200, response.text
+    checked_connection(client.app.state.store, client.app.state.credentials)
     response = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]})
     assert response.status_code == 202, response.text
     store = client.app.state.store

@@ -106,6 +106,32 @@ this documentation work occurred after publication and are excluded from the MVP
 
 ## Future checkpoints
 
+The post-publication phase is now open on `codex/post-mvp-work`. Its accounting starts strictly
+after the fixed MVP cutoff above and includes later planning/documentation and implementation.
+Its final cutoff/total remain open. A separate reconciled cumulative checkpoint is available
+through **10 November, 16:20:13 UTC / 17:20:13 Copenhagen**; no MVP counters were changed.
+
+| Post-MVP checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 207,954,580 |
+| Cached input, already included above | 205,716,736 |
+| Uncached input | 2,237,844 |
+| Output | 577,236 |
+| Reasoning output, already included above | 273,476 |
+| Total | **208,531,816** |
+
+All included updates are attributed to `gpt-6.1-sol`: 86,456,758 tokens in the main chat and
+122,075,058 across ten contributing subagent sessions. The audit scanned 183 retained project
+sessions, included 1,023 positive updates and excluded six duplicate snapshots in the window.
+Delta/last-update arithmetic and model/role totals reconcile; replay exactly reproduces the
+frozen MVP baseline, and all frozen prefixes/reports remain unchanged. Detailed source hashes,
+usage-only observations and reproduction scripts remain private.
+
+This checkpoint starts strictly after the MVP cutoff. Later/in-flight observations are not
+included. It is cumulative within the still-open post-MVP phase: **do not add it to later
+cumulative checkpoints**. No post-MVP speed/rate assumption, credit equivalent, actual debit,
+cost or Claude usage is claimed; those values stay null/pending rather than zero.
+
 Add separate non-overlapping phases for post-MVP planning/implementation and subsequent
 releases. Record explicit boundaries, provider/model, input/cache/output categories, scope,
 coverage gaps and rate assumptions. If a cumulative milestone view is useful, label it as

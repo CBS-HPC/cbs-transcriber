@@ -320,6 +320,9 @@ def test_mvp_transcription_follow_ups_stay_local_and_hidden_providers_are_refuse
         remember=False,
     )
     rows = client.get("/api/providers").json()["providers"]
+    from admission_support import checked_connection
+
+    checked_connection(store, credentials, openai["id"])
     runtime = next(p["id"] for p in rows if p["model"].startswith("whisperx/"))
     request = {"recording_ids": [recording["id"]]}
     refused(

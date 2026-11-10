@@ -35,8 +35,27 @@ fail() {
 
 LOCK="$RT/.prepare-lock"
 HOLDING_LOCK=0
+LOCK_ID=''
+LOCK_OWNER_ID=''
+owns_lock() {
+  [ -n "$LOCK_ID" ] && [ -n "$LOCK_OWNER_ID" ] || return 1
+  [ -d "$LOCK" ] && [ ! -L "$LOCK" ] || return 1
+  [ "$(stat -c '%d:%i' -- "$LOCK" 2>/dev/null)" = "$LOCK_ID" ] || return 1
+  [ -f "$LOCK/owner" ] && [ ! -L "$LOCK/owner" ] || return 1
+  [ "$(stat -c '%d:%i' -- "$LOCK/owner" 2>/dev/null)" = "$LOCK_OWNER_ID" ] || return 1
+  cmp -s "$LOCK/owner" <(printf '%s\n' "$GENERATION") || return 1
+  local entry
+  for entry in "$LOCK"/* "$LOCK"/.[!.]* "$LOCK"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    [ "$entry" = "$LOCK/owner" ] || return 1
+  done
+}
 release_lock() {
-  [ "$HOLDING_LOCK" = 1 ] && rm -rf "$LOCK"
+  # Cooperative owners never replace a held lock. Path checks cannot fence external
+  # replacement between check/unlink; uncertainty retains evidence, never recurses.
+  if [ "$HOLDING_LOCK" = 1 ] && owns_lock; then
+    rm -- "$LOCK/owner" && rmdir -- "$LOCK"
+  fi
   HOLDING_LOCK=0
 }
 trap release_lock EXIT
@@ -46,7 +65,9 @@ take_lock() {
   # Age does not prove the previous preparer has stopped. Never steal a live lock.
   mkdir "$LOCK" 2>/dev/null || return 1
   HOLDING_LOCK=1
-  echo "$GENERATION" > "$LOCK/owner"
+  LOCK_ID=$(stat -c '%d:%i' -- "$LOCK") || return 1
+  (set -o noclobber; printf '%s\n' "$GENERATION" > "$LOCK/owner") || return 1
+  LOCK_OWNER_ID=$(stat -c '%d:%i' -- "$LOCK/owner")
 }
 
 prepared() {

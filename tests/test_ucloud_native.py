@@ -228,6 +228,9 @@ def native_selection(client, wav_bytes, setup=None):
     )
     assert response.status_code == 201, response.text
     provider = response.json()
+    from admission_support import checked_connection
+
+    checked_connection(store, client.app.state.credentials, provider["id"])
     project = store.create_project("Synthetic")
     recording = store.create_recording(project["id"], "test.v2.wav")
     directory = store.directory(recording["id"])
@@ -308,12 +311,13 @@ def test_v76_invalid_saved_connection_blocks_new_admission(client, native_job, p
     provider["ucloud_transcriber"]["product"] = product
     response = client.put("/api/providers/" + provider["id"], json=provider)
     assert response.status_code == 200
+    assert response.json()["connection_state"] == "unconfigured"
     response = client.post(
         "/api/transcriptions",
         json={"provider_ids": [provider["id"]], "recording_ids": [recording["id"]]},
     )
     assert response.status_code == 400
-    issue = "discover a project" if product is None else PRODUCT["id"]
+    issue = "discover a project" if product is None else "Finish provider setup"
     assert issue in response.json()["detail"]
     assert store.all("SELECT * FROM jobs") == before
 

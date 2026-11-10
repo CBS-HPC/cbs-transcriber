@@ -169,5 +169,7 @@ record explicitly rather than rewriting its historical rationale.
 - [0164 — Reuse host canonical JSON facts with fresh byte bindings](0164-host-canonical-json-facts.md)
 - [0165 — Share live hint requests and repaint decorations](0165-hint-request-and-paint-reuse.md)
 - [0166 — Keep manual wording and splitting independent of word timing](0166-timing-independent-manual-editing.md)
+- [0167 — Checked connections for new transcription](0167-checked-provider-new-work.md)
+- [0168 — Release only the acquired preparation lock](0168-owned-preparation-lock-release.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

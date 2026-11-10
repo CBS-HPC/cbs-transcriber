@@ -165,6 +165,16 @@ def test_project_isolation_and_busy_delete(client, wav_bytes):
 def test_transcription_queue_replacement_is_explicit(client, wav_bytes, credentials):
     with client.app.state.store.library_lock():
         credentials.keys[OPENAI_URL] = "fake-key"
+        # Queue behavior starts from an explicitly checked synthetic connection.
+        from cbs_transcriber import provider_connection, providers
+
+        store = client.app.state.store
+        profile = providers.profile(store, providers.default_provider_id(store))
+        settings = providers.Settings.model_validate(profile["settings"])
+        checks = provider_connection.Checks()
+        proof = checks.issue(settings, "fake-key", checks.begin(settings), models=[settings.model])
+        with store.connection() as db:
+            checks.save(db, proof, settings, "fake-key")
         recording = finish_media(client, upload(client, wav_bytes))
         response = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]})
         assert response.status_code == 202

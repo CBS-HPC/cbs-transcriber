@@ -238,6 +238,11 @@ def test_disabled_models_reject_new_transcription_and_selection_but_frozen_work_
                 },
             )
         else:
+            # This fresh-acceptance branch explicitly checks the synthetic connection;
+            # the legacy branch above remains unchecked to verify frozen Retry behavior.
+            from test_provider_connection import check_save
+
+            check_save(client, monkeypatch)
             accepted = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]})
             assert accepted.status_code == 202, accepted.text
             queued = inspect_and_materialize(store, credentials, [accepted.json()[0]["id"]])[0]

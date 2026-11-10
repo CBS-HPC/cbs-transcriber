@@ -9,6 +9,30 @@ import wave
 from cbs_transcriber import input_admission, original_inspection
 
 
+def checked_connection(store, credentials, provider_id=None, *, models=None):
+    """Explicit successful synthetic Settings check; no transport or credential changes.
+
+    Call only where the test's configured provider is meant to accept fresh work. Keep
+    raw/frozen settings exact and use real server-issued proof validation/persistence.
+    """
+    from cbs_transcriber import provider_connection, providers
+
+    selected = providers.profile(store, provider_id or providers.default_provider_id(store))
+    settings = providers.Settings.model_validate(selected["settings"])
+    key = credentials.get(providers.credential_scope(settings))
+    providers.require_key(settings, key)
+    checks = provider_connection.Checks()
+    proof = checks.issue(
+        settings,
+        key,
+        checks.begin(settings),
+        models=[settings.model] if models is None else models,
+    )
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        checks.save(db, proof, settings, key)
+
+
 def write_original_wav(store, recording):
     """Create a real three-second silent WAV before a fresh synthetic request."""
     assert recording["filename"].endswith(".wav")

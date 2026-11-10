@@ -113,6 +113,11 @@ def test_later_rename_failure_restores_all_live_files_before_returning_409(
     denied = fixture["paths"][1 if kind == "recording" else -1]
     renamed, removed = [], []
     rename = deletion_files._rename
+    rmtree = deletion_files.shutil.rmtree
+    project_folder = store.project_folder(fixture["project"]["id"]).resolve()
+    deletion_parents = {path.resolve().parent for path in fixture["paths"]} | {
+        project_folder.parent
+    }
 
     def fail_later(path, destination):
         if path == denied:
@@ -122,9 +127,16 @@ def test_later_rename_failure_restores_all_live_files_before_returning_409(
             renamed.append(path)
         return result
 
-    def reject_recursive_cleanup(*args, **kwargs):
-        removed.append(args[0])
-        pytest.fail("A failed precommit Delete must never recursively remove live files")
+    def reject_recursive_cleanup(path, *args, **kwargs):
+        candidate = Path(path).resolve()
+        staged = any(
+            ancestor.name.startswith(".cbs-delete-") and ancestor.parent in deletion_parents
+            for ancestor in (candidate, *candidate.parents)
+        )
+        if candidate.is_relative_to(project_folder) or staged:
+            removed.append(path)
+            pytest.fail("A failed precommit Delete must never recursively remove live files")
+        return rmtree(path, *args, **kwargs)
 
     monkeypatch.setattr(deletion_files, "_rename", fail_later)
     monkeypatch.setattr(deletion_files.shutil, "rmtree", reject_recursive_cleanup)

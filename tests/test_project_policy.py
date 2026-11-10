@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import checked_connection, inspect_and_materialize
 from conftest import finish_media
 from prior_schema import remove_later_additions
 
@@ -44,6 +44,7 @@ def test_v18_protected_projects_enforce_provider_approval(
     ).json()
     request = {"recording_ids": [recording["id"]], "provider_ids": [provider["id"]]}
     store = client.app.state.store
+    checked_connection(store, credentials, provider["id"])
     with store.library_lock():
         assert client.post("/api/transcriptions", json=request).status_code == 403
         assert (
@@ -88,6 +89,7 @@ def test_v18_worker_rechecks_between_chunks_and_changed_endpoint(
         },
     ).json()
     store = client.app.state.store
+    checked_connection(store, credentials, provider["id"])
     with store.library_lock():
         accepted = client.post(
             "/api/transcriptions",
@@ -129,6 +131,7 @@ def test_v18_classification_change_blocks_pending_jobs(client, wav_bytes, creden
         },
     ).json()
     store = client.app.state.store
+    checked_connection(store, credentials, provider["id"])
     with store.library_lock():
         accepted = client.post(
             "/api/transcriptions",

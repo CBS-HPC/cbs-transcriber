@@ -597,6 +597,14 @@ Usage accounting does not authorize paid calls, provider jobs or changes to the 
 
 ## Workflow
 
+Current post-MVP work (10 November 2026) stays on `codex/post-mvp-work`, descended from
+the clean public history. Do not merge/push it to main, update Desktop main, publish a release
+or replace the installed MVP. Limit frontend decisions to the user's explicit changes;
+broader layouts and workflows await colleague feedback. Text-editor word following remains
+an opt-in prototype. CBS Runtime work is offline ownership/recovery design and mocked checks;
+anonymisation is decision-ready design and synthetic local prototyping. Neither authorizes
+preparation, paid jobs, private uploads or live cleanup. Missing-output reruns are design only.
+
 Implement the approved plan autonomously. Update TODO checkboxes as work passes verification.
 On failure, trace the cause and add a regression test where useful; record material lessons
 in SPEC's bug section. Avoid adding new approval gates for routine reversible development.

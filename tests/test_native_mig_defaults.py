@@ -50,6 +50,7 @@ def put_raw(store, identifier, payload):
 def test_marker_transition_preserves_frozen_protected_and_runtime_identities(client, credentials):
     store = client.app.state.store
     settings = settings_for()
+    settings.ucloud_transcriber.hours = 4  # Explicitly seed the pre-feature connection identity.
     saved = providers.save_profile(store, credentials, "Legacy native", settings)
     payload = raw_profile(store, saved["id"])
     for field in (providers.NATIVE_CHOICE, providers.NATIVE_PRODUCT):
@@ -431,6 +432,9 @@ def test_http_request_freezes_one_profile_choice_for_complete_recording_cohort(
         remember=False,
         native_allocation_choice="full",
     )
+    from admission_support import checked_connection
+
+    checked_connection(store, credentials, saved["id"])
     project = store.create_project("Cohort")
     rows = [store.create_recording(project["id"], name) for name in ("one.wav", "two.wav")]
     reads = []

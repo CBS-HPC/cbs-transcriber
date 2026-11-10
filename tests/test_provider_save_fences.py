@@ -45,7 +45,10 @@ def test_default_settings_honors_a_supplied_version_before_restoring_policy_or_k
         },
     )
     assert stale.status_code == 409, stale.text
-    assert client.get("/api/settings").json() == revoked.json() | {"has_key": True}
+    assert client.get("/api/settings").json() == revoked.json() | {
+        "has_key": True,
+        "connection_state": "recheck_required",
+    }
     assert credentials.keys[loaded["base_url"]] == "current-key"
     fresh = client.put(
         "/api/settings",

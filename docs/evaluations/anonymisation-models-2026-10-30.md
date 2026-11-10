@@ -5,6 +5,12 @@ measured. Scores are the publishers' own (self-reported) unless stated otherwise
 [the anonymisation proposal](../proposals/anonymisation-2026-10-30.md), which already plans local
 rules, a known-names list and PII-Tracer on a UCloud MIG slice.
 
+10 November checkpoint: this remains dated desk research, not a validated detector selection.
+No model/dependency/licence claims below were rechecked in the resumed offline prototype work.
+The [bilingual synthetic baseline and next evaluation gate](anonymisation-offline-2026-11-10.md)
+separate executable fixture observations from candidate-model claims. The historical “best”
+and “default” recommendations below are candidates for that gate, not accepted app defaults.
+
 App constraints checked in this worktree: Python 3.13, CPU `torch` 2.8.0 and `transformers` 4.57.6
 are locked in `uv.lock` (WhisperX 3.8.6). Any candidate that needs another `transformers` major
 version, `spacy-transformers` or `trust_remote_code` cannot share the app `.venv` as it is.

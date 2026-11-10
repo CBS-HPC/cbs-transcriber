@@ -5,7 +5,7 @@ import json
 import threading
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import checked_connection, inspect_and_materialize
 from conftest import finish_media
 
 from cbs_transcriber import enhancement, media, providers
@@ -41,6 +41,7 @@ def custom_provider(client, *, approved_for=None):
         },
     )
     assert response.status_code == 200, response.text
+    checked_connection(client.app.state.store, client.app.state.credentials)
 
 
 def fresh_job(client, recording):
@@ -112,6 +113,7 @@ def test_official_openai_fitting_original_is_sent_without_copy_or_conversion(
         json={"provider_type": "openai", "model": "whisper-1", "api_key": "synthetic-not-a-key"},
     )
     assert response.status_code == 200, response.text
+    checked_connection(client.app.state.store, client.app.state.credentials)
     job = fresh_job(client, recording)
     assert job["params"]["audio_transport"] == "original"
     store, queue = client.app.state.store, client.app.state.queue

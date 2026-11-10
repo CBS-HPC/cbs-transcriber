@@ -4,7 +4,7 @@ import sqlite3
 import threading
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import checked_connection, inspect_and_materialize
 from test_passage_timing import request as timing_request
 from test_passage_timing import untimed as untimed
 from test_realign import edit, realign_jobs
@@ -53,6 +53,7 @@ def test_v142_whole_asr_accepts_preparing_playback_without_inspecting_source(
             "capability": "segments",
         },
     )
+    checked_connection(client.app.state.store, client.app.state.credentials)
     no_preflight(monkeypatch)
     store = client.app.state.store
     with store.library_lock():
@@ -104,6 +105,7 @@ def test_v142_http_admission_preserves_conflict_and_policy_statuses(client, wav_
             "capability": "segments",
         },
     )
+    checked_connection(store, client.app.state.credentials)
     no_preflight(monkeypatch)
     body = {"recording_ids": [recording["id"]]}
     with store.library_lock():
@@ -176,6 +178,7 @@ def test_v142_original_asr_finishes_before_playback_and_inserts_exact_followup_o
             "capability": "segments",
         },
     )
+    checked_connection(store, credentials)
     calls = []
     monkeypatch.setattr(enhancement, "require_local_runtime", lambda options: None)
 
@@ -266,6 +269,7 @@ def test_v142_waiting_actions_are_guarded_and_retained_after_clear(client, wav_b
             "capability": "segments",
         },
     )
+    checked_connection(store, client.app.state.credentials)
     with store.library_lock():
         job = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]}).json()[
             0
@@ -310,6 +314,7 @@ def test_v142_upload_has_no_claimable_row_before_closed_file_metadata_commit(
             "capability": "segments",
         },
     )
+    checked_connection(store, client.app.state.credentials)
     with store.library_lock():
         thread = threading.Thread(
             target=lambda: responses.append(

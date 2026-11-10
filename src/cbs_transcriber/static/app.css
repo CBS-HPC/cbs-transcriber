@@ -440,6 +440,19 @@ label {
   flex-direction: column;
   gap: 0.3rem;
   margin: 0.65rem 0;
+  clear: both;
+  overflow-wrap: anywhere;
+}
+.library-delete .field-note {
+  float: none;
+}
+.library-delete .library-path,
+.library-delete .library-facts {
+  display: block;
+}
+.library-delete input {
+  width: 100%;
+  min-width: 0;
 }
 /* Collections (ADR 0060): chips in the recordings toolbar. */
 .collection-chips {
@@ -736,67 +749,23 @@ html.busy * {
   align-items: center;
   gap: 8px;
 }
-.welcome-card {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: linear-gradient(
-    145deg,
-    var(--surface-blue),
-    var(--surface-blue) 65%,
-    var(--surface-blue)
-  );
-  min-height: 410px;
+.empty-library-brand {
+  min-height: min(65vh, 640px);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 45px 20px;
+  gap: 24px;
+  padding: 40px 16px;
   text-align: center;
 }
-.welcome-card h2 {
-  font-family: "CBS New", "CBS Sans", sans-serif;
-  font-size: 30px;
-  letter-spacing: -0.5px;
-  font-weight: 400;
-  margin-bottom: 12px;
+.empty-library-brand img {
+  max-width: 100%;
+  object-fit: contain;
 }
-.welcome-card p {
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 25px;
-}
-.welcome-art {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  height: 65px;
-  margin-bottom: 25px;
-}
-.welcome-art span {
-  display: block;
-  width: 5px;
-  height: 18px;
-  background: var(--cbs-mid-blue);
-  border-radius: 4px;
-}
-.welcome-art span:nth-child(2n) {
-  height: 30px;
-  background: var(--cbs-light-blue);
-}
-.welcome-art span:nth-child(3n) {
-  height: 48px;
-  background: var(--cbs-blue);
-}
-.welcome-art span:nth-child(5) {
-  height: 62px;
-  background: var(--cbs-dark-blue);
-}
-.welcome-features {
-  display: flex;
-  gap: 32px;
-  color: var(--muted);
-  font-size: 10px;
-  margin-top: 35px;
+.empty-library-brand h1 {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 44px);
 }
 .library-toolbar {
   display: flex;
@@ -1659,6 +1628,41 @@ select {
   line-height: 1.8;
   font-size: 13px;
   margin: 12px 0;
+}
+.passage-text-surface {
+  position: relative;
+  margin: 12px 0;
+  background: var(--surface-blue);
+  border-radius: 6px;
+}
+.passage .passage-text-surface textarea {
+  position: relative;
+  margin: 0;
+  background: transparent;
+  isolation: isolate;
+}
+.passage-text-overlay {
+  position: absolute;
+  inset: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 5px;
+}
+.passage-text-overlay-content {
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: 13px;
+  line-height: 1.8;
+  color: transparent;
+}
+.passage-text-overlay [data-editor-word] {
+  color: transparent;
+  background: transparent;
+}
+.passage-text-overlay [data-editor-word].current {
+  background: var(--cbs-light-blue);
+  border-radius: 2px;
 }
 .edit-actions {
   display: flex;
@@ -2669,41 +2673,12 @@ dialog .checkbox-label {
 }
 /* CBS identity: original logo, display typography, and approved colour roles. */
 h1,
-.welcome-card h2,
 .dialog-heading h2,
 .drawer-heading h2 {
   font-family: "CBS New", "CBS Sans", sans-serif;
   font-weight: 700;
   letter-spacing: 0.015em;
   color: var(--cbs-blue);
-}
-.welcome-card {
-  background: var(--cbs-blue);
-  border-color: var(--cbs-blue);
-}
-.welcome-card h2 {
-  font-size: 38px;
-}
-.welcome-card h2,
-.welcome-card p,
-.welcome-card .eyebrow,
-.welcome-card .welcome-features {
-  color: white;
-}
-.welcome-card .button.primary {
-  background: white;
-  color: var(--cbs-dark-blue);
-  border-color: white;
-}
-.welcome-card .button.primary:hover {
-  background: var(--cbs-light-blue);
-  border-color: var(--cbs-light-blue);
-}
-.welcome-art span:nth-child(3n) {
-  background: var(--cbs-light-blue);
-}
-.welcome-art span:nth-child(5) {
-  background: white;
 }
 .badge,
 .speaker-badge {
@@ -2752,7 +2727,6 @@ h1,
 .sidebar-create,
 .local-note,
 .local-note small,
-.welcome-features,
 .card-file,
 .card-bottom,
 .dropzone p,
@@ -2964,13 +2938,6 @@ h1,
   .transcript {
     max-height: 440px;
   }
-  .welcome-features {
-    gap: 15px;
-    font-size: 9px;
-  }
-  .welcome-card h2 {
-    font-size: 25px;
-  }
   .toast {
     left: 55%;
     max-width: 80vw;
@@ -2989,8 +2956,7 @@ h1,
     display: inline-flex;
   }
   .nav-heading,
-  .sidebar-bottom .local-note,
-  .sidebar-create {
+  .sidebar-bottom .local-note {
     display: none;
   }
   .sidebar nav {
@@ -3096,10 +3062,6 @@ h1,
   .video-stage {
     right: 15px;
     width: 250px;
-  }
-  .welcome-features {
-    flex-wrap: wrap;
-    justify-content: center;
   }
   .toast {
     left: 50%;

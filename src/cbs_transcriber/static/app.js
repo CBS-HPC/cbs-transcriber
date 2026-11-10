@@ -215,6 +215,14 @@ async function loadProviders() {
   state.defaultProvider = data.default_provider_id;
   renderProviderSelects();
 }
+async function refreshProviderConnections() {
+  const data = await api("/providers");
+  state.providers = data.providers;
+  state.defaultProvider = data.default_provider_id;
+  renderProviderSelects();
+  if (state.recording) renderEditorDetails();
+  else renderRecordings();
+}
 function visibleProvider(provider) {
   return ["openai", "ucloud"].includes(providerTab(provider));
 }
@@ -231,6 +239,7 @@ function allowedProviders() {
     (p) =>
       offeredProvider(p) &&
       p.enabled !== false &&
+      p.connection_ready === true &&
       (!state.project ||
         state.project.classification === "standard" ||
         p.approved_for?.includes(state.project.classification)),
@@ -242,7 +251,7 @@ function providerOptions(
   forSettings = false,
 ) {
   if (!providers.length)
-    return `<option value="">${state.providers.some((provider) => offeredProvider(provider) && provider.enabled !== false) ? "No approved providers" : "No enabled models"}</option>`;
+    return `<option value="">${providerEmptyLabel()}</option>`;
   const option = (p) =>
     `<option value="${p.id}" ${p.id === selected ? "selected" : ""} ${!forSettings && p.provider_type === "ucloud-vllm" && (!p.base_url || !p.has_key) ? "disabled" : ""}>${h(forSettings ? configurationLabel(p.name, p.model) : modelLabel(p))}${p.provider_type === "ucloud-vllm" && !p.base_url ? " · awaiting deployment" : ""}</option>`;
   return providers.every((p) => providerTab(p) === "ucloud")
@@ -305,14 +314,22 @@ function providerKindOptions(selected) {
     ucloud: "UCloud",
   };
   const kinds = [...new Set(allowedProviders().map(providerTab))];
-  if (!kinds.length)
-    return `<option value="">${state.providers.some((provider) => offeredProvider(provider) && provider.enabled !== false) ? "No approved providers" : "No enabled models"}</option>`;
+  if (!kinds.length) return `<option value="">${providerEmptyLabel()}</option>`;
   return kinds
     .map(
       (kind) =>
         `<option value="${kind}" ${kind === selected ? "selected" : ""}>${labels[kind]}</option>`,
     )
     .join("");
+}
+function providerEmptyLabel() {
+  const enabled = state.providers.filter(
+    (provider) => offeredProvider(provider) && provider.enabled !== false,
+  );
+  if (!enabled.length) return "No enabled models";
+  return enabled.some((provider) => provider.connection_ready === true)
+    ? "No approved providers"
+    : "Connect a provider in Settings";
 }
 function selectedProvider(selected) {
   return (
@@ -1413,9 +1430,7 @@ async function createProject() {
   await refreshProjects();
   location.hash = `/projects/${project.id}`;
 }
-["#sidebar-create", "#welcome-create"].forEach((id) =>
-  $(id).addEventListener("click", handle(createProject)),
-);
+$("#sidebar-create").addEventListener("click", handle(createProject));
 $("#browse-project-storage").addEventListener(
   "click",
   handle(async (event) => {
@@ -2067,9 +2082,9 @@ async function route() {
   $("#file-settings-open").hidden = true;
   $("#file-settings-dialog").close();
   $("#welcome").hidden = !!state.project;
+  $("#library-view > .page-heading").hidden = !state.project;
   $("#project-content").hidden = !state.project;
-  $("#project-title").textContent =
-    state.project?.name || "Make room for the conversation.";
+  $("#project-title").textContent = state.project?.name || "";
   renderProjectSettings();
   document.title = state.project
     ? `${state.project.name} · CBS Transcriber`
@@ -6594,6 +6609,13 @@ function editableTimedWords(segment) {
   }
   return true;
 }
+function textPlaybackPrototypeEnabled() {
+  try {
+    return localStorage.getItem("cbs-text-playback-prototype") === "1";
+  } catch {
+    return false;
+  }
+}
 function passageEditorMarkup(segment) {
   const replay = replayWindow(segment);
   const label = replay?.fullRecording
@@ -6631,7 +6653,11 @@ function passageEditorMarkup(segment) {
       <button type="button" class="button passage-editor-replay" data-action="editor-replay" data-replay-label="${h(label)}" title="${h(help)}" ${replay && state.recording.status === "ready" ? "" : "disabled"}>▷ ${h(label)}</button>
     </div>
     <div data-editor-pane="text">
-      <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
+      <div class="passage-text-surface">
+        <div class="passage-text-overlay" aria-hidden="true" hidden><div class="passage-text-overlay-content"></div></div>
+        <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
+      </div>
+      <p class="split-help" data-text-playback-note hidden></p>
       <p class="split-help">Place the cursor between words to split. Save text changes first. If you know the split's audio position, pause playback there; unavailable timing is left unknown.</p>
       <label class="passage-realign" data-feature="editor_realign" ${featureOn("editor_realign") ? "" : "hidden"}><input type="checkbox" data-editor-realign ${featureOn("editor_realign") && (passageRealignChoice ?? $("#realign-edits").checked) ? "checked" : ""}>Realign this passage after saving on this computer</label>
       <p class="split-help" data-text-draft-note hidden>Save or reset the word changes before saving passage text.</p>
@@ -6646,6 +6672,7 @@ function passageEditorMarkup(segment) {
   </div>`;
 }
 function renderEditorPlayback(segment, editor) {
+  refreshTextEditorPlayback(segment, editor);
   renderPassageText(
     editor.querySelector(".editor-playback-text"),
     segment,
@@ -6656,7 +6683,109 @@ function renderEditorPlayback(segment, editor) {
       ? "Saved text for playback"
       : "Saved text for playback · word highlighting unavailable";
 }
+let activeTextPlaybackWord = null;
+function syncTextEditorScroll(editor) {
+  if (editor.querySelector(".passage-text-overlay").hidden) return;
+  const input = editor.querySelector("textarea");
+  const content = editor.querySelector(".passage-text-overlay-content");
+  // The native scrollbar reduces the textarea's text width. Match its actual
+  // client box, including padding, rather than the surrounding editor width.
+  const width = `${input.clientWidth}px`;
+  const transform = `translate(${-input.scrollLeft}px, ${-input.scrollTop}px)`;
+  if (content.style.width !== width) content.style.width = width;
+  if (content.style.transform !== transform)
+    content.style.transform = transform;
+}
+function refreshTextEditorPlayback(segment, editor, textDirty = null) {
+  const enabled = textPlaybackPrototypeEnabled();
+  const input = editor.querySelector("textarea");
+  const overlay = editor.querySelector(".passage-text-overlay");
+  const content = overlay.firstElementChild;
+  const note = editor.querySelector("[data-text-playback-note]");
+  note.hidden = !enabled;
+  if (!enabled) {
+    overlay.hidden = true;
+    return;
+  }
+  if (!content.childNodes.length) {
+    const characters = Array.from(segment.text);
+    const fragment = document.createDocumentFragment();
+    let cursor = 0;
+    for (const index of playbackWords(segment)) {
+      const word = segment.words[index];
+      const { char_start: start, char_end: end } = word;
+      if (
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        start < cursor ||
+        end <= start ||
+        end > characters.length ||
+        characters.slice(start, end).join("") !== word.word
+      )
+        continue;
+      fragment.append(
+        document.createTextNode(characters.slice(cursor, start).join("")),
+      );
+      const mark = document.createElement("span");
+      mark.dataset.editorWord = index;
+      mark.textContent = word.word;
+      fragment.append(mark);
+      cursor = end;
+    }
+    // Textarea values normalize CR/CRLF. Normalize only the presentation copy;
+    // the saved text, draft and word map remain untouched.
+    fragment.append(
+      document.createTextNode(characters.slice(cursor).join("") + "\u200b"),
+    );
+    for (const node of fragment.childNodes)
+      node.textContent = node.textContent.replace(/\r\n?/g, "\n");
+    content.append(fragment);
+  }
+  const changed = textDirty ?? passageEditText(segment, input) !== segment.text;
+  const available = !!content.querySelector("[data-editor-word]");
+  overlay.hidden = changed || !available;
+  note.textContent = changed
+    ? "Prototype · Highlighting pauses while the draft differs from saved wording. Save or undo to follow existing word timing."
+    : available
+      ? "Prototype · Highlights use existing saved word timing; untimed words stay unhighlighted."
+      : "Prototype · Word highlighting is unavailable for this passage.";
+  syncTextEditorScroll(editor);
+}
+function tickTextEditorPlayback(segment, index, player) {
+  const editor = state.editing
+    ? document
+        .getElementById(`passage-${state.editing}`)
+        ?.querySelector(".passage-editor")
+    : null;
+  const overlay = editor?.querySelector(".passage-text-overlay");
+  const word =
+    overlay &&
+    !overlay.hidden &&
+    !editor.querySelector('[data-editor-pane="text"]').hidden &&
+    segment?.id === state.editing &&
+    index >= 0
+      ? overlay.querySelector(`[data-editor-word="${index}"]`)
+      : null;
+  if (editor && !overlay.hidden) syncTextEditorScroll(editor);
+  if (word === activeTextPlaybackWord) return;
+  activeTextPlaybackWord?.classList.remove("current");
+  word?.classList.add("current");
+  activeTextPlaybackWord = word;
+  if (word && !player.paused) followEditorPlaybackWord(word);
+}
 function followEditorPlaybackWord(word) {
+  const surface = word?.closest(".passage-text-surface");
+  if (surface) {
+    if (!$("#follow-playback").checked) return;
+    const input = surface.querySelector("textarea");
+    const box = input.getBoundingClientRect();
+    const target = word.getBoundingClientRect();
+    if (target.top < box.top + 4) input.scrollTop += target.top - box.top - 4;
+    else if (target.bottom > box.bottom - 4)
+      input.scrollTop += target.bottom - box.bottom + 4;
+    syncTextEditorScroll(surface.closest(".passage-editor"));
+    return;
+  }
   const scroll = word?.closest(".editor-playback-scroll");
   if (
     !scroll ||
@@ -6771,6 +6900,7 @@ function refreshPassageDraft(segment, editor) {
   const textarea = editor.querySelector("textarea");
   const textDirty = passageEditText(segment, textarea) !== segment.text;
   const wordDirty = timedWordDraftChanged(segment, editor);
+  refreshTextEditorPlayback(segment, editor, textDirty);
   state.dirty = textDirty || wordDirty;
   editVersion++;
   saved(state.dirty ? "Unsaved changes" : undefined);
@@ -6978,6 +7108,14 @@ $("#transcript").addEventListener("input", (event) => {
   const editor = event.target.closest(".passage-editor");
   if (segment && editor) refreshPassageDraft(segment, editor);
 });
+$("#transcript").addEventListener(
+  "scroll",
+  (event) => {
+    if (event.target.matches(".passage-text-surface textarea"))
+      syncTextEditorScroll(event.target.closest(".passage-editor"));
+  },
+  true,
+);
 function refreshCursorSplit(event) {
   const input = event?.target?.matches?.(".passage-editor textarea")
     ? event.target
@@ -8054,7 +8192,10 @@ $("#follow-playback").addEventListener("change", (event) => {
   const current = segmentAt(state.recording.segments, position);
   const passage = current ? $(`#passage-${current.id}`) : null;
   if (state.editing)
-    followEditorPlaybackWord(passage?.querySelector(".word.current"));
+    followEditorPlaybackWord(
+      passage?.querySelector(".passage-text-overlay .current") ||
+        passage?.querySelector(".word.current"),
+    );
   else
     revealPlaybackPassage(passage?.querySelector(".word.current") || passage);
   if (state.comparison) {
@@ -8149,6 +8290,7 @@ function tick() {
         else revealPlaybackPassage(word);
       }
     }
+    tickTextEditorPlayback(segment, index, player);
     tickComparison(position, player);
   }
   requestAnimationFrame(tick);
@@ -8287,6 +8429,7 @@ async function connectNative() {
       )
       .join("");
     $("#ucloud-check-results").textContent = result.note;
+    providerConnectionCheck = result.connection_check || null;
     return result.ready;
   } catch (error) {
     if (token === modelCheckToken && sameProvider(context))
@@ -8294,6 +8437,7 @@ async function connectNative() {
     throw error;
   } finally {
     button.disabled = false;
+    await refreshProviderConnections();
   }
 }
 $("#connect-ucloud").addEventListener("click", handle(connectNative));
@@ -8329,6 +8473,8 @@ for (const [id] of nativeFields) {
 }
 $("#check-ucloud").addEventListener("click", async () => {
   const token = ++modelCheckToken;
+  const context = providerContext();
+  providerConnectionCheck = null;
   const button = $("#check-ucloud");
   button.disabled = true;
   $("#ucloud-check-results").textContent =
@@ -8345,7 +8491,8 @@ $("#check-ucloud").addEventListener("click", async () => {
         ucloud_transcriber: nativeSetup(),
       },
     });
-    if (token !== modelCheckToken) return;
+    if (token !== modelCheckToken || !sameProvider(context)) return;
+    providerConnectionCheck = result.connection_check || null;
     $("#native-parameter-details").open = Boolean(result.issue);
     $("#ucloud-check-results").innerHTML =
       `<p>${h(result.application.name)} ${h(result.application.version)} · ${h(result.product.id)}</p><p>${h(result.issue || result.note)}</p><ul>${result.parameters.map((p) => `<li>${h(p.name)}: ${h(p.type)}${p.options?.length ? ` · ${h(p.options.map((o) => o.value).join(", "))}` : ""}</li>`).join("")}</ul>`;
@@ -8354,9 +8501,11 @@ $("#check-ucloud").addEventListener("click", async () => {
       $("#ucloud-check-results").textContent = error.message;
   } finally {
     button.disabled = false;
+    await refreshProviderConnections();
   }
 });
 let modelCheckToken = 0;
+let providerConnectionCheck = null;
 let providerFormVersion = 0;
 let providerFormProfile = null;
 function providerContext() {
@@ -8454,6 +8603,7 @@ $("#catalog-model").addEventListener("change", (event) => {
 });
 function clearModelCheck() {
   modelCheckToken++;
+  providerConnectionCheck = null;
   $("#model-check-results").replaceChildren();
   $("#ucloud-check-results").replaceChildren();
 }
@@ -9192,7 +9342,9 @@ function fillProvider(settings) {
   $("#base-url").value = settings.base_url;
   $("#api-key").value = "";
   $("#key-status").textContent = settings.has_key
-    ? "Key available"
+    ? settings.connection_ready
+      ? "Connection checked"
+      : "Key available · check the connection before transcription"
     : "No key saved";
   $("#model").value = settings.model;
   $("#language").value = settings.language;
@@ -9589,6 +9741,8 @@ $("#forget-hosting-keys").addEventListener(
 );
 $("#check-models").addEventListener("click", async () => {
   const token = ++modelCheckToken;
+  const context = providerContext();
+  providerConnectionCheck = null;
   const button = $("#check-models");
   button.disabled = true;
   $("#model-check-results").textContent =
@@ -9603,7 +9757,8 @@ $("#check-models").addEventListener("click", async () => {
         api_key: $("#api-key").value || null,
       },
     });
-    if (token !== modelCheckToken) return;
+    if (token !== modelCheckToken || !sameProvider(context)) return;
+    providerConnectionCheck = result.connection_check || null;
     $("#model-check-results").innerHTML =
       `<ul class="model-availability">${result.models.map((model) => `<li><span>${h(model.name)}</span><strong class="${model.listed ? "listed" : "unlisted"}">${model.listed ? "Listed" : "Not listed"}</strong></li>`).join("")}</ul><p class="settings-note">${h(result.note)}</p>`;
   } catch (error) {
@@ -9612,6 +9767,7 @@ $("#check-models").addEventListener("click", async () => {
         `Could not check availability: ${error.message}`;
   } finally {
     button.disabled = false;
+    await refreshProviderConnections();
   }
 });
 function capabilityHelp() {
@@ -9705,6 +9861,7 @@ $("#settings-form").addEventListener(
               ...document.querySelectorAll('[name="approved-for"]:checked'),
             ].map((input) => input.value),
             api_key: key || null,
+            connection_check: providerConnectionCheck,
             remember: $("#remember-key").checked,
           },
         },

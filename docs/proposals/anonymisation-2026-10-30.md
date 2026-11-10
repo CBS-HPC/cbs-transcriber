@@ -1,6 +1,10 @@
 # Anonymisation of final transcripts — proposal, 30 October 2026
 
-Status: proposal for the user's decisions; nothing is implemented yet.
+Status: original proposal for the user's decisions; no production feature is implemented.
+Offline design and disposable synthetic examples resumed on 10 November 2026. The later
+[local review design](anonymisation-local-prototype-2026-10-30.md) refines this proposal;
+the [bilingual evaluation plan](../evaluations/anonymisation-offline-2026-11-10.md) records
+the measured fixture limits. Neither introduces an in-app workflow or selects a model.
 
 The [local review design and synthetic demonstration](anonymisation-local-prototype-2026-10-30.md)
 refine the weekend experiment. They require explicit occurrence/speaker decisions and a
@@ -40,7 +44,8 @@ every replacement is reviewed, and the method is documented for papers and data 
      below 4096 tokens at passage boundaries with overlap for spans crossing a boundary.
      Frozen model identity/revision, Protected approval and preparation consent as for other
      UCloud work. Run mode is a decision below.
-   - Named speakers are pseudonymised automatically from the speaker table.
+   - Every displayed speaker label requires an explicit reviewed replacement. Speaker labels
+     do not establish identity and are not automatically linked to named people in the text.
 2. **Review (mandatory).** An *Anonymise* view per recording highlights suggested spans with
    their category and confidence; accept/reject each, select text to add a span, and apply a
    decision to every occurrence of the same entity. Low-confidence spans are flagged.
@@ -48,10 +53,11 @@ every replacement is reviewed, and the method is documented for papers and data 
    replacement, so "Mette" is the same pseudonym in every interview. Style is a decision
    below (consistent pseudonyms such as "Person 3" / "Organisation 2", or category tags).
 4. **Output as a new result.** Applying the review appends an *Anonymised* result based on
-   the exact Working version (never overwriting it). Words outside replaced spans keep their
-   timing; replaced spans keep the passage bounds but carry no word timing.
-5. **The key (entity ↔ original).** Stored only in the local library, never in exports,
-   research reports or (by default) backups. Retention is a decision below.
+   the exact Working version (never overwriting it). The first synthetic trial omits all timing;
+   retained timing and inactive publication/designation need separate accepted implementation.
+5. **The key (entity ↔ original).** No mapping is persisted by the experiment. Proposed
+   exports exclude it; custody, storage, backup/restore and retention remain decisions. Existing
+   complete backups cannot promise key exclusion without a separate capture/storage design.
 6. **Exports and reports.** Project export, NVivo export and research reports gain an
    "Anonymised versions" choice; reports document the method (rules, model and revision,
    counts of accepted/rejected/added spans per category) without original text.
@@ -75,4 +81,5 @@ every replacement is reviewed, and the method is documented for papers and data 
    public endpoint), a connection to a hosted endpoint from the vLLM agent, or both.
 2. Replacement style: consistent pseudonyms, category tags, or a per-project choice.
 3. Key retention: keep a local re-identification key, or make anonymisation irreversible.
-4. Whether to start P1 now.
+4. Production scope/publication and permission to implement P1; the resumed offline examples
+   do not establish that implementation or permission to use real research data.

@@ -69,6 +69,19 @@ def test_save_native_connection_exposes_each_catalog_model_through_api(client, c
     )
     assert response.status_code == 201, response.text
     source_id = response.json()["id"]
+    from cbs_transcriber import provider_connection
+
+    checks = provider_connection.Checks()
+    token = checks.issue(settings, "synthetic-key", checks.begin(settings))
+    save_profile(
+        client.app.state.store,
+        credentials,
+        "My native connection",
+        settings,
+        identifier=source_id,
+        connection_check=token,
+        connection_checks=checks,
+    )
     providers = [
         p
         for p in client.get("/api/providers").json()["providers"]

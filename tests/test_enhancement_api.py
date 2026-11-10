@@ -1179,6 +1179,8 @@ def runtime_has_models(cloud, *keys):
 
 
 def transcription_request(client, prepare=False, **features):
+    from admission_support import checked_connection
+
     store = client.app.state.store
     project = store.create_project("WhisperX transcription")
     recording = store.create_recording(project["id"], "synthetic.wav")
@@ -1195,6 +1197,7 @@ def transcription_request(client, prepare=False, **features):
         settings,
         identifier=profile["id"],
     )
+    checked_connection(store, client.app.state.credentials, profile["id"])
     response = client.post(
         "/api/transcriptions",
         json={

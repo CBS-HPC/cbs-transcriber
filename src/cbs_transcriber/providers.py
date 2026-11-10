@@ -378,14 +378,18 @@ def stored_version(name, value):
 
 
 def public_profile(store, credentials, identifier):
+    from . import provider_connection
+
     raw = store.one("SELECT * FROM providers WHERE id=?", (identifier,))
     settings = Settings.model_validate_json(raw["value"])
+    key = credentials.get(credential_scope(settings)) if settings.base_url else ""
     result = {
         "id": raw["id"],
         "version": stored_version(raw["name"], raw["value"]),
         "name": raw["name"],
         **settings.model_dump(),
-        "has_key": bool(settings.base_url and credentials.get(credential_scope(settings))),
+        "has_key": bool(key),
+        **provider_connection.public_state(store, settings, key),
     }
     if any(
         json.loads(raw["value"]).get(key) is True
@@ -689,6 +693,8 @@ def save_profile(
     ucloud_token=None,
     hf_token=None,
     native_allocation_choice=None,
+    connection_check=None,
+    connection_checks=None,
 ):
     from .store import new_id, now
 
@@ -882,6 +888,15 @@ def save_profile(
                         "UPDATE providers SET value=? WHERE id=?",
                         (json.dumps(payload, ensure_ascii=False, separators=(",", ":")), row["id"]),
                     )
+        if connection_check is not None:
+            if connection_checks is None:
+                raise ValueError("Check the provider connection in Settings before saving.")
+            connection_checks.save(
+                db,
+                connection_check,
+                settings,
+                api_key if api_key is not None else credentials.get(credential_scope(settings)),
+            )
         if settings.provider_type == "ucloud-vllm":
             tokens = {"ucloud_token": ucloud_token, "hf_token": hf_token}
             for name, scope in setup_key_scopes(settings).items():
@@ -892,8 +907,16 @@ def save_profile(
     return public_profile(store, credentials, identifier)
 
 
-def set_default_provider(store, identifier):
-    require_enabled(Settings.model_validate(profile(store, identifier)["settings"]))
+def set_default_provider(store, identifier, credentials=None):
+    settings = Settings.model_validate(profile(store, identifier)["settings"])
+    require_enabled(settings)
+    if credentials is not None:
+        from . import provider_connection
+
+        with store.connection() as db:
+            provider_connection.require_ready(
+                db, settings, credentials.get(credential_scope(settings))
+            )
     store.execute(
         "UPDATE settings SET value=? WHERE id=2", (json.dumps({"default_provider_id": identifier}),)
     )
@@ -939,6 +962,8 @@ def save_settings(
     expected_version=None,
     ucloud_token=None,
     hf_token=None,
+    connection_check=None,
+    connection_checks=None,
 ):
     identifier = default_provider_id(store)
     return save_profile(
@@ -952,6 +977,8 @@ def save_settings(
         expected_version=expected_version,
         ucloud_token=ucloud_token,
         hf_token=hf_token,
+        connection_check=connection_check,
+        connection_checks=connection_checks,
     )
 
 
@@ -1040,6 +1067,7 @@ def check_models(settings, key, http_client=None):
             {"id": model, "name": label, "listed": model in available}
             for model, (label, _) in OPENAI_MODELS.items()
         ],
+        "selected_model_listed": settings.model in available,
         "note": "Listed means visible to this API key. Transcription permissions, billing, "
         "quota, and audio compatibility are checked only when transcribing. "
         "No audio was uploaded and no transcription was started.",

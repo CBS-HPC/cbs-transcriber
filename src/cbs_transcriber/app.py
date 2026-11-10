@@ -44,6 +44,7 @@ from . import (
     local_concurrency,
     original_inspection,
     portable_routes,
+    provider_connection,
     release_profile,
     remote_jobs,
     remote_release,
@@ -664,6 +665,7 @@ class ProviderEdit(Settings):
     remember: bool = True
     ucloud_token: str | None = Field(default=None, max_length=4096)
     hf_token: str | None = Field(default=None, max_length=4096)
+    connection_check: str | None = Field(default=None, max_length=100)
     # Public template/invalid state may be echoed by generic profile clients; it is not a choice.
     native_allocation_choice: Literal["full", "mig1g", "template", "invalid"] | None = None
 
@@ -865,6 +867,7 @@ def create_app(
     if project_parent:
         store.default_parent = Path(project_parent)
     credentials = credentials or Credentials()
+    connection_checks = provider_connection.Checks()
     queue = JobQueue(store, credentials)
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
@@ -1486,6 +1489,11 @@ def create_app(
         if body.provider_id:
             selected = profile(store, body.provider_id)
             require_enabled(Settings.model_validate(selected["settings"]))
+            settings = Settings.model_validate(selected["settings"])
+            with store.connection() as db:
+                provider_connection.require_ready(
+                    db, settings, credentials.get(credential_scope(settings))
+                )
             require_approval(
                 store,
                 current["project_id"],
@@ -2649,8 +2657,28 @@ def create_app(
     @app.post("/api/providers/check-models")
     def available_models(body: ProviderEdit):
         settings = Settings.model_validate(body.model_dump())
-        key = body.api_key if body.api_key else credentials.get(settings.base_url)
-        return check_models(settings, key)
+        key = body.api_key if body.api_key is not None else credentials.get(settings.base_url)
+        attempt = connection_checks.begin(settings)
+        observed = provider_connection.observation(store, settings)
+        try:
+            result = check_models(settings, key)
+        except ValueError:
+            if connection_checks.current(attempt):
+                provider_connection.failed(
+                    store,
+                    credentials,
+                    settings,
+                    key,
+                    observed,
+                    generation=(connection_checks.session, attempt[1]),
+                )
+            raise
+        listed = [model["id"] for model in result["models"] if model["listed"]]
+        if result.get("selected_model_listed"):
+            listed.append(settings.model)
+        return result | {
+            "connection_check": connection_checks.issue(settings, key, attempt, models=listed)
+        }
 
     @app.post("/api/providers/check-ucloud")
     def check_ucloud(body: ProviderEdit):
@@ -2659,8 +2687,38 @@ def create_app(
         settings = Settings.model_validate(body.model_dump())
         if settings.provider_type != "ucloud":
             raise ValueError("Choose the UCloud Transcriber provider.")
-        key = body.api_key or credentials.get(credential_scope(settings))
-        return check_setup(settings, key)
+        key = (
+            body.api_key
+            if body.api_key is not None
+            else credentials.get(credential_scope(settings))
+        )
+        attempt = connection_checks.begin(settings)
+        observed = provider_connection.observation(store, settings)
+        try:
+            result = check_setup(settings, key)
+        except ValueError:
+            if connection_checks.current(attempt):
+                provider_connection.failed(
+                    store,
+                    credentials,
+                    settings,
+                    key,
+                    observed,
+                    generation=(connection_checks.session, attempt[1]),
+                )
+            raise
+        if result["ready"]:
+            result["connection_check"] = connection_checks.issue(settings, key, attempt)
+        elif connection_checks.current(attempt):
+            provider_connection.failed(
+                store,
+                credentials,
+                settings,
+                key,
+                observed,
+                generation=(connection_checks.session, attempt[1]),
+            )
+        return result
 
     @app.get("/api/providers/catalog")
     def model_catalog():
@@ -2680,18 +2738,51 @@ def create_app(
         )
         if settings.provider_type != "ucloud":
             raise ValueError("Choose the UCloud Transcriber provider.")
-        key = body.api_key or credentials.get(credential_scope(settings))
+        key = (
+            body.api_key
+            if body.api_key is not None
+            else credentials.get(credential_scope(settings))
+        )
         requested = body.native_allocation_choice
         if requested not in (None, "full", "mig1g"):
             raise ValueError("Choose full B200 or native 1g MIG for discovery.")
         target = COMPUTE_ID if requested == "full" else MIG_PRODUCT["id"]
-        return discover(
-            settings,
-            key,
-            compute_id=None
-            if settings.ucloud_transcriber.template_job_id and requested is None
-            else target,
-        )
+        attempt = connection_checks.begin(settings)
+        observed = provider_connection.observation(store, settings)
+        try:
+            result = discover(
+                settings,
+                key,
+                compute_id=None
+                if settings.ucloud_transcriber.template_job_id and requested is None
+                else target,
+            )
+        except ValueError:
+            if connection_checks.current(attempt):
+                provider_connection.failed(
+                    store,
+                    credentials,
+                    settings,
+                    key,
+                    observed,
+                    generation=(connection_checks.session, attempt[1]),
+                )
+            raise
+        if result["ready"]:
+            checked = Settings.model_validate(
+                {**settings.model_dump(), "ucloud_transcriber": result["setup"]}
+            )
+            result["connection_check"] = connection_checks.issue(checked, key, attempt)
+        elif connection_checks.current(attempt):
+            provider_connection.failed(
+                store,
+                credentials,
+                settings,
+                key,
+                observed,
+                generation=(connection_checks.session, attempt[1]),
+            )
+        return result
 
     @app.post("/api/providers", status_code=201)
     def create_provider(body: ProviderConfig):
@@ -2717,6 +2808,8 @@ def create_app(
                 ucloud_token=body.ucloud_token,
                 hf_token=body.hf_token,
                 native_allocation_choice=body.native_allocation_choice,
+                connection_check=body.connection_check,
+                connection_checks=connection_checks,
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
@@ -2725,7 +2818,7 @@ def create_app(
     def choose_default_provider(body: ProviderChoice):
         if not body.provider_id:
             raise ValueError("Choose a configured provider.")
-        set_default_provider(store, body.provider_id)
+        set_default_provider(store, body.provider_id, credentials)
         return public_profiles(store, credentials)
 
     @app.put("/api/providers/{identifier}")
@@ -2747,6 +2840,8 @@ def create_app(
                 expected_version=body.expected_version,
                 ucloud_token=body.ucloud_token,
                 hf_token=body.hf_token,
+                connection_check=body.connection_check,
+                connection_checks=connection_checks,
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
@@ -2796,6 +2891,8 @@ def create_app(
                 expected_version=body.expected_version,
                 ucloud_token=body.ucloud_token,
                 hf_token=body.hf_token,
+                connection_check=body.connection_check,
+                connection_checks=connection_checks,
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
@@ -2831,6 +2928,10 @@ def create_app(
             release.require_provider(settings.provider_type, runtime=bool(whisperx_model(settings)))
             require_enabled(settings)
             require_key(settings, credentials.get(credential_scope(settings)))
+            with store.connection() as db:
+                provider_connection.require_ready(
+                    db, settings, credentials.get(credential_scope(settings))
+                )
             if settings.provider_type == "ucloud" and not whisperx_model(settings):
                 from .ucloud_native import require_compute
 
@@ -2899,7 +3000,7 @@ def create_app(
         if consent is None:
             items = consented_items(items, plans, item, saved)
         with queue.lock:
-            jobs = input_admission.accept(store, items)
+            jobs = input_admission.accept(store, items, credentials=credentials)
         queue.notify()
         return jobs
 

@@ -13,6 +13,23 @@ Supporting references: [application audit plan](docs/audits/application-audit-pl
 The [post-MVP audit and proposed sequence](docs/work-plans/post-mvp-2026-11-10.md) separates
 missing implementation, pending acceptance, workflow decisions and explicitly parked work.
 
+## Current post-MVP branch
+
+The user authorized selected follow-up work on local `codex/post-mvp-work`, descended from
+clean public main `708a27b`. **Do not merge/push it to main, update Desktop main, publish or
+reload the installed MVP.** Frontend changes stay within explicit requests; broader choices
+await the colleague's feedback. The installed/published baseline remains MVP 0.1.0.
+
+The [seventeen-item evidence audit](docs/audits/post-mvp-hidden-tasks-2026-11-10.md) is the
+current classification of hidden work. Delivered native retrieval/recovery, concurrency
+controls, background exports, deletion and server fencing need acceptance/performance checks,
+not duplicate implementations. Real-device/provider, model-quality and institutional gates
+remain open. Missing-output reruns have a [design only](docs/proposals/native-failed-output-recovery-2026-11-10.md);
+no new transcription or remote cleanup was performed. Focused branch verification is recorded
+separately from the published release receipt.
+The segmented full backend gate now covers 5,526 unique cases: 5,500 passed, 26 skipped;
+independent inventory/outcome audit passes. Relevant provider browser regression is ongoing.
+
 ## Colleague MVP — 11 November 2026
 
 Readiness was brought forward to **10 November**. Follow the
@@ -153,8 +170,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Reliability and existing workflows
 
-- [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — parked by user.** Do not resume
-  CBS Runtime work or start its UCloud jobs until the user requests it. Resolve the live `runtime-busy`
+- [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — offline investigation resumed.**
+  Live preparation/jobs and generation activation remain held. The branch adds exact acquired
+  lock-release guards without reclaim (ADR 0168), with synthetic ownership-change regressions.
+  [Investigation and disabled-generation review](docs/proposals/post-mvp-runtime-preparation-2026-11-10.md).
+  Resolve the live `runtime-busy`
   preparation failure safely: the retained lock's recorded owner is terminal, but neither safe
   removal nor an isolated replacement generation is established. The isolated-generation work
   is a disabled prototype, not a deployed fix. Preserve the failed job's evidence and remote
@@ -280,15 +300,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and
-  real Windows/Mac/UCloud acceptance. **Post-MVP simplification:** remove the Remove from list
-  (hide-library) action and its explanatory text; keep Open and Delete permanently. Review how
-  previously hidden libraries remain accessible when retiring the feature. Removing a hide
-  preference must never delete library files or imply permanent-deletion consent.
-  **Post-MVP deletion-preview layout fix:** keep the confirmation label readable across the
-  available width, place a usable full-width name input below it, and separate explanatory
-  notes from that field. Wrap long paths cleanly and verify wide/narrow dialogs; the current
-  preview can squeeze the label into a vertical column and the input into a tiny box.
-  Preserve typed-name confirmation, deletion blockers and file-ownership safeguards.
+  real Windows/Mac/UCloud acceptance. **Post-MVP branch:** Remove from list and its explanation
+  are retired; old hidden entries remain accessible with Open/Delete without changing stored
+  preferences. The deletion preview clears the floated note, separates paths/counts and keeps
+  the typed-name field full width. Wide/narrow browser checks preserve confirmation, blockers
+  and file-ownership safeguards. No real library was deleted by these tests.
   The simplified UCloud backup flow uses a uniquely
   configured project and a location selector; exact destination and recovery fencing remain
   internal (ADR0139). Broader integration and real transfer acceptance remain open.
@@ -396,16 +412,23 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   editable passage while replaying it, without a separate duplicate playback panel. Preserve
   the draft, typing focus, cursor/selection and undo; use available valid word timing without
   inventing times for new words or blocking editing. Review scrolling and responsiveness on
-  long passages. This editable-word following is planned, not implemented in the MVP.
+  long passages. An off-by-default local prototype now exists on the post-MVP branch;
+  enable only for review with `localStorage.setItem("cbs-text-playback-prototype", "1")`
+  and reload. Remove that key and reload to revert. Differing drafts pause highlighting.
+  This is not installed in the MVP and does not settle the broader editor design.
   **Released MVP 0.1.0:** the fresh timing-independent manual policy (ADR 0166) preserves proven
   unchanged/replacement intervals and leaves inserted or ambiguous words untimed, without
   blocking wording changes. ADR 0156 retains the older conservative generation for history.
   Automatic timing estimates and the broader redesign remain post-MVP;
   any future estimate must be labelled and distinct from aligned/verified timing.
-- [ ] **Legacy alignment-hint provenance.** Same-result realignment of an unmarked passage can
-  retain older alignment-fit hints. Design an explicitly versioned remedy without changing
-  frozen jobs or lost-reply recovery; explain individually suppressed manual-timing hints in
-  the editor. Marked maps are protected under ADR 0137.
+- [ ] **Realignment alignment-hint provenance.** Reproduced on the branch: fresh unmarked
+  local realignment can retain old alignment-fit hints, and partial replacement can leave a
+  hint for an omitted word even with marked returned words. A versioned Apply remedy must
+  preserve exact frozen jobs, history and lost-reply successors; this is not solved by changing
+  the legacy transform. Per-word manual suppression under ADR 0137 remains useful but does
+  not establish whole-passage freshness. [Design](docs/proposals/legacy-timing-hints-2026-11-10.md).
+  Independent design review gives Go after versioned merge/adoption and honest cloud-history
+  boundaries were added. Implementation remains separate and waits for the current immutable gate.
 - [ ] **Track and roll back manual edits.** Make changes such as text edits, merges, splits and
   deletions easy to inspect and roll back. Existing result-version history provides a starting
   point; Undo merge now restores proven unmodified merges while keeping unrelated current edits
@@ -426,9 +449,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
   explicit provider policy and review behavior; assess privacy, costs and recovery before rollout.
-- [ ] **Anonymisation — parked pending a new decision.** No production in-app detector, model
-  or review workflow exists. When explicitly resumed, turn
-  the reviewed design and synthetic demo into a workflow with evaluated detectors, researcher
+- [ ] **Anonymisation — offline design/prototyping resumed; production decisions open.** No
+  production in-app detector, model or review workflow exists. The branch expands explicit
+  entity-label linking and export-canary tests; a six-case DA/EN fixture exposes detection gaps,
+  not real accuracy. [Offline evaluation](docs/evaluations/anonymisation-offline-2026-11-10.md).
+  Turn the reviewed design and synthetic demo into a workflow with evaluated detectors, researcher
   span review, separate derived results, pseudonym decisions and export-leak tests. Resolve
   key custody/retention and scope before using real research data; text-only redaction does not
   anonymise audio or metadata. [Design](docs/proposals/anonymisation-local-prototype-2026-10-30.md) ·
@@ -501,26 +526,26 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
-- [ ] **Post-MVP README simplification and uninstall guide.** Shorten the main README around
-  ordinary-user installation, starting, updating and removal; move technical/reference detail
-  into linked docs. Make uninstall steps prominent: stop the app, run
-  `uv tool uninstall cbs-transcriber`, and remove its optional shortcut. Explain which library,
-  recording, model-cache and credential data remain, with separate explicit cleanup guidance.
-  A brief uninstall paragraph already exists; review its clarity and placement after MVP.
+- [x] **Post-MVP branch README simplification and uninstall guide.** The main guide is 158
+  lines; focused install/review/export/provider/storage/development guides retain unique detail.
+  Install pins, copy mode, shortcuts, uninstall and retained data/credentials remain explicit.
+  Local outgoing and incoming README links pass; this is not a new published release.
 
 - [ ] **Post-MVP explanatory-text review.** Review feature-description and information boxes
   across the app; shorten long text, remove repetition and use plain, action-focused wording.
   Keep essential instructions, consequences and recovery guidance clear; move secondary detail
   to help where useful. Review the proposed copy for non-technical users before applying it.
+  Three reviewed boxes (Library, preparation, concurrency) are shortened on the branch;
+  broader wording/frontend choices await colleague feedback.
 
-- [ ] **Post-MVP empty start-page redesign.** When the current library has no projects, show
+- [x] **Post-MVP branch empty start-page change.** When the current library has no projects, show
   just the CBS Transcriber logo/title in the main area. Use the user's
   [supplied CBS logo](docs/design-assets/cbs-logo-white-on-blue.png) as the artwork reference,
   retaining the requested reversed colours: blue artwork/text on the light background.
-  Remove the promotional headings,
-  waveform, feature labels and large blue welcome panel. Keep project creation accessible
-  through the existing navigation. Review the layout before implementation; the existing-
-  project overview is outside this empty-state change.
+  The unchanged official blue vertical SVG supplies that treatment without editing the PNG.
+  Promotional headings, waveform, feature labels and welcome panel are removed. Existing
+  project creation stays accessible at narrow widths too; synthetic browser checks pass.
+  Existing project-overview layout is unchanged; installed MVP remains unchanged.
 
 - [ ] **Optional post-MVP idea: branded shortcut icons.** Consider automatically assigning a
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
@@ -533,6 +558,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Keep Settings available for setup and preserve saved results, active jobs and recovery
   controls when a provider is unconfigured or temporarily unavailable. Verify fresh installs,
   successful setup and later connection changes with mocked checks; no test transcription.
+  Implemented on the separate branch under ADR 0167; focused backend/browser/restore checks
+  and independent review pass. The full backend inventory is verified; the additional
+  provider browser regression gate remains in progress.
 
 - [ ] **AI-assisted analysis and NVivo roadmap (T38/T88b/T88c).** The manual codebook/evidence
   prototype exists; shared UCloud/OpenAI analysis, researcher-reviewed coding/summaries,

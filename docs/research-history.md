@@ -5,6 +5,8 @@ notes. The initial history delivery was activated on 22 October 2026 after backu
 preservation checks. This guide also describes the later Working-version, conflict-review and
 producer-evidence features. Consult the [current worklist](../TODO.md) for integration and
 running-build status; an implementation or synthetic check is not evidence of activation.
+MVP 0.1.0 includes review history and Working versions; the Research Report and topic tools
+are hidden. Start with the [review guide](review-guide.md) for ordinary editing.
 
 ## Review history
 
@@ -33,16 +35,22 @@ identity. Successful retries cannot duplicate the first version or enhancement f
 Choose **Restore as newest version** on an earlier saved state to append its exact transcript
 payload as a new version of that result. The revision check refuses a stale edit; earlier
 versions remain available. Notes and project settings are separate. This content restoration
-does not move the Working designation or restore a result from Trash.
+uses the same Working-choice rules as other manual edits; it does not restore a result from
+Trash.
 
 ## Working transcript and explicit review choices
 
-The result selected for review and the **Working transcript** serve different purposes. Mark
-an exact saved version using **Mark current saved version Working**, or inspect an older state
-in History and choose **Mark this version Working**. Review the version/hash preview before
-confirming. Marking changes the designation, without replacing the current text or review view.
-Later edits, a restored version or a completed producer leave that designation on its original
-version. Nothing is assigned automatically.
+The result selected for review and the **Working transcript** serve different purposes.
+Use **Set as working** in Versions/History to choose an exact saved version, reviewing its
+preview before confirmation. Selecting a designation does not replace the review view's text.
+
+New first results can become Working automatically. Manual edits to the current Working head
+advance that designation with the saved edit. For edits to another version, choose whether the
+edited successor should become Working or the existing designation should stay. Processing
+can advance Working only while its exact frozen source and the designation remain unchanged;
+a newer explicit user choice wins. Older/restored libraries may need an explicit designation.
+These rules supersede the initial manual-only designation policy; see
+[ADR 0133](decisions/0133-automatic-working-versions.md).
 
 Project exports and default research reports use those exact pinned payloads, even when the
 same result has newer edits. Recordings with no Working designation are listed as skipped;

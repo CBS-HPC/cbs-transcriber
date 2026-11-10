@@ -635,7 +635,7 @@ def _native_allocation_key(accepted):
     return "native_allocation" in accepted, _canonical(accepted.get("native_allocation"))
 
 
-def accept(store, items, *, request_id=None):
+def accept(store, items, *, request_id=None, credentials=None):
     """One metadata transaction accepts every combination and its shared inspection work."""
     original_inspection._lease(store)
     if not isinstance(items, list) or not 1 <= len(items) <= 100:
@@ -653,6 +653,30 @@ def accept(store, items, *, request_id=None):
             ):
                 _invalid()
             accepted = _choice(item["choice"])
+            if accepted["provider"] is not None and credentials is not None:
+                from . import provider_connection
+
+                provider = accepted["provider"]
+                row = db.execute(
+                    "SELECT value FROM providers WHERE id=?", (provider["id"],)
+                ).fetchone()
+                if row is None:
+                    raise AdmissionError(
+                        "This provider was removed. Choose a connected provider in Settings."
+                    )
+                current = providers.Settings.model_validate_json(row[0])
+                frozen = providers.Settings.model_validate(provider["settings"])
+                if (
+                    provider_connection.identity(current) != provider_connection.identity(frozen)
+                    or current.model != frozen.model
+                ):
+                    raise AdmissionError(
+                        "The provider connection changed. Choose it again before transcription."
+                    )
+                providers.require_enabled(current)
+                provider_connection.require_ready(
+                    db, current, credentials.get(providers.credential_scope(current))
+                )
             recording = db.execute(
                 "SELECT * FROM recordings WHERE id=?", (item["recording_id"],)
             ).fetchone()
