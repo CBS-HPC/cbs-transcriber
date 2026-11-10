@@ -4,6 +4,8 @@
 checkpoint `7cf165c15f7748ed3242e1cad300d2ccf5c53d91`. The parent documentation/browser-test
 checkpoint `67068dc` has identical product bytes to that base. This implementation is not
 merged, installed or released. Public main and installed MVP 0.1.0 remain unchanged.
+The verified implementation checkpoint is local commit `4e7f671`; subsequent usage/status
+documentation does not change its product or test bytes.
 
 See [ADR 0169](decisions/0169-versioned-timing-hint-invalidation.md), SPEC V211/T133 and
 the [reviewed proposal](proposals/legacy-timing-hints-2026-11-10.md).

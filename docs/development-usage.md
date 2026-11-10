@@ -132,6 +132,28 @@ included. It is cumulative within the still-open post-MVP phase: **do not add it
 cumulative checkpoints**. No post-MVP speed/rate assumption, credit equivalent, actual debit,
 cost or Claude usage is claimed; those values stay null/pending rather than zero.
 
+A later checkpoint covers the same phase through **10 November, 17:47:12.528 UTC /
+18:47:12.528 Copenhagen**:
+
+| Later cumulative checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 388,621,484 |
+| Cached input, already included above | 385,519,360 |
+| Uncached input | 3,102,124 |
+| Output | 927,836 |
+| Reasoning output, already included above | 460,521 |
+| Total | **389,549,320** |
+
+This adds **181,017,504 tokens** in the interval after the earlier cutoff; do not add the two
+cumulative totals. All included updates remain `gpt-6.1-sol`: 126,850,656 main-chat tokens and
+262,698,664 subagent tokens, across the same one main/ten contributing subagent sessions.
+There are 1,628 positive updates and nine excluded duplicate snapshots. Independent replay
+matches the earlier checkpoint and fixed MVP baseline exactly; all 183 current source prefixes
+and prior evidence files were rehashed unchanged. The private aggregate SHA-256 is
+`90d7119678b36e3a370afc563d4206eacc99146119d5f0cde5d2632b9ed5a256`.
+Later work, including final verification/documentation, is excluded. This phase stays open;
+billing, rates, speed and Claude usage remain null/pending.
+
 Add separate non-overlapping phases for post-MVP planning/implementation and subsequent
 releases. Record explicit boundaries, provider/model, input/cache/output categories, scope,
 coverage gaps and rate assumptions. If a cumulative milestone view is useful, label it as

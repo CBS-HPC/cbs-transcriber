@@ -174,7 +174,10 @@
           "main": 86456758,
           "subagents": 122075058
         },
-        "contributing_sessions": {"main": 1, "subagents": 10},
+        "contributing_sessions": {
+          "main": 1,
+          "subagents": 10
+        },
         "retained_project_sessions_scanned": 183,
         "positive_usage_updates": 1023,
         "duplicate_snapshots_excluded_in_window": 6,
@@ -191,6 +194,58 @@
         "actual_credits": null,
         "actual_cost": null,
         "limits": "Retained local usage observations only; later and in-flight updates excluded. No post-MVP speed/rate/billing claim or Claude estimate. Private source hashes and reproduction evidence retained outside Git."
+      },
+      {
+        "id": "codex-post-mvp-20261110T174712528Z",
+        "provider": "Codex",
+        "kind": "cumulative since phase start; do not sum checkpoints",
+        "start_exclusive_utc": "2026-11-10T12:41:11Z",
+        "cutoff_inclusive_utc": "2026-11-10T17:47:12.528Z",
+        "cutoff_copenhagen": "2026-11-10T18:47:12.528+01:00",
+        "development_branch": "codex/post-mvp-work",
+        "base_commit": "67068dc0993c995ff8e6419ccd4bf63fc6ec1b8a",
+        "source_status": "Parent checkpoint frozen; isolated child implementation uncommitted at cutoff. Not an installed release.",
+        "model": "gpt-6.1-sol",
+        "tokens": {
+          "input": 388621484,
+          "cached_input_subset": 385519360,
+          "uncached_input": 3102124,
+          "output": 927836,
+          "reasoning_output_subset": 460521,
+          "total": 389549320
+        },
+        "by_role_total_tokens": {
+          "main": 126850656,
+          "subagents": 262698664
+        },
+        "contributing_sessions": {
+          "main": 1,
+          "subagents": 10
+        },
+        "retained_project_sessions_scanned": 183,
+        "positive_usage_updates": 1628,
+        "duplicate_snapshots_excluded_in_window": 9,
+        "checks": {
+          "delta_equals_last_usage": true,
+          "model_and_role_totals_reconcile": true,
+          "frozen_mvp_prefixes_and_reports_unchanged": true,
+          "baseline_replay_matches": true,
+          "counter_or_arithmetic_anomalies": 0,
+          "missing_or_invalid_records": 0
+        },
+        "speed": null,
+        "credit_equivalent": null,
+        "actual_credits": null,
+        "actual_cost": null,
+        "limits": "Retained local usage observations only; later and in-flight updates excluded. No post-MVP speed/rate/billing claim or Claude estimate. Private source hashes and reproduction evidence retained outside Git.",
+        "local_child_branch": "codex/post-mvp-timing-hints",
+        "additional_since_prior_checkpoint": {
+          "start_exclusive_utc": "2026-11-10T16:20:13Z",
+          "end_inclusive_utc": "2026-11-10T17:47:12.528Z",
+          "tokens": 181017504,
+          "cumulative_totals_must_not_be_added": true
+        },
+        "private_aggregate_sha256": "90d7119678b36e3a370afc563d4206eacc99146119d5f0cde5d2632b9ed5a256"
       }
     ]
   }

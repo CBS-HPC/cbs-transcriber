@@ -613,7 +613,7 @@ an opt-in prototype. CBS Runtime work is offline ownership/recovery design and m
 anonymisation is decision-ready design and synthetic local prototyping. Neither authorizes
 preparation, paid jobs, private uploads or live cleanup. Missing-output reruns are design only.
 
-The reviewed timing-hint remedy is being implemented separately on local
+The reviewed timing-hint remedy is implemented and independently verified at `4e7f671` on local
 `codex/post-mvp-timing-hints`, based on post-MVP checkpoint `7cf165c`. That worktree owns only
 the backend policy/receipt/merge/validation slice in ADR 0169 and its synthetic tests. Do not
 edit the parent's frozen source or merge this experiment back before independent review and
