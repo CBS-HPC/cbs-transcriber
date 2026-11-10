@@ -282,6 +282,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   (hide-library) action and its explanatory text; keep Open and Delete permanently. Review how
   previously hidden libraries remain accessible when retiring the feature. Removing a hide
   preference must never delete library files or imply permanent-deletion consent.
+  **Post-MVP deletion-preview layout fix:** keep the confirmation label readable across the
+  available width, place a usable full-width name input below it, and separate explanatory
+  notes from that field. Wrap long paths cleanly and verify wide/narrow dialogs; the current
+  preview can squeeze the label into a vertical column and the input into a tiny box.
+  Preserve typed-name confirmation, deletion blockers and file-ownership safeguards.
   The simplified UCloud backup flow uses a uniquely
   configured project and a location selector; exact destination and recovery fencing remain
   internal (ADR0139). Broader integration and real transfer acceptance remain open.
