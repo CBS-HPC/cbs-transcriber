@@ -460,6 +460,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
+- [ ] **Post-MVP connected-provider selectors.** Offer providers in project/recording
+  transcription selectors only after successful configuration and a connection check in
+  Settings. Fresh presets or missing credentials alone must not appear ready to use. Bind
+  readiness to the saved connection; recheck after relevant settings/credential changes.
+  Keep Settings available for setup and preserve saved results, active jobs and recovery
+  controls when a provider is unconfigured or temporarily unavailable. Verify fresh installs,
+  successful setup and later connection changes with mocked checks; no test transcription.
+
 - [ ] **AI-assisted analysis and NVivo roadmap (T38/T88b/T88c).** The manual codebook/evidence
   prototype exists; shared UCloud/OpenAI analysis, researcher-reviewed coding/summaries,
   topic discovery, aspect sentiment/stance and expanded NVivo exports remain planned.
