@@ -118,7 +118,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   preserved; no remote allocation was changed or started. Receipt is recorded with rc3.
 
 - [x] **9 November MVP follow-up implemented and verified offline:** Undo split; spoken-word playback
-  following inside the open passage editor; manual Checked/Needs review marks with progress;
+  following in the Word and timing editor's saved-text preview; manual Checked/Needs review marks with progress;
   bounded parallel UCloud uploads/downloads with accurate Activity stages; compact recording/format
   export selection and named ZIP folders; combined word/timing selector with Edit word; automatic
   same-job UCloud status reconnection after temporary connection errors. The assembled regression
@@ -374,8 +374,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   The saved-text playback preview and compact ordinal/word timing dropdown with Edit word are
   implemented and verified; this does not complete the broader editor redesign.
   The user rejected the duplicated preview in Text mode. Its removal, Text Replay and
-  double-click opening Text are implemented, browser-verified and loaded in rc3. A single
-  editable highlighting area remains later work. **Current update:** conservative preservation
+  double-click opening Text are implemented, browser-verified and loaded in rc3.
+  **Post-MVP replay in the Text editor:** follow/highlight spoken words directly within the
+  editable passage while replaying it, without a separate duplicate playback panel. Preserve
+  the draft, typing focus, cursor/selection and undo; use available valid word timing without
+  inventing times for new words or blocking editing. Review scrolling and responsiveness on
+  long passages. This editable-word following is planned, not implemented in the MVP.
+  **Current update:** conservative preservation
   is implemented, verified offline and loaded in rc3 (ADR 0156):
   unchanged words keep exact times, replacement words inherit the original interval, inserted
   words stay untimed. Automatic timing estimates and the broader redesign remain post-MVP;
