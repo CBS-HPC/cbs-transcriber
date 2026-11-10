@@ -68,6 +68,34 @@ manual-timing-assembled-browser-nov10.xml, manual-integration-guard-review-nov10
 cbs-wheel-tool-preflight-smoke-nov10.json, cbs-wheel-tool-preflight-resolution-nov10.json,
 cbs-wheel-tool-shortcut-preflight-nov10.json and cbs-publication-hygiene-2026-11-10.md.
 
+## Published package and activation
+
+The clean public root is `5cf2e64d5fe5980586f9ec3d170b216eb1f98384`, tagged v0.1.0.
+It has no parent commits; the earlier repository remains private. The public repository has
+only main. The release was published on 10 November at 12:41 UTC. All six assets were then
+downloaded anonymously and matched their local hashes and lengths. The wheel SHA-256 is
+`57a9f2071aeef3b4d6b9079399c2f4826f0a610278f7ee68af5a1343341824fc`;
+the constraints SHA-256 is
+`b4e812858ed094d099403f9f2703d8f391e1959ca416ba4bdd79f3bd686dd835`.
+Documentation corrections do not replace that wheel, constraints, or tag.
+
+MVP 0.1.0 was activated from the frozen wheel-build source using the existing serving
+interpreter without synchronizing it. The profile/label and four served assets matched the
+release wheel exactly. Online/offline/post comparisons preserved every database table and
+all 24 originals; the offline/post database hashes were identical. This verifies activation
+and preservation, not a clean tool installation.
+
+The user's subsequent per-user uv-tool install initially failed with Windows Cloud Files
+hardlink error 396. A new uv 0.13.7 binary was installed, but PATH still selected Conda's
+0.9.29 first. Explicit copy mode avoids the hardlink operation; the earlier isolated Windows
+preflight also used copy mode. The user reports package installation succeeded after retrying.
+Starting it then correctly refused the library already leased by the development server.
+That server was stopped normally after confirming zero active jobs, batches and exports;
+the user's installed app subsequently responded with the MVP 0.1.0 label, using its uv-tool
+interpreter. Functional acceptance remains pending. The current guide
+checks existing uv/PATH, explains per-user Python, uses `--link-mode copy`, and explains the
+single-library-process rule. This is a documentation follow-up, with no runtime code change.
+
 ## Remaining acceptance
 
 Native same-allocation existing-output recovery and owned-folder Trash cleanup passed the

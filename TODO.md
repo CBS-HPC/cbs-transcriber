@@ -16,8 +16,11 @@ Supporting references: [application audit plan](docs/audits/application-audit-pl
 Readiness was brought forward to **10 November**. Follow the
 [current finish/freeze/acceptance plan](docs/work-plans/mvp-ready-2026-11-10.md); finish the core
 editor/export reliability changes, load one labelled tested build and reserve tomorrow for
-acceptance and blocking fixes. **MVP rc7 60e07a9 is loaded** from immutable package 2bfb635;
-see the [rc7 verification/activation receipt](docs/verification-2026-11-10-rc7.md).
+acceptance and blocking fixes. **MVP 0.1.0 was activated and verified**, including exact served
+asset bytes and unchanged database/originals. That development instance has since been stopped
+normally for the user's fresh uv-tool installation. The new installation completed with copy
+mode and serves MVP 0.1.0 from its installed tool environment; functional acceptance remains
+pending. See the [release receipt](docs/verification-2026-11-10-mvp-release.md).
 
 10 November user acceptance: double-click/Text controls, manual Checked/Needs review and Next
 to review, and background exports after closing Export Settings work in the user's quick test.
@@ -36,10 +39,15 @@ Functional acceptance does not establish speed.
   remains unchanged. The assembled backend gate passes 258 cases, including new-policy Undo
   and repinned contained history. The broader browser run passed 31 cases; eleven corrected
   oracle cases and six re-profiled Text cases pass their reruns. Independent reviews give Go.
-  These final policies are not in the running rc7 package yet.
-- [ ] **Publish the MVP wheel release.** Prepare the v0.1.0 wheel with
-  matching runtime constraints and optional installed-package shortcuts. The user authorizes a
-  public clean repository/release while retaining the existing development history privately.
+  These final policies are included in the published and verified MVP 0.1.0 package.
+- [x] **Publish the MVP wheel release.** v0.1.0 is public in a clean-history repository, with
+  matching constraints and optional installed-package shortcuts. All six release assets were
+  verified by anonymous download. Old development history remains in the private repository.
+- [ ] **Fresh installed-app acceptance.** The user installed all packages on this PC after
+  switching to `--link-mode copy` for Windows Cloud Files error 396. The earlier development
+  server was stopped gracefully after idle checks so the installed app can open the library.
+  Installed startup now responds with MVP 0.1.0. Check core review/export controls and the optional shortcut; Mac/clean-device
+  acceptance remains separate. The guide now checks existing uv/PATH before installation.
 
 - [ ] **Post-MVP Save/Split speed follow-up.** Further reduce long-transcript Save and Split
   latency. The accepted rc7 improvement still takes roughly 7–8 seconds at 1,800 passages.

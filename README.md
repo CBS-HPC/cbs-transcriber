@@ -46,8 +46,15 @@ Keep libraries and source checkouts outside OneDrive/iCloud.
 
 ### 1. Provide uv and Python once
 
-Use CBS-approved software routes on a managed computer; prerequisite installation may need
-IT. The [official uv installers](https://docs.astral.sh/uv/getting-started/installation/) are:
+First check whether uv is already available in your terminal:
+
+```text
+uv --version
+```
+
+If this reports **0.9.29 or later**, skip the uv installer below. If the command is missing
+or older, use CBS-approved software routes on a managed computer; prerequisite installation
+may need IT. The [official uv installers](https://docs.astral.sh/uv/getting-started/installation/) are:
 
 Windows, in **PowerShell**:
 
@@ -61,7 +68,8 @@ macOS, in **Terminal**:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Close and reopen the terminal, then run:
+After installing uv, close and reopen the terminal and check its version again. Then install
+Python once:
 
 ```text
 uv --version
@@ -71,13 +79,23 @@ uv python install 3.13
 Use **uv 0.9.29 or later**. Later uv releases still require installation acceptance; the
 version floor is not a claim that every future resolver behaves identically.
 
+If Windows still reports an older uv after installing a newer one, run `Get-Command uv -All`.
+Conda or another installation may appear first on PATH. To use the official installer's copy
+directly, run `& "$env:USERPROFILE\.local\bin\uv.exe" --version` in PowerShell and use that
+same prefix in place of `uv` in the commands below. Do not reinstall just because another
+copy appears first.
+
+`uv python install 3.13` installs a uv-managed Python for your user account. It can be reused
+by uv tools/projects; it does not replace your existing Conda or system environment. CBS
+Transcriber gets its own isolated environment in the next step. See [uv's Python guide](https://docs.astral.sh/uv/guides/install-python/).
+
 ### 2. Install the matching wheel and constraints
 
 Use the [v0.1.0 release](https://github.com/CBS-HPC/cbs-transcriber/releases/tag/v0.1.0).
 This same command works in PowerShell and Terminal without a GitHub login:
 
 ```text
-uv tool install --python 3.13 --no-config --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
+uv tool install --python 3.13 --no-config --link-mode copy --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
 ```
 
 Always use the wheel and constraints from **the same release**. uv creates its own isolated
@@ -85,6 +103,9 @@ app environment. The constraints carry the release's runtime version pins, UClou
 wheel and supported CPU PyTorch wheel choices. They do **not** make `uv tool install` consume
 the repository's `uv.lock` or establish its complete artifact-hash guarantees. Do not add a
 global PyTorch index or replace the constraints with a hand-edited dependency list.
+`--link-mode copy` installs independent file copies, avoiding Windows Cloud Files/hardlink
+errors such as error 396. It uses more disk space than hardlinks; it does not affect
+transcription speed. The terminal's current folder does not select uv's tool/cache folders.
 
 If release access is still private, sign into GitHub in your browser and download these two
 assets from the release page instead:
@@ -95,7 +116,7 @@ assets from the release page instead:
 Open a terminal in their download folder and run:
 
 ```text
-uv tool install --python 3.13 --no-config --constraints "cbs-transcriber-0.1.0-constraints.txt" "./cbs_transcriber-0.1.0-py3-none-any.whl"
+uv tool install --python 3.13 --no-config --link-mode copy --constraints "cbs-transcriber-0.1.0-constraints.txt" "./cbs_transcriber-0.1.0-py3-none-any.whl"
 ```
 
 A missing/private release can return 404. Contact the maintainer rather than putting a GitHub
@@ -113,6 +134,8 @@ The MVP release packages its profile. To select it explicitly, run `cbs-transcri
 The browser opens at **http://127.0.0.1:8765**. Keep the terminal open while you work;
 press **Ctrl+C** there to stop. macOS may ask for Keychain access when you save API keys.
 If the command is not found, run `uv tool update-shell`, reopen the terminal and try again.
+Save edits and stop any earlier running copy before launching the newly installed app.
+Only one process can open a given library; changing ports does not remove that restriction.
 
 Optional: create a Windows Start menu or macOS Applications launcher, then exit without
 starting the app:
@@ -198,12 +221,15 @@ their offline package-plan evidence; these do not establish fresh wheel-install 
 | --- | --- |
 | Release 404 or sign-in prompt | Confirm release availability with the maintainer. For private access, download the assets through your signed-in browser; never embed a token in a command. |
 | `uv` is not recognized | Reopen the terminal after installation and check `uv --version`; ask IT if the prerequisite is restricted. |
+| uv still reports the old version | On Windows, run `Get-Command uv -All`; use `& "$env:USERPROFILE\.local\bin\uv.exe"` explicitly if Conda or another copy appears first. |
+| Hardlink failure, Cloud Files error 396 | Repeat the matching release install command with `--link-mode copy`. If a partial install left the app's executable, add `--force` after confirming it belongs to CBS Transcriber. Do not delete your library or clear the whole cache. |
 | `cbs-transcriber` is not recognized | Run `uv tool update-shell`, then reopen the terminal. |
 | Wheel or constraints file not found | Open a terminal in the folder containing both matching release assets and check their filenames. |
 | No compatible package or constraints refuse installation | Check standard CPython 3.13, supported architecture and macOS 14+ for Apple Silicon. Do not remove the constraints to force installation. |
 | Permission denied | Use a writable user location and ask IT about managed-device restrictions. |
 | Browser did not open | Keep the terminal open and visit `http://127.0.0.1:8765`; read any terminal startup error first. |
 | Port 8765 is occupied | Use the already-running CBS app. If a different application owns that port, use `cbs-transcriber --port 8766`. |
+| This library is already open | Save edits, finish or stop jobs, and press Ctrl+C in the earlier app's terminal. Closing its browser tab alone does not stop it. Then start the installed app again. Do not delete the library lock file. |
 
 After installation, creating projects and importing/reviewing existing transcripts needs no
 GitHub login or transcription-service key. Configure service keys under **Settings** when

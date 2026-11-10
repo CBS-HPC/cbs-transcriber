@@ -13,19 +13,26 @@ Repository: https://github.com/CBS-HPC/cbs-transcriber. The MVP wheel release is
 verify the actual release and installation receipts before claiming acceptance. Publishing and
 repository visibility changes require explicit user authorization; never embed tokens.
 
-1. Provide uv (0.9.29 or later) through CBS-approved routes. Managed prerequisites may need IT.
+1. Check `uv --version` first; reuse an existing uv 0.9.29 or later. If missing or older,
+   provide uv through CBS-approved routes. Managed prerequisites may need IT.
    Official installers: Windows `powershell -ExecutionPolicy ByPass -c "irm
    https://astral.sh/uv/install.ps1 | iex"`; macOS
    `curl -LsSf https://astral.sh/uv/install.sh | sh`. Reopen the terminal and check `uv --version`.
-   Run `uv python install 3.13` for standard CPython 3.13.
+   If the new version is shadowed, inspect `Get-Command uv -All` on Windows and invoke the
+   official installer's `$env:USERPROFILE\.local\bin\uv.exe` explicitly. Do not change Conda
+   or global PATH silently. Run `uv python install 3.13` for per-user uv-managed CPython 3.13;
+   the app's tool environment remains separate from existing Conda/system environments.
 2. Use the README's explicit versioned HTTPS wheel/constraints URLs once publicly available:
-   `uv tool install --python 3.13 --no-config --constraints <release-constraints> <release-wheel>`.
+   `uv tool install --python 3.13 --no-config --link-mode copy --constraints <release-constraints> <release-wheel>`.
+   Copy mode avoids observed Windows Cloud Files/hardlink error 396. Preserve this flag in
+   update/retry commands; it does not change runtime behavior or dependency pins.
    While access is private, obtain both files through a signed-in browser and use local paths.
    Do not require GitHub CLI, add a global PyTorch index or drop the release constraints.
 3. Start `cbs-transcriber` at http://127.0.0.1:8765; keep the terminal open, Ctrl+C stops.
    The release packages MVP; `--profile mvp` selects it explicitly. The profile hides unfinished
    features but does not reduce dependency downloads. If PATH is missing, use
-   `uv tool update-shell` and reopen the terminal.
+   `uv tool update-shell` and reopen the terminal. Stop an earlier app process before opening
+   its library from the installed copy; closing a browser tab does not release the lease.
 4. Optional launcher: `cbs-transcriber --create-shortcut --profile mvp`; add
    `--shortcut-location desktop` for Desktop. See docs/installation-shortcuts.md. Never
    silently overwrite a launcher, install dependencies, migrate a library or start processing.
