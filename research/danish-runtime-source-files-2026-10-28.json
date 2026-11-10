@@ -1,0 +1,539 @@
+{
+  "schema": "cbs.transcriber.danish_source_preparation_research.v1",
+  "observed_on": "2026-10-28",
+  "purpose": "Pinned source allowlists for explicit local HF-to-CTranslate2 preparation; research evidence only.",
+  "weights_downloaded": false,
+  "conversion_performed": false,
+  "inference_performed": false,
+  "source_models": [
+    {
+      "candidate_id": "edda-v0.2-large",
+      "repository": "danish-foundation-models/edda-v0.2-large",
+      "revision": "796bf033ce51d03bfe793844fa3412e72997b826",
+      "metadata_url": "https://huggingface.co/api/models/danish-foundation-models/edda-v0.2-large/revision/796bf033ce51d03bfe793844fa3412e72997b826?blobs=true",
+      "weight_licence_declaration": "apache-2.0",
+      "licence_evidence_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/blob/796bf033ce51d03bfe793844fa3412e72997b826/README.md",
+      "full_governing_licence_present_in_source": false,
+      "source_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1519,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/.gitattributes",
+          "git_blob_id": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+          "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "README.md",
+          "bytes": 9420,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/README.md",
+          "git_blob_id": "f18866c6db924000517cf00cc051286926a8bbb4",
+          "sha256": "a268a8aad6274f3ff98bc6a5ec7472d66c465d5e312f20c2c1ee5edaa324997e",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "added_tokens.json",
+          "bytes": 34648,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/added_tokens.json",
+          "git_blob_id": "1b33526d33aaa60d79f78ae8651dae50b730185a",
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "config.json",
+          "bytes": 1225,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/config.json",
+          "git_blob_id": "64d03babfb0cdcdc587062e1b230c4c7a51de262",
+          "sha256": "442aac639bc016a785fde286e6f58dc2abf11a5f58061434e3bfaefcdc52ec8f",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "generation_config.json",
+          "bytes": 3893,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/generation_config.json",
+          "git_blob_id": "0fadfe23f35a7056312169a03e15261d5000f2b3",
+          "sha256": "2993aef0eec921ab2c506b01875943884e87f56414faf0c6371184a65e065d04",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "merges.txt",
+          "bytes": 493869,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/merges.txt",
+          "git_blob_id": "6038932a2a1f09a66991b1c2adae0d14066fa29e",
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "model.safetensors",
+          "bytes": 3087130976,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/model.safetensors",
+          "git_blob_id": "c5e035d41216ba258e449526d85d2270ea92c8bf",
+          "sha256": "889d5c42a5d428cce1bf5d90b7974e529fdb0f82c13dcc8ef24f47a7c91cd478",
+          "hash_evidence": "publisher_hf_lfs_metadata_only",
+          "downloaded": false
+        },
+        {
+          "path": "normalizer.json",
+          "bytes": 52666,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/normalizer.json",
+          "git_blob_id": "dd6ae819ad738ac1a546e9f9282ef325c33b9ea0",
+          "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "preprocessor_config.json",
+          "bytes": 340,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/preprocessor_config.json",
+          "git_blob_id": "931c77a740890c46365c7ae0c9d350ba3cca908f",
+          "sha256": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "special_tokens_map.json",
+          "bytes": 2072,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/special_tokens_map.json",
+          "git_blob_id": "3c18e97162d572f2b1d62e7e1c7b805f1be11dbe",
+          "sha256": "1c70773c078cb2ca96e0fcff113102f1d3e2b1504272c3bb63b035d4a6700d87",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 2480617,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/tokenizer.json",
+          "git_blob_id": "3a5e2ba63acdcac9a19ba56cf9bd27f185bfff61",
+          "sha256": "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 282843,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/tokenizer_config.json",
+          "git_blob_id": "06ffdc8308eae6bb7bd1fdd81e94b0a881a539ab",
+          "sha256": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "vocab.json",
+          "bytes": 1036558,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/resolve/796bf033ce51d03bfe793844fa3412e72997b826/vocab.json",
+          "git_blob_id": "0f3456460629e21d559c6daa23ab6ce3644e8271",
+          "sha256": "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        }
+      ],
+      "weight_bytes": 3087130976,
+      "metadata_bytes": 4399670,
+      "runtime_candidate": {
+        "source_architecture": "WhisperForConditionalGeneration",
+        "remote_code_required": false,
+        "input_sampling_rate": 16000,
+        "mel_bins": 128,
+        "window_seconds": 30,
+        "tokenizer_class": "WhisperTokenizer",
+        "decoder_layers": 32,
+        "converted_artifact_validated": false
+      },
+      "gaps": [
+        "No weights retrieved or model conversion/inference performed.",
+        "Licence declaration and file hashes do not constitute CBS clearance or verified base/training rights.",
+        "English and code-switching performance, timing quality and speaker detection remain unvalidated."
+      ],
+      "generation_observation": {
+        "language": "da",
+        "task": "transcribe",
+        "beam_size": 5,
+        "condition_on_previous_text": "Publisher documents trained previous-text prompting; freeze explicit runtime option.",
+        "ct2_conversion_tested_by_publisher": false
+      }
+    },
+    {
+      "candidate_id": "edda-v0.2",
+      "repository": "danish-foundation-models/edda-v0.2",
+      "revision": "698f8d04b5970f963d31c4079c05a76fa7f4f5bb",
+      "metadata_url": "https://huggingface.co/api/models/danish-foundation-models/edda-v0.2/revision/698f8d04b5970f963d31c4079c05a76fa7f4f5bb?blobs=true",
+      "weight_licence_declaration": "apache-2.0",
+      "licence_evidence_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/blob/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/README.md",
+      "full_governing_licence_present_in_source": false,
+      "source_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1519,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/.gitattributes",
+          "git_blob_id": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+          "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "README.md",
+          "bytes": 10095,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/README.md",
+          "git_blob_id": "0ab06054f80c85086f670bce68cbcdf428c4b3f0",
+          "sha256": "6511c9037720eb3d9268bb1bee0d7e44368b274fd778374289528e5852c1f684",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "added_tokens.json",
+          "bytes": 34648,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/added_tokens.json",
+          "git_blob_id": "1b33526d33aaa60d79f78ae8651dae50b730185a",
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "config.json",
+          "bytes": 1224,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/config.json",
+          "git_blob_id": "1c3f5aa3936c9ddf7934b7c118acf8a002ae17cf",
+          "sha256": "4ab07239f6feb26444e723fc9a357ca2e4f4b0b1aeca13a207f012a86c3421ab",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "generation_config.json",
+          "bytes": 3762,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/generation_config.json",
+          "git_blob_id": "777f59b29fe8518a89a2f91ae73c148de874ce36",
+          "sha256": "530b20e03c430ceb42295267b075a4a27609b60f49dfbaeb697a809ce5a66636",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "merges.txt",
+          "bytes": 493869,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/merges.txt",
+          "git_blob_id": "6038932a2a1f09a66991b1c2adae0d14066fa29e",
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "model.safetensors",
+          "bytes": 1617824864,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/model.safetensors",
+          "git_blob_id": "2fcaf4a5b5133f735eee7ed948897926c81a07da",
+          "sha256": "84f31719f0a26ea774a9d4470f0a54fecf807afef6ac6fb04291cd2dabe40e4c",
+          "hash_evidence": "publisher_hf_lfs_metadata_only",
+          "downloaded": false
+        },
+        {
+          "path": "normalizer.json",
+          "bytes": 52666,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/normalizer.json",
+          "git_blob_id": "dd6ae819ad738ac1a546e9f9282ef325c33b9ea0",
+          "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "preprocessor_config.json",
+          "bytes": 316,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/preprocessor_config.json",
+          "git_blob_id": "d5b0c6354f769b87e4d7d27f1607a545782cb6cd",
+          "sha256": "02051956d42fbab481cba9b17d28c2019c5e15cefde01699a0253e75a130d648",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "processor_config.json",
+          "bytes": 410,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/processor_config.json",
+          "git_blob_id": "22755f693c72f1a96070a4fa82465ca007d5ab91",
+          "sha256": "8efb801da889b24fc64a28d0af16d376852508aefb97d497a4c6d2200b114a33",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "special_tokens_map.json",
+          "bytes": 2186,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/special_tokens_map.json",
+          "git_blob_id": "312bc106291bb51bf2cc1648df070bef963a0639",
+          "sha256": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 2710337,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/tokenizer.json",
+          "git_blob_id": "17456db595adc78a973f97d69d8cb50bc87c0b1c",
+          "sha256": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 282843,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/tokenizer_config.json",
+          "git_blob_id": "06ffdc8308eae6bb7bd1fdd81e94b0a881a539ab",
+          "sha256": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "vocab.json",
+          "bytes": 1036558,
+          "source_url": "https://huggingface.co/danish-foundation-models/edda-v0.2/resolve/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/vocab.json",
+          "git_blob_id": "0f3456460629e21d559c6daa23ab6ce3644e8271",
+          "sha256": "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        }
+      ],
+      "weight_bytes": 1617824864,
+      "metadata_bytes": 4630433,
+      "runtime_candidate": {
+        "source_architecture": "WhisperForConditionalGeneration",
+        "remote_code_required": false,
+        "input_sampling_rate": 16000,
+        "mel_bins": 128,
+        "window_seconds": 30,
+        "tokenizer_class": "WhisperTokenizer",
+        "decoder_layers": 4,
+        "converted_artifact_validated": false
+      },
+      "gaps": [
+        "No weights retrieved or model conversion/inference performed.",
+        "Licence declaration and file hashes do not constitute CBS clearance or verified base/training rights.",
+        "English and code-switching performance, timing quality and speaker detection remain unvalidated."
+      ],
+      "generation_observation": {
+        "language": "da",
+        "task": "transcribe",
+        "beam_size": 5,
+        "condition_on_previous_text": "Publisher documents trained previous-text prompting; freeze explicit runtime option.",
+        "ct2_conversion_tested_by_publisher": false
+      }
+    },
+    {
+      "candidate_id": "roest-v3-whisper-1.5b",
+      "repository": "CoRal-project/roest-v3-whisper-1.5b",
+      "revision": "7182cced29631ef7d7776eb8c01f24624b9b9b04",
+      "metadata_url": "https://huggingface.co/api/models/CoRal-project/roest-v3-whisper-1.5b/revision/7182cced29631ef7d7776eb8c01f24624b9b9b04?blobs=true",
+      "weight_licence_declaration": "openrail",
+      "licence_evidence_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/blob/7182cced29631ef7d7776eb8c01f24624b9b9b04/README.md",
+      "full_governing_licence_present_in_source": false,
+      "source_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1519,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/.gitattributes",
+          "git_blob_id": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+          "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "README.md",
+          "bytes": 8543,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/README.md",
+          "git_blob_id": "114dbdc03f893aca6a5964438e5c0a76838d8a16",
+          "sha256": "a6289736fb885e464277ae7a480a42a3844fc9a887252c8f6482d3cc22eda6f8",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "added_tokens.json",
+          "bytes": 34648,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/added_tokens.json",
+          "git_blob_id": "1b33526d33aaa60d79f78ae8651dae50b730185a",
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "config.json",
+          "bytes": 1232,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/config.json",
+          "git_blob_id": "59fad6fb580841735d413a42f0bc9ca5e7791d7e",
+          "sha256": "30853ccbd03cd6551dd2ba2cab2bbf1949e41eae295575650995606da23f9d0f",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "generation_config.json",
+          "bytes": 3040,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/generation_config.json",
+          "git_blob_id": "8219ddd89f9dc45394136afc1a47a02f1d2ab42d",
+          "sha256": "44ee9d18f06139070e79542cd844032e519115fc74be464f0faa660bf4c30e28",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "merges.txt",
+          "bytes": 493869,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/merges.txt",
+          "git_blob_id": "6038932a2a1f09a66991b1c2adae0d14066fa29e",
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "model-00001-of-00002.safetensors",
+          "bytes": 2050743032,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/model-00001-of-00002.safetensors",
+          "git_blob_id": "3edf4a9ffc2858c18e069235734b28d8b586e236",
+          "sha256": "24b5e1b2cb4b753de8c279c773f3fcb2e902b64ea877d6cf918b522758d65471",
+          "hash_evidence": "publisher_hf_lfs_metadata_only",
+          "downloaded": false
+        },
+        {
+          "path": "model-00002-of-00002.safetensors",
+          "bytes": 1036388232,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/model-00002-of-00002.safetensors",
+          "git_blob_id": "1a5dbac53e53c64aa88c98c71f2c4281485b8fd1",
+          "sha256": "b738b9200b73d36bb1164591b8e8f6363dd4bb1fce5b12427cc0c8bc9f7095ad",
+          "hash_evidence": "publisher_hf_lfs_metadata_only",
+          "downloaded": false
+        },
+        {
+          "path": "model.safetensors.index.json",
+          "bytes": 111634,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/model.safetensors.index.json",
+          "git_blob_id": "7afbef303183537af8ceb37ab6e74bb8c479698b",
+          "sha256": "1c98503cd123744b08c608ec3d5e9fdc095539b90d35e7cf08f70e7e35a2d47b",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "normalizer.json",
+          "bytes": 52666,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/normalizer.json",
+          "git_blob_id": "dd6ae819ad738ac1a546e9f9282ef325c33b9ea0",
+          "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "preprocessor_config.json",
+          "bytes": 357,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/preprocessor_config.json",
+          "git_blob_id": "3f567c1115178e9fd2e1ef818dca934e22ca0c85",
+          "sha256": "654cf18d3e163b948ceaf9766da56ce0b52de265d58673cf61c9376f126bd499",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "special_tokens_map.json",
+          "bytes": 2186,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/special_tokens_map.json",
+          "git_blob_id": "312bc106291bb51bf2cc1648df070bef963a0639",
+          "sha256": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 3930645,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/tokenizer.json",
+          "git_blob_id": "33c8354828689f5daef89956ad477df739eccd16",
+          "sha256": "5c1bf30c9e716e1477bedef846b01be0013daecb89e9e3ef7ab89b23c178df1b",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 282845,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/tokenizer_config.json",
+          "git_blob_id": "4e8fa5e704c4434a7bf93a1dc3a20ae4b4ab158d",
+          "sha256": "5f1c8321670c5447a77532960874a3aecfd98565b241cf3c49b2c5e493e2f8ea",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        },
+        {
+          "path": "vocab.json",
+          "bytes": 835528,
+          "source_url": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/resolve/7182cced29631ef7d7776eb8c01f24624b9b9b04/vocab.json",
+          "git_blob_id": "b45bc0e97a5511c917c112c42231cdbf455e200d",
+          "sha256": "6788c80b082e9b0d1393147d3a3e62ba19285ac0c82ace8e5ef00f37ead58971",
+          "hash_evidence": "retrieved_public_bytes",
+          "downloaded": true
+        }
+      ],
+      "weight_bytes": 3087131264,
+      "metadata_bytes": 5758712,
+      "runtime_candidate": {
+        "source_architecture": "WhisperForConditionalGeneration",
+        "remote_code_required": false,
+        "input_sampling_rate": 16000,
+        "mel_bins": 128,
+        "window_seconds": 30,
+        "tokenizer_class": "WhisperTokenizer",
+        "decoder_layers": 32,
+        "converted_artifact_validated": false
+      },
+      "gaps": [
+        "No weights retrieved or model conversion/inference performed.",
+        "Licence declaration and file hashes do not constitute CBS clearance or verified base/training rights.",
+        "English and code-switching performance, timing quality and speaker detection remain unvalidated."
+      ],
+      "legacy_alias_observation": {
+        "requested_repository": "CoRal-project/roest-whisper-1.5b-v2",
+        "canonical_repository_returned": "CoRal-project/roest-v3-whisper-1.5b",
+        "returned_revision": "7182cced29631ef7d7776eb8c01f24624b9b9b04",
+        "metadata_url": "https://huggingface.co/api/models/CoRal-project/roest-whisper-1.5b-v2/revision/7182cced29631ef7d7776eb8c01f24624b9b9b04"
+      },
+      "generation_observation": {
+        "forced_decoder_ids": [
+          [
+            1,
+            null
+          ],
+          [
+            2,
+            50360
+          ]
+        ],
+        "task_token_note": "Force language da and transcribe explicitly in the new profile; do not infer an English validation claim.",
+        "custom_licence_source": "https://huggingface.co/CoRal-project/roest-v1-whisper-1.5b/blob/a6c1e24d9f10e6289607a1ba32341b68e8660688/LICENSE",
+        "custom_licence_sha256": "f575b6361ff69b52388967f69219f0cc7f9ae91f96482e5ad038261b2728799e",
+        "custom_licence_conditions": "Linked custom terms, including identity/impersonation and downstream restrictions, require applicability review; no blanket clearance."
+      }
+    }
+  ],
+  "installed_conversion_versions": {
+    "transformers": "4.57.6",
+    "ctranslate2": "4.8.3",
+    "torch": "2.8.0+cpu",
+    "safetensors": "0.8.0",
+    "faster-whisper": "1.2.1"
+  },
+  "conversion_contract_observation": {
+    "model_name_or_path": "An owned verified complete LOCAL source snapshot; never floating repo ID.",
+    "trust_remote_code": false,
+    "low_cpu_mem_usage": false,
+    "load_as_float16": "Explicitly freeze chosen option with output quantization.",
+    "copy_files": [
+      "tokenizer.json",
+      "preprocessor_config.json"
+    ],
+    "provenance_files_to_preserve": [
+      "README.md",
+      "source file/hash manifest",
+      "linked licence/notices with separate evidence identity"
+    ],
+    "inference_path": "Only completed verified CT2 local folder; tokenizer/preprocessor mandatory to prevent fallback download.",
+    "important_revision_limit": "Installed CTranslate2 4.8.3 passes revision to model loading but not uniformly to AutoConfig, tokenizer and copied-file fetches; local source input avoids mixed revisions.",
+    "output_identity": "Hash converted config/model.bin/vocabulary/tokenizer/preprocessor with converter versions/options/source manifest, commit completion marker last; generated output is not an HF revision.",
+    "validation_state": "Architecture and installed converter source inspection only; conversion/inference acceptance pending."
+  },
+  "primary_engine_sources": [
+    "https://github.com/OpenNMT/CTranslate2/blob/v4.8.3/python/ctranslate2/converters/transformers.py",
+    "https://github.com/SYSTRAN/faster-whisper/tree/v1.2.1",
+    "https://opennmt.net/CTranslate2/guides/transformers.html#whisper"
+  ]
+}

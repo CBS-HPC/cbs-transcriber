@@ -1,0 +1,158 @@
+{
+  "schema_version": 2,
+  "openai": {
+    "default": "gpt-transcribe",
+    "source": "https://developers.openai.com/api/docs/guides/speech-to-text",
+    "models": [
+      {
+        "key": "gpt-transcribe",
+        "model": "gpt-transcribe",
+        "name": "OpenAI gpt-transcribe",
+        "default_enabled": true,
+        "capability": "json",
+        "legacyName": "OpenAI · GPT Transcribe",
+        "language_parameter": "languages"
+      },
+      {
+        "key": "gpt-4o-transcribe",
+        "model": "gpt-4o-transcribe",
+        "name": "OpenAI gpt-4o-transcribe",
+        "default_enabled": false,
+        "capability": "json",
+        "logprobs": true,
+        "legacyName": "OpenAI · GPT-4o Transcribe"
+      },
+      {
+        "key": "gpt-4o-mini-transcribe",
+        "model": "gpt-4o-mini-transcribe",
+        "name": "OpenAI gpt-4o-mini-transcribe",
+        "default_enabled": false,
+        "capability": "json",
+        "logprobs": true,
+        "legacyName": "OpenAI · GPT-4o Mini Transcribe"
+      },
+      {
+        "key": "words",
+        "model": "whisper-1",
+        "name": "OpenAI whisper-1 (Word timing)",
+        "default_enabled": false,
+        "capability": "words",
+        "legacyName": "OpenAI · Word timing"
+      },
+      {
+        "key": "speakers",
+        "model": "gpt-4o-transcribe-diarize",
+        "name": "OpenAI gpt-4o-transcribe-diarize (Speaker Labels)",
+        "default_enabled": false,
+        "capability": "speakers",
+        "legacyName": "OpenAI · Speaker labels"
+      }
+    ]
+  },
+  "ucloud_transcriber": {
+    "default": "large-v3",
+    "source": "https://docs.cloud.sdu.dk/Apps/transcriber.html#settings",
+    "verified_date": "2026-10-21",
+    "models": [
+      {
+        "model": "base",
+        "name": "UCloud whisper/base (Transcriber)",
+        "default_enabled": false,
+        "capability": "words_speakers",
+        "memory_gb": 1,
+        "aliases": ["whisper/base"]
+      },
+      {
+        "model": "small",
+        "name": "UCloud whisper/small (Transcriber)",
+        "default_enabled": false,
+        "capability": "words_speakers",
+        "memory_gb": 2,
+        "aliases": ["whisper/small"]
+      },
+      {
+        "model": "medium",
+        "name": "UCloud whisper/medium (Transcriber)",
+        "default_enabled": false,
+        "capability": "words_speakers",
+        "memory_gb": 5,
+        "aliases": ["whisper/medium"]
+      },
+      {
+        "model": "large-v3",
+        "name": "UCloud whisper/large-v3 (Transcriber)",
+        "default_enabled": true,
+        "capability": "words_speakers",
+        "memory_gb": 10,
+        "aliases": ["whisper/large-v3"]
+      },
+      {
+        "model": "large-v3-turbo",
+        "name": "UCloud whisper/large-v3-turbo (Transcriber)",
+        "default_enabled": false,
+        "capability": "words_speakers",
+        "memory_gb": 6,
+        "aliases": ["whisper/large-v3-turbo"]
+      },
+      {
+        "model": "nvidia/parakeet-tdt-0.6b-v3",
+        "name": "UCloud nvidia/parakeet-tdt-0.6b-v3 (Transcriber)",
+        "default_enabled": false,
+        "capability": "words_speakers",
+        "memory_gb": 4,
+        "aliases": ["parakeet-tdt-0.6b-v3", "parakeet"]
+      }
+    ]
+  },
+  "ucloud_cbs_runtime": {
+    "default": "whisperx/large-v3",
+    "source": "https://github.com/m-bain/whisperX",
+    "models": [
+      {
+        "model": "whisperx/large-v3",
+        "name": "UCloud WhisperX large-v3 (CBS Runtime)",
+        "default_enabled": false,
+        "capability": "words",
+        "memory_gb": 10,
+        "engine": "whisperx",
+        "whisper_model": "large-v3"
+      },
+      {
+        "model": "whisperx/large-v3-turbo",
+        "name": "UCloud WhisperX large-v3-turbo (CBS Runtime)",
+        "default_enabled": false,
+        "capability": "words",
+        "memory_gb": 6,
+        "engine": "whisperx",
+        "whisper_model": "large-v3-turbo"
+      },
+      {
+        "model": "whisperx/edda-turbo",
+        "name": "UCloud Edda v0.2 turbo (CBS Runtime) (Danish)",
+        "default_enabled": false,
+        "capability": "words",
+        "engine": "whisperx",
+        "whisper_model": "edda-turbo",
+        "fixed_language": "da"
+      },
+      {
+        "model": "whisperx/edda-large",
+        "name": "UCloud Edda v0.2 large (CBS Runtime) (Danish)",
+        "default_enabled": false,
+        "capability": "words",
+        "engine": "whisperx",
+        "whisper_model": "edda-large",
+        "fixed_language": "da"
+      },
+      {
+        "model": "whisperx/roest-v3",
+        "name": "UCloud Røst v3 (CBS Runtime) (Danish)",
+        "default_enabled": false,
+        "capability": "words",
+        "engine": "whisperx",
+        "whisper_model": "roest-v3",
+        "fixed_language": "da"
+      }
+    ]
+  }
+}

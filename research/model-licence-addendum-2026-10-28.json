@@ -1,0 +1,72 @@
+{
+  "schema": "cbs.transcriber.licence_evidence_addendum.v1",
+  "observed_on": "2026-10-28",
+  "candidate_manifest_sha256": "d1f0f3a2f89711d9e30424b40864d75b9ccf2f806e4271b1133b26ad615891c5",
+  "cbs_clearance": "not_established",
+  "weights_downloaded": false,
+  "observations": [
+    {
+      "id": "hviske-v6-derivation-notice",
+      "role": "publisher_derivation_notice",
+      "model": "syvai/hviske-v6",
+      "revision": "323b5ffdf54ef22196340a0b37cb11e668fefc5a",
+      "url": "https://huggingface.co/syvai/hviske-v6/blob/323b5ffdf54ef22196340a0b37cb11e668fefc5a/NOTICE",
+      "bytes": 2355,
+      "sha256": "fcf962286327ec7ac5d554835dee54beb7ce03d1a6add1defc75d4c966c19fec",
+      "observation": "Publisher names a historical Apache-licensed saga-2 revision and an unversioned Qwen decoder. This is a notice, not a new licence grant for Hviske weights or independently verified ancestry."
+    },
+    {
+      "id": "saga-2-historical-metadata",
+      "role": "base_model_metadata_declaration",
+      "model": "capacit-ai/saga-2-m",
+      "revision": "f1c014f383d59be1302c4eac350f6335a30b8f68",
+      "url": "https://huggingface.co/api/models/capacit-ai/saga-2-m/revision/f1c014f383d59be1302c4eac350f6335a30b8f68",
+      "declared_license": "apache-2.0",
+      "governing_text_retrieved": false,
+      "initial_unauthenticated_text_status": {
+        "README.md": 401,
+        "LICENSE": 401
+      },
+      "unauthenticated_text_status": {
+        "README.md": 200,
+        "LICENSE": 404
+      },
+      "card_url": "https://huggingface.co/capacit-ai/saga-2-m/blob/f1c014f383d59be1302c4eac350f6335a30b8f68/README.md",
+      "card_bytes": 11511,
+      "card_sha256": "94ab769c7a4b9f2fdf6099cea67db063037c7a7f820641a2539420928693cc65",
+      "observation": "The exact historical card was publicly retrievable on a second unauthenticated check, after initial 401 responses. It declares Apache 2.0 and attributes an MIT Whisper encoder and Apache Qwen base, without exact upstream revisions. No standalone LICENSE was available (404). Its declared FLEURS test-slice checkpoint selection is a holdout caution, not independently verified training lineage for Hviske. The complete governing-text chain and exact initialization artifacts remain unresolved; no authentication or gated-file access was attempted."
+    },
+    {
+      "id": "qwen-current-public-licence",
+      "role": "separate_pinned_public_license_text",
+      "model": "Qwen/Qwen3-0.6B-Base",
+      "revision": "da87bfb608c14b7cf20ba1ce41287e8de496c0cd",
+      "url": "https://huggingface.co/Qwen/Qwen3-0.6B-Base/blob/da87bfb608c14b7cf20ba1ce41287e8de496c0cd/LICENSE",
+      "declared_license": "apache-2.0",
+      "bytes": 11343,
+      "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+      "historical_decoder_revision_established": false,
+      "observation": "These public Apache-2.0 bytes belong to the separately observed revision. The Hviske notice does not identify its decoder revision, so this does not prove which decoder artifact was used."
+    },
+    {
+      "id": "runtime-large-v3-conversion-card",
+      "role": "converted_artifact_model_card",
+      "model": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "url": "https://huggingface.co/Systran/faster-whisper-large-v3/blob/edaa852ec7e145841d8ffdb056a99866b5f0a478/README.md",
+      "declared_license": "mit",
+      "bytes": 2052,
+      "sha256": "39e96252229f5a3d0141dc81afb65a36fd205461ac21e5b70f2cd1248ef0082c",
+      "standalone_license_in_metadata_listing": false,
+      "upstream_revision_in_conversion_example": null,
+      "observation": "This is the artifact pinned by the app worker. Its card declares MIT and describes conversion from openai/whisper-large-v3, but the example does not pin that upstream revision. It is distinct from the HF source candidate; no conversion or runtime was executed here."
+    }
+  ],
+  "remaining_gaps": [
+    "Resolve exact governing historical base text and actual initialization artifacts before adoption; a metadata declaration or publisher notice is not complete ancestry proof.",
+    "Review the actual derived/converted artifact, executable code and notices, not only the source model card.",
+    "Hviske's own noncommercial weights and Røst's custom restrictions remain subject to CBS review for the intended use.",
+    "Model, code, training data and recording rights remain separate; no institutional clearance is inferred.",
+    "Candidate runtimes and model quality remain unvalidated; no benchmark ranking or enabling/default change was performed."
+  ]
+}

@@ -1,0 +1,6 @@
+*.sh text eol=lf
+src/cbs_transcriber/catalogs/*.txt text eol=lf
+src/cbs_transcriber/catalogs/portable_schema_16.json text eol=lf
+src/cbs_transcriber/static/*.js text eol=lf
+src/cbs_transcriber/static/*.css text eol=lf
+src/cbs_transcriber/static/*.html text eol=lf

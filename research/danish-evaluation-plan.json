@@ -1,0 +1,62 @@
+{
+  "schema": "cbs.transcriber.model_evaluation_plan.v1",
+  "id": "cbs-da-en-research-v1",
+  "revision": "2026-10-28",
+  "candidate_manifest_sha256": "d1f0f3a2f89711d9e30424b40864d75b9ccf2f806e4271b1133b26ad615891c5",
+  "candidate_ids": [
+    "edda-v0.2-large",
+    "edda-v0.2",
+    "roest-v3-whisper-1.5b",
+    "hviske-v5.3",
+    "hviske-v6",
+    "whisper-large-v3",
+    "parakeet-tdt-0.6b-v3"
+  ],
+  "cohorts": [
+    {
+      "id": "fleurs-da-smoke",
+      "language": "da",
+      "domain": "read_speech",
+      "purpose": "smoke",
+      "minimum_clips": 5,
+      "minimum_recordings": null,
+      "minimum_seconds": 60,
+      "reference": {
+        "dataset": "FluidInference/fleurs-full",
+        "revision": "1cca811bb8ea4d370345f108f00518167040282c",
+        "license": "CC-BY-4.0",
+        "manifest_sha256": "7e599457d5c1585a418d471fa8e7dce5d68d1622e1dcdee4b535d6a56bee52e4"
+      }
+    },
+    {
+      "id": "interview-da",
+      "language": "da",
+      "domain": "interview",
+      "purpose": "holdout",
+      "minimum_clips": 10,
+      "minimum_recordings": 5,
+      "minimum_seconds": 600,
+      "reference": null
+    },
+    {
+      "id": "interview-en",
+      "language": "en",
+      "domain": "interview",
+      "purpose": "holdout",
+      "minimum_clips": 10,
+      "minimum_recordings": 5,
+      "minimum_seconds": 600,
+      "reference": null
+    },
+    {
+      "id": "interview-da-en-switching",
+      "language": "da_en",
+      "domain": "interview",
+      "purpose": "holdout",
+      "minimum_clips": 5,
+      "minimum_recordings": 3,
+      "minimum_seconds": 180,
+      "reference": null
+    }
+  ]
+}

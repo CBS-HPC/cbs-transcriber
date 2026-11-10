@@ -1,0 +1,257 @@
+{
+  "schema": "cbs.transcriber.danish_whisper_sources.v1",
+  "models": [
+    {
+      "choice": "edda-large",
+      "label": "Edda v0.2-large",
+      "repo": "danish-foundation-models/edda-v0.2-large",
+      "revision": "796bf033ce51d03bfe793844fa3412e72997b826",
+      "language": "da",
+      "sampling_rate": 16000,
+      "mel_bins": 128,
+      "window_seconds": 30,
+      "license": "apache-2.0",
+      "license_source": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/blob/796bf033ce51d03bfe793844fa3412e72997b826/README.md",
+      "source_files": [
+        {
+          "name": ".gitattributes",
+          "bytes": 1519,
+          "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+        },
+        {
+          "name": "README.md",
+          "bytes": 9420,
+          "sha256": "a268a8aad6274f3ff98bc6a5ec7472d66c465d5e312f20c2c1ee5edaa324997e"
+        },
+        {
+          "name": "added_tokens.json",
+          "bytes": 34648,
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1225,
+          "sha256": "442aac639bc016a785fde286e6f58dc2abf11a5f58061434e3bfaefcdc52ec8f"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 3893,
+          "sha256": "2993aef0eec921ab2c506b01875943884e87f56414faf0c6371184a65e065d04"
+        },
+        {
+          "name": "merges.txt",
+          "bytes": 493869,
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6"
+        },
+        {
+          "name": "model.safetensors",
+          "bytes": 3087130976,
+          "sha256": "889d5c42a5d428cce1bf5d90b7974e529fdb0f82c13dcc8ef24f47a7c91cd478"
+        },
+        {
+          "name": "normalizer.json",
+          "bytes": 52666,
+          "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd"
+        },
+        {
+          "name": "preprocessor_config.json",
+          "bytes": 340,
+          "sha256": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"
+        },
+        {
+          "name": "special_tokens_map.json",
+          "bytes": 2072,
+          "sha256": "1c70773c078cb2ca96e0fcff113102f1d3e2b1504272c3bb63b035d4a6700d87"
+        },
+        {
+          "name": "tokenizer.json",
+          "bytes": 2480617,
+          "sha256": "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 282843,
+          "sha256": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 1036558,
+          "sha256": "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387"
+        }
+      ]
+    },
+    {
+      "choice": "edda-turbo",
+      "label": "Edda v0.2",
+      "repo": "danish-foundation-models/edda-v0.2",
+      "revision": "698f8d04b5970f963d31c4079c05a76fa7f4f5bb",
+      "language": "da",
+      "sampling_rate": 16000,
+      "mel_bins": 128,
+      "window_seconds": 30,
+      "license": "apache-2.0",
+      "license_source": "https://huggingface.co/danish-foundation-models/edda-v0.2/blob/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/README.md",
+      "source_files": [
+        {
+          "name": ".gitattributes",
+          "bytes": 1519,
+          "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+        },
+        {
+          "name": "README.md",
+          "bytes": 10095,
+          "sha256": "6511c9037720eb3d9268bb1bee0d7e44368b274fd778374289528e5852c1f684"
+        },
+        {
+          "name": "added_tokens.json",
+          "bytes": 34648,
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1224,
+          "sha256": "4ab07239f6feb26444e723fc9a357ca2e4f4b0b1aeca13a207f012a86c3421ab"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 3762,
+          "sha256": "530b20e03c430ceb42295267b075a4a27609b60f49dfbaeb697a809ce5a66636"
+        },
+        {
+          "name": "merges.txt",
+          "bytes": 493869,
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6"
+        },
+        {
+          "name": "model.safetensors",
+          "bytes": 1617824864,
+          "sha256": "84f31719f0a26ea774a9d4470f0a54fecf807afef6ac6fb04291cd2dabe40e4c"
+        },
+        {
+          "name": "normalizer.json",
+          "bytes": 52666,
+          "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd"
+        },
+        {
+          "name": "preprocessor_config.json",
+          "bytes": 316,
+          "sha256": "02051956d42fbab481cba9b17d28c2019c5e15cefde01699a0253e75a130d648"
+        },
+        {
+          "name": "processor_config.json",
+          "bytes": 410,
+          "sha256": "8efb801da889b24fc64a28d0af16d376852508aefb97d497a4c6d2200b114a33"
+        },
+        {
+          "name": "special_tokens_map.json",
+          "bytes": 2186,
+          "sha256": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"
+        },
+        {
+          "name": "tokenizer.json",
+          "bytes": 2710337,
+          "sha256": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 282843,
+          "sha256": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 1036558,
+          "sha256": "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387"
+        }
+      ]
+    },
+    {
+      "choice": "roest-v3",
+      "label": "Røst v3",
+      "repo": "CoRal-project/roest-v3-whisper-1.5b",
+      "revision": "7182cced29631ef7d7776eb8c01f24624b9b9b04",
+      "language": "da",
+      "sampling_rate": 16000,
+      "mel_bins": 128,
+      "window_seconds": 30,
+      "license": "openrail",
+      "license_source": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/blob/7182cced29631ef7d7776eb8c01f24624b9b9b04/README.md",
+      "source_files": [
+        {
+          "name": ".gitattributes",
+          "bytes": 1519,
+          "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+        },
+        {
+          "name": "README.md",
+          "bytes": 8543,
+          "sha256": "a6289736fb885e464277ae7a480a42a3844fc9a887252c8f6482d3cc22eda6f8"
+        },
+        {
+          "name": "added_tokens.json",
+          "bytes": 34648,
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0"
+        },
+        {
+          "name": "config.json",
+          "bytes": 1232,
+          "sha256": "30853ccbd03cd6551dd2ba2cab2bbf1949e41eae295575650995606da23f9d0f"
+        },
+        {
+          "name": "generation_config.json",
+          "bytes": 3040,
+          "sha256": "44ee9d18f06139070e79542cd844032e519115fc74be464f0faa660bf4c30e28"
+        },
+        {
+          "name": "merges.txt",
+          "bytes": 493869,
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6"
+        },
+        {
+          "name": "model-00001-of-00002.safetensors",
+          "bytes": 2050743032,
+          "sha256": "24b5e1b2cb4b753de8c279c773f3fcb2e902b64ea877d6cf918b522758d65471"
+        },
+        {
+          "name": "model-00002-of-00002.safetensors",
+          "bytes": 1036388232,
+          "sha256": "b738b9200b73d36bb1164591b8e8f6363dd4bb1fce5b12427cc0c8bc9f7095ad"
+        },
+        {
+          "name": "model.safetensors.index.json",
+          "bytes": 111634,
+          "sha256": "1c98503cd123744b08c608ec3d5e9fdc095539b90d35e7cf08f70e7e35a2d47b"
+        },
+        {
+          "name": "normalizer.json",
+          "bytes": 52666,
+          "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd"
+        },
+        {
+          "name": "preprocessor_config.json",
+          "bytes": 357,
+          "sha256": "654cf18d3e163b948ceaf9766da56ce0b52de265d58673cf61c9376f126bd499"
+        },
+        {
+          "name": "special_tokens_map.json",
+          "bytes": 2186,
+          "sha256": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"
+        },
+        {
+          "name": "tokenizer.json",
+          "bytes": 3930645,
+          "sha256": "5c1bf30c9e716e1477bedef846b01be0013daecb89e9e3ef7ab89b23c178df1b"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 282845,
+          "sha256": "5f1c8321670c5447a77532960874a3aecfd98565b241cf3c49b2c5e493e2f8ea"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 835528,
+          "sha256": "6788c80b082e9b0d1393147d3a3e62ba19285ac0c82ace8e5ef00f37ead58971"
+        }
+      ]
+    }
+  ]
+}

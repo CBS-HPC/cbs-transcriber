@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cbs-transcriber"
+version = "0.1.0"
+description = "A local workspace for transcription, media review, and NVivo export"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.34",
+  "python-multipart>=0.0.20",
+  "openai>=1.68",
+  "imageio-ffmpeg>=0.6",
+  "keyring>=25.6",
+  "platformdirs>=4.3",
+  "ucloud-workflow==0.1.9",
+  "httpx>=0.28",
+  "websockets>=15",
+  "whisperx==3.8.6; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torch~=2.8.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torchaudio~=2.8.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torchvision~=0.23.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+]
+
+[project.scripts]
+cbs-transcriber = "cbs_transcriber.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "httpx>=0.28", "ruff>=0.11", "playwright>=1.51"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["browser: opt-in browser acceptance tests"]
+addopts = "-m 'not browser'"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cbs_transcriber"]
+
+[tool.uv.sources]
+ucloud-workflow = { url = "https://github.com/CBS-HPC/ucloud-api/releases/download/v0.1.9/ucloud_workflow-0.1.9-py3-none-any.whl" }
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

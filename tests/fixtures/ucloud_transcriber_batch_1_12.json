@@ -1,0 +1,20 @@
+{
+  "metadata": {"name": "transcriber", "version": "1.12", "flavorName": "Batch"},
+  "invocation": {
+    "applicationType": "WEB",
+    "parameters": [
+      {"name": "initScript", "type": "input_file"},
+      {"name": "inputFile", "type": "input_file"},
+      {"name": "inputDir", "type": "input_directory"},
+      {"name": "outputDir", "type": "input_directory"},
+      {"name": "outputFormat", "type": "enumeration"},
+      {"name": "model", "type": "enumeration"},
+      {"name": "language", "type": "enumeration"},
+      {"name": "jupyterLab", "type": "boolean"},
+      {"name": "archivePassword", "type": "text"},
+      {"name": "minSpeakers", "type": "integer"},
+      {"name": "maxSpeakers", "type": "integer"},
+      {"name": "mergeSpeakers", "type": "boolean"}
+    ]
+  }
+}

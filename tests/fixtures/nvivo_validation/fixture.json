@@ -1,0 +1,86 @@
+{
+  "format": "cbs-nvivo-validation-fixture-v1",
+  "synthetic": true,
+  "audio_kind": "tone clock, no speech; scripted text is not an ASR reference",
+  "sample_rate": 16000,
+  "duration_seconds": 12,
+  "cases": [
+    {
+      "id": "danish",
+      "language": "da",
+      "speakers": {"A": "Interviewer DA", "B": "Participant DA"},
+      "segments": [
+        {"speaker": "A", "start": 0, "end": 2.04, "text": "Hvordan fungerer arbejdet i København?"},
+        {"speaker": "B", "start": 2.04, "end": 5.97, "text": "🙂 Jeg kan lide fleksibilitet, men systemet er langsomt."},
+        {"speaker": "B", "start": 6.1, "end": 9.99, "text": "Hun sagde: \"Ja, æøå!\"\tDet står i café og café.\r\nNæste linje."},
+        {"speaker": "A", "start": 10.1, "end": 11.9, "text": "=1+1 er kun tekst; <kode> & \"citat\"."}
+      ],
+      "expected_windows": [
+        ["Timespan", "Speaker", "Content"],
+        ["00:00:00.0-00:00:02.0", "Interviewer DA", "Hvordan fungerer arbejdet i København?"],
+        ["00:00:02.0-00:00:06.0", "Participant DA", "🙂 Jeg kan lide fleksibilitet, men systemet er langsomt."],
+        ["00:00:06.1-00:00:10.0", "Participant DA", "Hun sagde: \"Ja, æøå!\" Det står i café og café. Næste linje."],
+        ["00:00:10.1-00:00:11.9", "Interviewer DA", "=1+1 er kun tekst; <kode> & \"citat\"."]
+      ],
+      "coding": {
+        "positive": {"passage": 1, "quote": "fleksibilitet", "start_char": 15, "end_char": 28},
+        "negative": {"passage": 1, "quote": "systemet er langsomt", "start_char": 34, "end_char": 54},
+        "pending": {"passage": 2, "quote": "Det står i café", "start_char": 22, "end_char": 37},
+        "literal": {"passage": 2, "quote": "café", "start_char": 41, "end_char": 46}
+      }
+    },
+    {
+      "id": "english",
+      "language": "en",
+      "speakers": {"A": "Interviewer EN", "B": "Participant EN"},
+      "segments": [
+        {"speaker": "A", "start": 0, "end": 2.04, "text": "How does work in Copenhagen feel?"},
+        {"speaker": "B", "start": 2.04, "end": 5.97, "text": "🙂 I value flexibility, but the system is slow."},
+        {"speaker": "B", "start": 6.1, "end": 9.99, "text": "She said: \"Yes!\"\tUse café and café.\r\nNext line."},
+        {"speaker": "A", "start": 10.1, "end": 11.9, "text": "=1+1 is only text; <code> & \"quotation\"."}
+      ],
+      "expected_windows": [
+        ["Timespan", "Speaker", "Content"],
+        ["00:00:00.0-00:00:02.0", "Interviewer EN", "How does work in Copenhagen feel?"],
+        ["00:00:02.0-00:00:06.0", "Participant EN", "🙂 I value flexibility, but the system is slow."],
+        ["00:00:06.1-00:00:10.0", "Participant EN", "She said: \"Yes!\" Use café and café. Next line."],
+        ["00:00:10.1-00:00:11.9", "Interviewer EN", "=1+1 is only text; <code> & \"quotation\"."]
+      ],
+      "coding": {
+        "positive": {"passage": 1, "quote": "flexibility", "start_char": 10, "end_char": 21},
+        "negative": {"passage": 1, "quote": "the system is slow", "start_char": 27, "end_char": 45},
+        "pending": {"passage": 2, "quote": "Use café", "start_char": 17, "end_char": 25},
+        "literal": {"passage": 2, "quote": "café", "start_char": 30, "end_char": 35}
+      }
+    }
+  ],
+  "controls": [
+    {
+      "id": "missing-start",
+      "speakers": {"A": "Named voice"},
+      "segments": [
+        {"speaker": "A", "start": 0, "end": 1, "text": "Known timing. Kendt tid."},
+        {"speaker": "B", "text": "No timing. Ingen tid. 🙂"}
+      ],
+      "refuse_formats": ["nvivo-windows", "nvivo-mac", "srt", "vtt"]
+    },
+    {
+      "id": "start-only",
+      "speakers": {},
+      "segments": [{"speaker": "A", "start": 3599.99, "text": "Start only. Kun start."}],
+      "refuse_formats": ["srt", "vtt"],
+      "expected_windows": [["Timespan", "Speaker", "Content"], ["01:00:00.0", "Speaker_01", "Start only. Kun start."]]
+    }
+  ],
+  "refi_design_probe": {
+    "implemented": false,
+    "hierarchy": [
+      {"path": ["Work"], "id": "work-parent-planned-only"},
+      {"path": ["Work", "Flexibility"], "id": "flexibility"},
+      {"path": ["Work", "Speed"], "id": "speed"},
+      {"path": ["Literal text"], "id": "literal_text"}
+    ],
+    "memo": "Synthetic memo: flexibility and speed are separate interpretations. Syntetisk memo: æøå, café, café and 🙂 stay literal.",
+    "states": "Accepted and changed items are eligible coding; rejected evidence stays an explicit rejection; unreviewed metadata never becomes approved coding."
+  }
+}

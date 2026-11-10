@@ -1,0 +1,53 @@
+{
+  "dataset": "FluidInference/fleurs-full",
+  "revision": "1cca811bb8ea4d370345f108f00518167040282c",
+  "language": "da_dk",
+  "split": "test",
+  "license": "CC-BY-4.0",
+  "source": "https://huggingface.co/datasets/FluidInference/fleurs-full",
+  "reference_source": "https://huggingface.co/datasets/FluidInference/fleurs-full/resolve/1cca811bb8ea4d370345f108f00518167040282c/da_dk/da_dk.trans.txt",
+  "reference_source_sha256": "9d0d556fa07f9d604db4617d600c7fe069e750b867f1cfdd32a08357c79f80c5",
+  "selection": "First five Danish file IDs (0000-0004), small smoke subset, not representative.",
+  "clips": [
+    {
+      "id": "da_dk_0000",
+      "file": "da_dk_0000.wav",
+      "text": "dette er en vigtig måde at skelne mellem nogle verber og objektiver",
+      "sha256": "05e5e021501884b9e98fd0b74b0f040e3c1283b1079fb77c0c6745e12e1bfed6",
+      "duration_seconds": 5.1,
+      "source": "https://huggingface.co/datasets/FluidInference/fleurs-full/resolve/1cca811bb8ea4d370345f108f00518167040282c/da_dk/da_dk_0000.wav"
+    },
+    {
+      "id": "da_dk_0001",
+      "file": "da_dk_0001.wav",
+      "text": "fordi dinosaurfjerene ikke har et veludviklet skaft kaldet et fjerskaft men har andre kendetegn fra fjer stråler og bistråler udledte forskerne at fjerskaft sandsynligvis var en senere evolutionær udvikling end disse andre karakteristika",
+      "sha256": "266d8f430b8b379629abd87a1c4e78f5017cf2f86bacaa3c8197349786ce8611",
+      "duration_seconds": 18.24,
+      "source": "https://huggingface.co/datasets/FluidInference/fleurs-full/resolve/1cca811bb8ea4d370345f108f00518167040282c/da_dk/da_dk_0001.wav"
+    },
+    {
+      "id": "da_dk_0002",
+      "file": "da_dk_0002.wav",
+      "text": "nordmarianernes beredskabskontor meddelte at der ikke var rapporteret om skader i nationen",
+      "sha256": "f6deb455b716987643c34e29158df4fd2c6be339e15b9d51e8d193684ce51ae7",
+      "duration_seconds": 6.84,
+      "source": "https://huggingface.co/datasets/FluidInference/fleurs-full/resolve/1cca811bb8ea4d370345f108f00518167040282c/da_dk/da_dk_0002.wav"
+    },
+    {
+      "id": "da_dk_0003",
+      "file": "da_dk_0003.wav",
+      "text": "finland er et fantastisk rejsemål for sejlere de tusind søers land har også tusindvis af øer i søerne samt i øhavene langs kysten",
+      "sha256": "444de6b7847dbd1c87329310f79638100bd2601227ea4b2a3ed18e41b5572317",
+      "duration_seconds": 11.34,
+      "source": "https://huggingface.co/datasets/FluidInference/fleurs-full/resolve/1cca811bb8ea4d370345f108f00518167040282c/da_dk/da_dk_0003.wav"
+    },
+    {
+      "id": "da_dk_0004",
+      "file": "da_dk_0004.wav",
+      "text": "folk har kendt til de grundlæggende kemiske grundstoffer såsom guld sølv og kobber siden oldtiden fordi de findes i naturen i deres naturlige form og er relativt nemme at grave efter hvis man har de rigtige værktøjer",
+      "sha256": "8e4e06dfbe9a962631657edc2cfe5ba6a92122154cb789e02df2281e809d971a",
+      "duration_seconds": 22.44,
+      "source": "https://huggingface.co/datasets/FluidInference/fleurs-full/resolve/1cca811bb8ea4d370345f108f00518167040282c/da_dk/da_dk_0004.wav"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Choose a library · CBS Transcriber</title>
+    <link
+      rel="icon"
+      href="/static/brand/cbs-logo-vertical.svg"
+      type="image/svg+xml"
+    />
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/library.js" defer></script>
+  </head>
+  <body data-page="library-chooser">
+    <div
+      id="library-instance-notice"
+      class="library-instance-notice"
+      role="alert"
+      hidden
+    >
+      This page belongs to an earlier library. Copy any unsaved changes, then
+      reload before continuing.
+    </div>
+    <main id="library-chooser" class="library-chooser">
+      <h1>Choose a library</h1>
+      <p class="settings-note">
+        A library holds your projects, transcripts and their history. Several
+        were found on this computer. The one you open is remembered for next
+        time, and you can switch later under <strong>Library</strong> in the
+        sidebar.
+      </p>
+      <ul class="library-list" data-library-list></ul>
+      <div class="dialog-actions">
+        <button type="button" class="button" data-library-browse>
+          Open another folder
+        </button>
+        <button type="button" class="button" data-library-new>
+          New library
+        </button>
+      </div>
+      <p class="settings-note" data-library-status role="status"></p>
+    </main>
+  </body>
+</html>

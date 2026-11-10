@@ -1,0 +1,146 @@
+{
+  "schema": "cbs.transcriber.model_evaluation_candidates.v1",
+  "reviewed_on": "2026-10-27",
+  "candidates": [
+    {
+      "id": "edda-v0.2-large",
+      "model": "danish-foundation-models/edda-v0.2-large",
+      "revision": "796bf033ce51d03bfe793844fa3412e72997b826",
+      "languages": ["da"],
+      "license": {
+        "declared_id": "apache-2.0",
+        "source": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/blob/796bf033ce51d03bfe793844fa3412e72997b826/README.md",
+        "sha256": null,
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/blob/796bf033ce51d03bfe793844fa3412e72997b826/README.md",
+      "training_overlap": {
+        "fleurs": "documented_training",
+        "evidence": "https://huggingface.co/danish-foundation-models/edda-v0.2-large/blob/796bf033ce51d03bfe793844fa3412e72997b826/README.md",
+        "notes": "The card explicitly lists Danish FLEURS train. This establishes dataset-family training exposure, not overlap with the app's separately pinned FLEURS test clips. No sample-level exclusion audit was performed."
+      },
+      "runtime": {"engine": "transformers", "validated": false},
+      "notes": "Danish specialist. The card explicitly licenses weights under Apache-2.0; no standalone licence text was present in the metadata file listing, so the licence hash is null. Base, data and runtime licences remain separate. Publisher did not validate CTranslate2 conversion; a faster-whisper artifact would require its own pin and review. No CBS performance or adoption claim."
+    },
+    {
+      "id": "edda-v0.2",
+      "model": "danish-foundation-models/edda-v0.2",
+      "revision": "698f8d04b5970f963d31c4079c05a76fa7f4f5bb",
+      "languages": ["da"],
+      "license": {
+        "declared_id": "apache-2.0",
+        "source": "https://huggingface.co/danish-foundation-models/edda-v0.2/blob/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/README.md",
+        "sha256": null,
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/danish-foundation-models/edda-v0.2/blob/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/README.md",
+      "training_overlap": {
+        "fleurs": "documented_training",
+        "evidence": "https://huggingface.co/danish-foundation-models/edda-v0.2/blob/698f8d04b5970f963d31c4079c05a76fa7f4f5bb/README.md",
+        "notes": "The card explicitly lists Danish FLEURS train. Dataset-family exposure does not establish overlap with the app's pinned test clips. Exact clip exclusion is unverified."
+      },
+      "runtime": {"engine": "transformers", "validated": false},
+      "notes": "Turbo-based Danish candidate. Weight licence declared Apache-2.0 in the card; no standalone licence text verified, hence null hash. Training-data and base-model terms need separate consideration. Publisher did not validate CTranslate2 conversion. English, code-switching, timing and diarization acceptance remain untested here."
+    },
+    {
+      "id": "roest-v3-whisper-1.5b",
+      "model": "CoRal-project/roest-v3-whisper-1.5b",
+      "revision": "7182cced29631ef7d7776eb8c01f24624b9b9b04",
+      "languages": ["da"],
+      "license": {
+        "declared_id": "openrail",
+        "source": "https://huggingface.co/CoRal-project/roest-v1-whisper-1.5b/blob/a6c1e24d9f10e6289607a1ba32341b68e8660688/LICENSE",
+        "sha256": "f575b6361ff69b52388967f69219f0cc7f9ae91f96482e5ad038261b2728799e",
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/blob/7182cced29631ef7d7776eb8c01f24624b9b9b04/README.md",
+      "training_overlap": {
+        "fleurs": "not_established",
+        "evidence": "https://huggingface.co/CoRal-project/roest-v3-whisper-1.5b/blob/7182cced29631ef7d7776eb8c01f24624b9b9b04/README.md",
+        "notes": "Card describes CoRal v3 fine-tuning. It does not establish FLEURS training inclusion or exclusion, including inherited pretraining."
+      },
+      "runtime": {"engine": "transformers", "validated": false},
+      "notes": "Metadata openrail is only a label. Card links a custom Alvenir licence via Alvenir/coral-1-whisper-large; that alias resolves to the pinned source above. Hash covers 16,554 downloaded public bytes. Restrictions include identity inference and downstream use conditions. This pins the currently linked text, not proof of its historical governing version. CBS review must resolve applicability, intended diarization and redistribution."
+    },
+    {
+      "id": "hviske-v5.3",
+      "model": "syvai/hviske-v5.3",
+      "revision": "5d1a09822018702dc51d763e3a867b62d26b3501",
+      "languages": ["da"],
+      "license": {
+        "declared_id": "cc-by-nc-4.0",
+        "source": "https://huggingface.co/syvai/hviske-v5.3/blob/5d1a09822018702dc51d763e3a867b62d26b3501/README.md",
+        "sha256": null,
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/syvai/hviske-v5.3/blob/5d1a09822018702dc51d763e3a867b62d26b3501/README.md",
+      "training_overlap": {
+        "fleurs": "not_established",
+        "evidence": "https://huggingface.co/syvai/hviske-v5.3/blob/5d1a09822018702dc51d763e3a867b62d26b3501/README.md",
+        "notes": "FLEURS inclusion/exclusion is not established. Card says 10% of each CoRal test split was used for best-checkpoint tracking; this is model-selection exposure, not a claim of gradient training. Do not call the complete CoRal test splits untouched holdouts."
+      },
+      "runtime": {"engine": "transformers", "validated": false},
+      "notes": "CC-BY-NC-4.0 declared; full licence bytes were not separately verified, hence null hash. The noncommercial condition needs CBS review of actual deployment, including funded or company-linked work. Documented inference executes remote model code; pinned code/dependencies require independent review. No execution or benchmark performed."
+    },
+    {
+      "id": "hviske-v6",
+      "model": "syvai/hviske-v6",
+      "revision": "323b5ffdf54ef22196340a0b37cb11e668fefc5a",
+      "languages": ["da"],
+      "license": {
+        "declared_id": "cc-by-nc-4.0",
+        "source": "https://huggingface.co/syvai/hviske-v6/blob/323b5ffdf54ef22196340a0b37cb11e668fefc5a/README.md",
+        "sha256": null,
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/syvai/hviske-v6/blob/323b5ffdf54ef22196340a0b37cb11e668fefc5a/README.md",
+      "training_overlap": {
+        "fleurs": "documented_training",
+        "evidence": "https://huggingface.co/syvai/hviske-v6/blob/323b5ffdf54ef22196340a0b37cb11e668fefc5a/README.md",
+        "notes": "Card lists FLEURS in its unified training corpus and reports excluding all five benchmark test sets by transcript hash. Publisher exclusion claim is not independently verified and does not establish sample-level exclusion of our pinned clips."
+      },
+      "runtime": {"engine": "custom", "validated": false},
+      "notes": "Own weights are CC-BY-NC-4.0 despite bundled third-party Apache/MIT notices. Pinned NOTICE distinguishes earlier Apache saga-2 ancestry from its later licence change: https://huggingface.co/syvai/hviske-v6/blob/323b5ffdf54ef22196340a0b37cb11e668fefc5a/NOTICE . It does not license own weights under Apache. Custom inference/code and noncommercial scope need review; no timestamps or diarization supplied by this card's model."
+    },
+    {
+      "id": "whisper-large-v3",
+      "model": "openai/whisper-large-v3",
+      "revision": "06f233fe06e710322aca913c1bc4249a0d71fce1",
+      "languages": ["da", "en"],
+      "license": {
+        "declared_id": "apache-2.0",
+        "source": "https://huggingface.co/openai/whisper-large-v3/blob/06f233fe06e710322aca913c1bc4249a0d71fce1/README.md",
+        "sha256": null,
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/openai/whisper-large-v3/blob/06f233fe06e710322aca913c1bc4249a0d71fce1/README.md",
+      "training_overlap": {
+        "fleurs": "not_established",
+        "evidence": "https://huggingface.co/openai/whisper-large-v3/blob/06f233fe06e710322aca913c1bc4249a0d71fce1/README.md",
+        "notes": "Public card does not establish exact FLEURS inclusion/exclusion in weakly labelled and pseudo-labelled pretraining. No clean-holdout assertion."
+      },
+      "runtime": {"engine": "transformers", "validated": false},
+      "notes": "Languages list is the target Danish/English subset, not exhaustive. HF metadata declares Apache-2.0, while OpenAI's upstream README says code and weights are MIT: https://github.com/openai/whisper/blob/6e3be77e1a105e59086e3e21ff5f609fd6fa89a5/README.md . Upstream LICENSE SHA-256 is b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d. Resolve artifact-specific licence evidence before adoption. Existing Systran CTranslate2 runtime is a different artifact requiring its own pin."
+    },
+    {
+      "id": "parakeet-tdt-0.6b-v3",
+      "model": "nvidia/parakeet-tdt-0.6b-v3",
+      "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+      "languages": ["da", "en"],
+      "license": {
+        "declared_id": "cc-by-4.0",
+        "source": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/blob/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/README.md",
+        "sha256": null,
+        "review_state": "pending_cbs_review"
+      },
+      "card_source": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/blob/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/README.md",
+      "training_overlap": {
+        "fleurs": "not_established",
+        "evidence": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/blob/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/README.md",
+        "notes": "Card names Granary and NeMo ASR Set 3.0 for training and FLEURS test for evaluation. This does not independently establish FLEURS exclusion from every source or pretraining stage."
+      },
+      "runtime": {"engine": "nemo", "validated": false},
+      "notes": "CC-BY-4.0 declared; full legalcode bytes not separately verified, hence null hash. Danish/English are a subset of 25 documented languages. NeMo engine records a published inference path, not app compatibility, measured memory or validation. Code, data and notices require their own review."
+    }
+  ]
+}

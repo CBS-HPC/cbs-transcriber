@@ -1,0 +1,60 @@
+{
+  "enhancement": null,
+  "language_default": "da",
+  "operation": "transcription",
+  "options": null,
+  "prepare_consent": null,
+  "prepare_runtime": false,
+  "provider": {
+    "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "Legacy native",
+    "settings": {
+      "approved_for": [],
+      "base_url": "https://cloud.invalid",
+      "capability": "words",
+      "concurrent_chunks": 1,
+      "enabled": true,
+      "language": "da",
+      "max_upload_mb": 20,
+      "model": "large-v3",
+      "provider_type": "ucloud",
+      "ucloud": null,
+      "ucloud_transcriber": {
+        "application": {
+          "name": "transcriber/Batch",
+          "version": "synthetic"
+        },
+        "cleanup_after_success": false,
+        "format_parameter": "output_format",
+        "hours": 4,
+        "input_parameter": "input_dir",
+        "language_parameter": "language",
+        "model_parameter": "model",
+        "output_parameter": "output_dir",
+        "product": {
+          "category": "synthetic",
+          "id": "gpu-nvidia-b200-1-gpu",
+          "provider": "synthetic"
+        },
+        "project_id": "synthetic-project",
+        "storage_path": "/synthetic-drive/inputs",
+        "template_job_id": ""
+      }
+    }
+  },
+  "replace": false,
+  "requested_features": {
+    "speaker_labels": false,
+    "word_timing": false
+  },
+  "routing": {
+    "connection": null,
+    "rules": {
+      "cuda_factor": 6.0,
+      "fallback": "local",
+      "speaker_minutes": 3.0,
+      "word_minutes": 10.0
+    }
+  },
+  "source": null
+}
