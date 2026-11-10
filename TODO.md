@@ -28,7 +28,10 @@ remain open. Missing-output reruns have a [design only](docs/proposals/native-fa
 no new transcription or remote cleanup was performed. Focused branch verification is recorded
 separately from the published release receipt.
 The segmented full backend gate now covers 5,526 unique cases: 5,500 passed, 26 skipped;
-independent inventory/outcome audit passes. Relevant provider browser regression is ongoing.
+independent inventory/outcome audit passes. Relevant provider browser regression finished with
+25 distinct passes. The isolated `codex/post-mvp-timing-hints` child now passes its complete
+5,600-case backend inventory: 5,574 passed, 26 skipped, independent Go. Both remain local;
+see [child verification](docs/verification-2026-11-10-timing-hints.md).
 
 ## Colleague MVP — 11 November 2026
 
@@ -38,7 +41,7 @@ editor/export reliability changes, load one labelled tested build and reserve to
 acceptance and blocking fixes. **MVP 0.1.0 was activated and verified**, including exact served
 asset bytes and unchanged database/originals. That development instance has since been stopped
 normally for the user's fresh uv-tool installation. The new installation completed with copy
-mode and serves MVP 0.1.0 from its installed tool environment; functional acceptance remains
+mode and was verified serving MVP 0.1.0 from its installed tool environment; functional acceptance remains
 pending. See the [release receipt](docs/verification-2026-11-10-mvp-release.md).
 
 10 November user acceptance: double-click/Text controls, manual Checked/Needs review and Next
@@ -421,14 +424,15 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   blocking wording changes. ADR 0156 retains the older conservative generation for history.
   Automatic timing estimates and the broader redesign remain post-MVP;
   any future estimate must be labelled and distinct from aligned/verified timing.
-- [ ] **Realignment alignment-hint provenance.** Reproduced on the branch: fresh unmarked
-  local realignment can retain old alignment-fit hints, and partial replacement can leave a
-  hint for an omitted word even with marked returned words. A versioned Apply remedy must
-  preserve exact frozen jobs, history and lost-reply successors; this is not solved by changing
-  the legacy transform. Per-word manual suppression under ADR 0137 remains useful but does
-  not establish whole-passage freshness. [Design](docs/proposals/legacy-timing-hints-2026-11-10.md).
-  Independent design review gives Go after versioned merge/adoption and honest cloud-history
-  boundaries were added. Implementation remains separate and waits for the current immutable gate.
+- [x] **Realignment alignment-hint provenance — local child only.** ADR 0169 now seals the
+  fresh host policy and invalidates whole-passage source alignment-fit hints after actual
+  timing replacement/adoption, including omitted words. Exact legacy transforms, raw evidence,
+  Working fences and lost replies remain. Structural carry and contained authority checks are
+  covered. The complete child gate is **5,574 passed, 26 skipped**, independently reviewed;
+  the earlier 393-case evidence gap was closed by a frozen rerun. No historical backfill or
+  automatic alignment. Cloud historical transformation and ordinary merge full transformation
+  remain `not_checked`. Branch `codex/post-mvp-timing-hints` stays unmerged and uninstalled.
+  [Verification and limits](docs/verification-2026-11-10-timing-hints.md).
 - [ ] **Track and roll back manual edits.** Make changes such as text edits, merges, splits and
   deletions easy to inspect and roll back. Existing result-version history provides a starting
   point; Undo merge now restores proven unmodified merges while keeping unrelated current edits

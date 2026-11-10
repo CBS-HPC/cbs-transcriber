@@ -278,6 +278,17 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V211: Fresh verified timing requests freeze the host-only invalidation policy at their exact
+  source/role acceptance boundary (ADR 0169); missing policy stays byte-exact legacy, unknown
+  policy refuses and mutation cannot remove/retarget it. Applied/replaced passages and changed
+  timing adoption invalidate all source alignment-fit word hints, including omitted spans;
+  skipped/unselected dictionaries and recognition confidence remain. Old/new local/cloud/merge/
+  conflict successors, receipts, Working proofs and projections dispatch stored generations.
+  Local history/capture validation never claims checked cloud transformation; no source rewrite,
+  invented scores, UI redesign or automatic alignment. Portable pins/caps remain enforced.
+  Present-policy Apply requires its generation/presence/value sealed by the host at birth;
+  a coincidental parameter or legacy v1 authority row cannot grant the new generation.
+  Structural joins retain invalidation from either input, including a marked right passage.
 - V209: New HTTP transcription selection/admission requires the saved connection's explicit
   successful Settings check, bound to actual resolved identity and credential (ADR 0167).
   Operational settings row 10 never enters provider versions, frozen jobs, provenance or public
@@ -1781,12 +1792,12 @@ T124|x|Conservative Text v2 word-time retention, exact legacy replay and repinne
 T125|x|Individual proven deleted-passage restoration, lifecycle barriers and exact current Working edit; 173 backend/structure, seven MVP browser and complete portable-chain checks pass|V185,V186,V197,I.passage-delete-undo,ADR0157
 T126|x|Background project/recording ZIP Activity with frozen selection, cancellation, retained streaming download and source-operation fencing; 22 final backend/API, 99 broader (two setup skips) and 16 browser checks pass|V5,V8,V189,V193,V199,I.export-settings,ADR0158
 T127|x|Reviewed history/response/store fixes loaded in rc4; exact packaged 100/600 synthetic audits pass source/correctness, 0/48 sampled content actions above 3 s, long save median 2.69 s and Undo split 2.49 s; retain n=3/hardware/history limits and separate background times|V3,V8,V79,V149,V200,I.history,I.transcript,ADR0159
-T128|~|Post-MVP checked-provider new-work selectors/admission with identity/credential-bound operational receipts; independent review and focused regression gate in progress; branch only|V209,V8,I.providers,ADR0167
+T128|x|Branch-only checked-provider new-work selectors/admission with identity/credential-bound receipts; complete parent backend and 25 relevant browser cases independently verified; recovery preserved|V209,V8,I.providers,ADR0167
 T129|x|Branch-only short README/linked guides, requested blue-on-light empty state and Library hide removal/confirmation layout; local links and synthetic narrow/wide checks; no installed-app change|V183,V8,I.libraries
 T130|x|Off-by-default actual Text textarea playback-overlay prototype; 28 distinct scoped browser cases and independent review pass, with explicit Chromium/Windows limits; branch only|V210,V188,V59,I.transcript
 T131|x|Offline CBS Runtime release confined to acquired lock/marker identities and exact contents; no recursive removal or reclaim; synthetic checks with explicit Linux/symlink limits|V116,I.enhance-api,ADR0168
 T132|x|Audit seventeen hidden work areas, explicit missing-only native rerun/owned-folder inventory design and synthetic bilingual anonymisation review proofs; production/privacy/live acceptance remain open|V8,V18,V20,I.native-batch
-T133|.|Versioned whole-passage alignment-fit invalidation for fresh local/cloud realignment; reproduced unmarked and partial-map gaps; preserve legacy transforms, exact history and lost-reply successors|V89,V200,I.history,I.transcript
+T133|x|Isolated versioned timing-hint invalidation, sealed fresh authority and exact legacy local/cloud/merge/conflict dispatch; complete child backend 5574 passed/26 skipped, independent Go; unmerged/uninstalled, cloud history not_checked|V89,V200,V211,I.history,I.transcript,ADR0169
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1864,8 +1875,13 @@ B415|2026-11-10|Library deletion preview inherited a floated field-note, squeezi
 B416|2026-11-10|Runtime supervisor trusted only HOLDING_LOCK and recursively removed a changed/replaced .prepare-lock during release|V116; verify acquired directory/owner identities and exact contents, unlink marker then rmdir; no reclaim or claim to resolve historical runtime-busy
 B417|2026-11-10|Removing the duplicate empty-page Create action exposed an old mobile rule that hid the sole navigation action|V8; retain existing sidebar Create at narrow widths and verify creation from the new empty state
 B418|2026-11-10|New checked-provider admission correctly refused synthetic native fixtures that never performed Settings Check|V209; explicitly check/save mocked fixture connections, preserving fresh-work refusal and frozen recovery rather than blanket trust
-B419|2026-11-10|Unmarked same-result realignment keeps text-bound old alignment-fit hints; partial word maps can also leave omitted-word hints beyond per-word stale markers|V89,T133; reproduced offline; versioned whole-passage remedy designed, not implemented; never alter legacy successor reconstruction as a quick fix
+B419|2026-11-10|Unmarked same-result realignment keeps text-bound old alignment-fit hints; partial word maps can also leave omitted-word hints beyond per-word stale markers|V89,V211,T133; isolated versioned whole-passage remedy implemented with scoped synthetic gates; exact legacy successor reconstruction retained; not merged or installed
 B420|2026-11-10|A retained native Retry mock rejected the existing request_timeout polling keyword, obscuring the survivor-recovery assertion|V8; align only the mock signature with the released polling contract and retain same-allocation/no-recreation assertions
 B421|2026-11-10|A Delete-stage test replaced shared shutil.rmtree globally, treating unrelated temporary-directory teardown as premature logical Delete|V183; scope the mock to Delete-owned targets while retaining transaction-boundary assertions
 B422|2026-11-10|Initial connection-check prototype allowed stale successful proofs or racing Save/failure observations to restore readiness, and malformed records could crash selectors|V209; resolved-identity generations, save/failure fencing and strict bounded observation validation; focused concurrent/replay/malformed regressions
 B423|2026-11-10|Private coverage audit normalized backslashes inside parameter IDs, collapsing two distinct cases although module execution included both|V8; preserve literal parameter tails/case/Unicode, normalize file prefixes only, use Pytest XML name mapping and assert fresh raw inventory/unique outcome equality
+B424|2026-11-10|Structural join deep-copied only the left passage, dropping new whole-passage alignment-fit invalidation when only the right passage was marked|V211; red adversarial join regression, source-marker-conditional carry and repinned normalized source within existing cap
+B425|2026-11-10|First timing-policy implementation trusted a known parameter value at Apply, letting a legacy job without host birth authority self-assert v2|V211; require generation/presence/value sealed at fresh acceptance, refuse coincidental keys and legacy-authority upgrades; adversarial no-authority/old-authority probes
+B426|2026-11-10|New merge/conflict generation dispatch used set membership on unvalidated JSON values, raising TypeError for list/dict formats instead of a clean invalid-evidence refusal|V211; validate stored generation type before dispatch and retain ValueError refusal for malformed/unknown generations
+B427|2026-11-10|First contained timing-policy seal reader materialized role_json before applying its bounded text reader|V8,V211; select only policy, then use the accounted 4096-byte reader; oversized-role resource refusal regression and source repin
+B428|2026-11-10|A same-size Windows test corruption could retain every filesystem witness, so the late-change test nondeterministically expected refusal without observable drift|V8,V137; reproduce equal witnesses and controlled red/green, then explicitly advance/assert test mtime; retain corruption/refusal assertions, quiescent transport contract and unchanged product; affected module rerun

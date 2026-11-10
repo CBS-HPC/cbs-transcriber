@@ -14,7 +14,23 @@ from .transcripts import MAX_TRANSCRIPT_BYTES
 
 POLICY = "local-timing-v1"
 FORMAT = "cbs-local-timing-capture-v1"
+NEW_FORMAT = "cbs-local-timing-capture-v2"
 MAX_BYTES = 2 * MAX_TRANSCRIPT_BYTES + 1024 * 1024
+
+
+def apply_policy(params):
+    if "timing_apply_policy" not in params:
+        return None
+    if params["timing_apply_policy"] != "invalidate-source-alignment-fit-v1":
+        _invalid()
+    return params["timing_apply_policy"]
+
+
+def input_binding(params):
+    value = {"source": params["source_snapshot"], "output": params["realign_output"]}
+    if apply_policy(params) is not None:
+        value["timing_apply_policy"] = apply_policy(params)
+    return value
 
 
 def _invalid():
@@ -153,7 +169,7 @@ def validate(value, job):
     if (
         not isinstance(value, dict)
         or set(value) != {"format", "source", "units", "assembled_output_sha256"}
-        or value["format"] != FORMAT
+        or value["format"] != (NEW_FORMAT if apply_policy(params) is not None else FORMAT)
         or value["source"] != _source(params)
         or not isinstance(value["units"], dict)
     ):
@@ -280,7 +296,7 @@ def begin_unit(store, job, folder, index):
     from .enhancement_worker import language_binding
 
     value = job["params"].get("timing_artifact_capture") or {
-        "format": FORMAT,
+        "format": NEW_FORMAT if apply_policy(job["params"]) is not None else FORMAT,
         "source": _source(job["params"]),
         "units": {},
         "assembled_output_sha256": None,
@@ -345,7 +361,7 @@ def verify_files(job, folder, index):
 
 def publish_output(store, job, output, message):
     value = copy.deepcopy(job["params"].get("timing_artifact_capture")) or {
-        "format": FORMAT,
+        "format": NEW_FORMAT if apply_policy(job["params"]) is not None else FORMAT,
         "source": _source(job["params"]),
         "units": {},
         "assembled_output_sha256": None,
@@ -452,7 +468,13 @@ def historical_references(value, job):
             ):
                 _invalid()
         receipt = params["realign_apply_receipt"]
-        if receipt.get("format") != "cbs-local-timing-apply-v1":
+        policy = apply_policy(params)
+        if (
+            receipt.get("format")
+            != ("cbs-local-timing-apply-v2" if policy is not None else "cbs-local-timing-apply-v1")
+            or receipt.get("timing_apply_policy") != policy
+            or receipt.get("input_sha256") != _hash(input_binding(params))
+        ):
             _invalid()
         for name in ("version", "previous"):
             reference = receipt[name]
@@ -505,6 +527,10 @@ def verify_historical(row, captured):
             or applied["action"] != "timing_realign"
             or applied["result_id"] != row["result_id"]
             or applied["context"].get("job_id") != job["id"]
+            or (
+                apply_policy(params) is not None
+                and applied["context"].get("timing_apply_policy") != apply_policy(params)
+            )
             or applied["context"].get("timing_artifacts") != evidence
             or applied["predecessor_id"] != previous["id"]
             or previous["result_id"] != applied["result_id"]
@@ -527,7 +553,9 @@ def verify_historical(row, captured):
         outputs = output.get("passages") if "passages" in output else {params["segment_id"]: output}
         if not isinstance(outputs, dict) or not outputs or outputs.keys() - frozen.keys():
             _invalid()
-        successor, ids, skipped = _successor(previous["payload"]["segments"], frozen, outputs)
+        successor, ids, skipped = _successor(
+            previous["payload"]["segments"], frozen, outputs, apply_policy=apply_policy(params)
+        )
         if (
             encode_payload(successor, previous["payload"]["speakers"])[1]
             != applied["payload_sha256"]
@@ -544,7 +572,7 @@ def public_projection(row, version_aliases):
     job = row["timing_artifact_parent"]
     creation = evidence["creation"]
     return {
-        "format": FORMAT,
+        "format": evidence["format"],
         "source_version": version_aliases[evidence["source"]["version_id"]],
         "application_version": version_aliases[creation["version_id"]],
         "source_projection_sha256": evidence["source"]["projection_sha256"],

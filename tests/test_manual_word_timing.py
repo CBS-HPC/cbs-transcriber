@@ -349,6 +349,35 @@ def test_transcription_confidence_not_removed_by_manual_timing():
     assert _current_alignment_hints(hints, edited) == hints
 
 
+@pytest.mark.parametrize("partial", [False, True])
+@pytest.mark.parametrize("marked", [False, True])
+def test_fresh_timing_invalidates_the_whole_passage_including_omitted_words(partial, marked):
+    from cbs_transcriber import local_timing
+    from cbs_transcriber.review_hints import _current_alignment_hints
+
+    original = passage()
+    original.pop("_hints", None)
+    if marked:
+        original["words"][1]["manual_timing"] = True
+    before = deepcopy(original)
+    words = deepcopy(original["words"][:1] if partial else original["words"])
+    for word in words:
+        word.pop("manual_timing", None)
+    words[0].update(start=0.1, end=0.8)
+    output = {"words": words, "word_timing": not partial}
+    legacy = local_timing._candidate(original, output)
+    fresh = local_timing._candidate(original, output, apply_policy=local_timing.POLICY)
+    assert "alignment_hints_stale" not in legacy
+    assert fresh["alignment_hints_stale"] is True
+    assert original == before
+    hints = {"word_kind": "alignment", "words": [[0, 3, 0.2], [4, 13, 0.4], [14, 19, 0.6]]}
+    assert _current_alignment_hints(hints, fresh)["words"] == []
+    assert (
+        _current_alignment_hints({**hints, "word_kind": "transcription"}, fresh)["words"]
+        == hints["words"]
+    )
+
+
 def test_preserves_unicode_codepoint_offsets_and_unknown_word_metadata():
     source = passage()
     source["text"] = "Hej 🧪 København igen."

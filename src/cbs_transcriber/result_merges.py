@@ -14,6 +14,7 @@ from .result_actions import append_edit, read_pair
 from .transcripts import MAX_TRANSCRIPT_BYTES
 
 FORMAT = "cbs-enhancement-merge-v1"
+NEW_FORMAT = "cbs-enhancement-merge-v2"
 SUMMARY_FIELDS = (
     "updated_passages",
     "timing_updates",
@@ -56,7 +57,7 @@ def _reference(version):
 
 def _plan(store, db, recording_id, result_id, incoming_id, revision):
     """Everything used by a preview or commit comes from this caller-owned transaction."""
-    from .transcript_merge import POLICY_VERSION, merge_payload
+    from .transcript_merge import NEW_POLICY_VERSION, merge_payload
 
     pair = read_pair(store, db, recording_id, result_id, incoming_id, revision)
     current, incoming = pair["current"], pair["source"]
@@ -79,7 +80,9 @@ def _plan(store, db, recording_id, result_id, incoming_id, revision):
     if base is None or incoming_head["source_version_id"] != base["id"]:
         raise ValueError("The enhancement's exact base must belong to the reviewed result.")
     base_payload = _payload(base)
-    merged = merge_payload(base_payload, ours_payload, incoming_payload, creation_payload)
+    merged = merge_payload(
+        base_payload, ours_payload, incoming_payload, creation_payload, policy=NEW_POLICY_VERSION
+    )
     payload, digest = encode_payload(merged["segments"], merged["speakers"])
     _bounded(payload)
     summary = {field: merged["summary"][field] for field in SUMMARY_FIELDS}
@@ -89,8 +92,8 @@ def _plan(store, db, recording_id, result_id, incoming_id, revision):
         "creation": _reference(creation),
     }
     binding = {
-        "format": FORMAT,
-        "policy": POLICY_VERSION,
+        "format": NEW_FORMAT,
+        "policy": NEW_POLICY_VERSION,
         "recording_id": recording_id,
         "revision": revision,
         "ours": _reference(ours_head),
@@ -163,7 +166,8 @@ def apply(
             merged = plan["merged"]
             evidence = merge_metadata(
                 {
-                    "format": FORMAT,
+                    "format": NEW_FORMAT,
+                    "timing_adoption_policy": "cbs-transcript-merge-v2",
                     **plan["references"],
                     "summary": plan["response"]["summary"],
                 }

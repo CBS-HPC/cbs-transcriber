@@ -135,6 +135,14 @@ Future public commits must descend only from the clean public main history.
   absent policies preserve legacy gaps. Local timing Apply commits version/mirror/job receipt
   atomically, validates lost-reply successors and skips newer timing maps. Keep original producer
   meaning, named voices and unselected dictionaries; reports validate without runtime/file reads.
+- ADR 0169 timing Apply generations are host-only: fresh verified source/role acceptance seals
+  the exact policy in a canonical v2 Working-job authority envelope. Old plain role authority
+  stays v1; parameters alone never upgrade it, and removing a key cannot downgrade the seal.
+  Actually applied timing and changed timing adoption invalidate whole-passage creation
+  alignment-fit hints, including omitted words; retain recognition confidence and immutable
+  raw evidence. Replay stored local/cloud/merge/conflict generations exactly. Local capture
+  and contained validation do not establish cloud historical transformation; keep that scope
+  not_checked and preserve current pins/caps. No historical backfill or automatic alignment.
 - Schema-8 result Trash changes visibility with revision checks and explicit history events.
   Retain result rows, raw files, versions, frozen jobs and source lineage. Active removal chooses
   the newest live result or clears its projection; restore activates only when none is active.
@@ -604,6 +612,12 @@ broader layouts and workflows await colleague feedback. Text-editor word followi
 an opt-in prototype. CBS Runtime work is offline ownership/recovery design and mocked checks;
 anonymisation is decision-ready design and synthetic local prototyping. Neither authorizes
 preparation, paid jobs, private uploads or live cleanup. Missing-output reruns are design only.
+
+The reviewed timing-hint remedy is being implemented separately on local
+`codex/post-mvp-timing-hints`, based on post-MVP checkpoint `7cf165c`. That worktree owns only
+the backend policy/receipt/merge/validation slice in ADR 0169 and its synthetic tests. Do not
+edit the parent's frozen source or merge this experiment back before independent review and
+its gates pass. Main, Desktop and installed MVP remain unchanged. No frontend redesign.
 
 Implement the approved plan autonomously. Update TODO checkboxes as work passes verification.
 On failure, trace the cause and add a regression test where useful; record material lessons

@@ -171,5 +171,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0166 — Keep manual wording and splitting independent of word timing](0166-timing-independent-manual-editing.md)
 - [0167 — Checked connections for new transcription](0167-checked-provider-new-work.md)
 - [0168 — Release only the acquired preparation lock](0168-owned-preparation-lock-release.md)
+- [0169 — Versioned source alignment-fit hint invalidation](0169-versioned-timing-hint-invalidation.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

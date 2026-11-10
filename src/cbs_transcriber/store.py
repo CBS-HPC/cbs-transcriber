@@ -1568,7 +1568,7 @@ class Store:
         from . import restored_owners
 
         restored_owners.require_job(self, job_id)
-        from . import repair_cloud
+        from . import local_timing, repair_cloud
         from .result_actions import append_edit
 
         validate_revision(revision)
@@ -1582,9 +1582,12 @@ class Store:
             job = dict(row)
             params = json.loads(row["params"])
             job["params"] = params
+            apply_policy = local_timing._policy(params)
             from . import result_roles, timing_working
 
             authority = result_roles.job_authority(db, job_id, recording_id, "timing")
+            if apply_policy is not None and authority is None:
+                raise ValueError("The timing application policy has no trusted acceptance receipt.")
             if authority is not None:
                 timing_working.validate_authorized_params(authority, "timing", params)
             if (
@@ -1644,6 +1647,8 @@ class Store:
                 ):
                     raise ValueError("The applied repair version failed its integrity check.")
                 decode_payload(version["payload"], version["payload_sha256"])
+                if apply_policy is not None:
+                    local_timing.verify_cloud_receipt(db, recording_id, result_id, job, params)
                 from . import timing_working
 
                 if authority is not None or working_choice is not None:
@@ -1669,27 +1674,9 @@ class Store:
                 )
                 frozen = {s["id"]: s for s in params["source_snapshot"]["segments"]}
                 outputs = params["realign_output"]["passages"]
-                applied, skipped = [], []
-                for segment in segments:
-                    identifier = segment["id"]
-                    if identifier not in outputs:
-                        continue
-                    if identifier not in frozen or any(
-                        segment.get(k) != frozen[identifier].get(k)
-                        for k in ("text", "start", "end", "words", "word_timing", "words_current")
-                    ):
-                        skipped.append(identifier)
-                        continue
-                    timing = outputs[identifier]
-                    segment.update(
-                        words=json.loads(json.dumps(timing["words"])),
-                        word_timing=timing["word_timing"],
-                        words_current=True,
-                    )
-                    if "start" in timing and (segment["start"] is None or segment["end"] is None):
-                        segment.update(start=timing["start"], end=timing["end"])
-                    applied.append(identifier)
-                skipped.extend(i for i in outputs if i not in {s["id"] for s in segments})
+                segments, applied, skipped = local_timing._cloud_successor(
+                    segments, frozen, outputs, apply_policy=apply_policy
+                )
                 if applied:
                     version = append_edit(
                         self,
@@ -1700,7 +1687,8 @@ class Store:
                         segments,
                         speakers,
                         action="timing_realign",
-                        context={"job_id": job_id},
+                        context={"job_id": job_id}
+                        | ({local_timing.POLICY_KEY: apply_policy} if apply_policy else {}),
                         reason=None,
                         **(
                             {"working_choice": working_choice} if working_choice is not None else {}
@@ -1716,6 +1704,19 @@ class Store:
                             warning = timing_working.FOLLOW_WARNING
                     params["realign_applied"] = "applied"
                     params["realign_receipt"] = {
+                        **(
+                            {
+                                "format": local_timing.CLOUD_FORMAT,
+                                local_timing.POLICY_KEY: apply_policy,
+                                "previous": {
+                                    "id": head["id"],
+                                    "payload_sha256": head["payload_sha256"],
+                                },
+                                "input_sha256": local_timing.input_hash(params),
+                            }
+                            if apply_policy is not None
+                            else {}
+                        ),
                         "version": version,
                         "fingerprint": fingerprint,
                         "base_revision": revision,
@@ -3151,6 +3152,7 @@ class Store:
                 ):
                     raise ValueError("The timing source changed before it could be queued.")
                 frozen = timing_working.freeze(self, db, recording_id, frozen)
+                frozen = local_timing.freeze_policy(frozen)
             self._insert_job(
                 db,
                 recording_id,
@@ -3185,6 +3187,13 @@ class Store:
             if params.get(key):
                 restored_owners.require_owned(db, owner_kind, params[key])
         from . import runtime_store
+
+        if "timing_apply_policy" in params:
+            from . import local_timing
+
+            local_timing._policy(params)
+            if not timing_role_verified:
+                raise ValueError("Timing application policy requires verified fresh acceptance.")
 
         if kind == "source-inspect":
             raise ValueError("Source inspection jobs require the internal inspection lifecycle.")
@@ -3250,7 +3259,16 @@ class Store:
                 else params["working_role"]
             )
             result_roles.authorize_job(
-                db, self, identifier, recording_id, policy, expected, params.get("source_snapshot")
+                db,
+                self,
+                identifier,
+                recording_id,
+                policy,
+                expected,
+                params.get("source_snapshot"),
+                timing_apply_policy=params.get("timing_apply_policy")
+                if timing_role_verified
+                else None,
             )
 
     def enqueue_enhancement(
@@ -3309,9 +3327,12 @@ class Store:
             if {"working_role", "working_role_policy"} & frozen_params.keys():
                 raise ValueError("Working evidence is created only when work is accepted.")
             if frozen_params.get("realign") is True:
-                from . import timing_working
+                from . import local_timing, timing_working
 
                 frozen_params = timing_working.freeze(self, db, recording_id, frozen_params)
+                frozen_params = local_timing.freeze_policy(frozen_params)
+            elif "timing_apply_policy" in frozen_params:
+                raise ValueError("Timing application policy requires a fresh timing request.")
             else:
                 from . import result_roles, timing_working
 

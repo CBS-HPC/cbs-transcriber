@@ -63,6 +63,9 @@ def _current_alignment_hints(value, segment):
     """Do not show source alignment fit for manually moved audio intervals."""
     if value.get("word_kind") != "alignment":
         return value
+    if "alignment_hints_stale" in segment:
+        # Host timing replacement invalidates even old hints for omitted partial-map words.
+        return {**value, "words": []}
     try:
         words = segment.get("words", [])
         if not isinstance(words, list) or any(not isinstance(word, dict) for word in words):

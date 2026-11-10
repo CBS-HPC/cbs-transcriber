@@ -53,6 +53,8 @@
 | Alternative | A retained live saved result or version that is not the Working version; it remains independently editable and restorable. |
 | Role event | An append-only observation marking or clearing an exact Working version, with its local-user or system actor recorded separately from content edits and producer ancestry. |
 | Timing application receipt | The atomic link between one completed timing job and its exact immutable timing successor; separate from the saved result's original producer and source version. |
+| Timing Apply generation | The host-sealed fresh timing policy selecting the exact successor/receipt rules; old missing-policy requests retain their legacy generation, and parameters alone cannot upgrade or downgrade authority (ADR 0169). |
+| Source alignment-fit invalidation | A passage marker suppressing old creation-time alignment word scores after applied timing replacement/adoption, including omitted words; recognition confidence and raw source evidence remain. |
 | Passage / segment | A stretch of transcript with optional start/end times and a speaker label. |
 | Manual passage review | User progress (Not checked, Checked or Needs review) bound to exact saved passage content, independent of uncertainty hints and Working versions. |
 | Current word mapping | Word offsets and intervals still belonging to the present text; independent of complete coverage and whether a researcher has edited words. |

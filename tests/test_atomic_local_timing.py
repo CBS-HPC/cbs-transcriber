@@ -379,6 +379,7 @@ def test_legacy_timing_without_working_policy_never_promotes(client):
     before = store.recording(rid)
     params = store.job(job_id)["params"]
     del params["timing_working_policy"]
+    params.pop("timing_apply_policy")
     # Simulate a durable job accepted by an older version of the application.
     store.execute("DELETE FROM working_job_authorities WHERE job_id=?", (job_id,))
     store.execute("UPDATE jobs SET params=? WHERE id=?", (json.dumps(params), job_id))
@@ -393,6 +394,8 @@ def test_legacy_timing_with_coincidental_policy_never_promotes(client):
     before = store.recording(rid)
     params = store.job(job_id)["params"]
     # Old custom jobs could use this formerly unreserved key, even with identical value.
+    params.pop("timing_apply_policy")
+    store.execute("UPDATE jobs SET params=? WHERE id=?", (json.dumps(params), job_id))
     store.execute("DELETE FROM working_job_authorities WHERE job_id=?", (job_id,))
     assert repair_cloud.identity(params) == repair_cloud.identity(
         {key: value for key, value in params.items() if key != "timing_working_policy"}
@@ -408,8 +411,10 @@ def test_edit_realign_captures_only_current_exact_source_and_rejects_forged_poli
     params = {"realign": True, "source_snapshot": source, "enhancement": {"execution": "local"}}
     accepted = store.add_job(rid, "enhance", params, capture_timing_role=True)
     assert accepted["params"]["timing_working_policy"]["expected_role"] == current["result_roles"]
+    working_claim = dict(accepted["params"])
+    working_claim.pop("timing_apply_policy")
     with pytest.raises(ValueError, match="Working evidence"):
-        store.add_job(rid, "enhance", accepted["params"])
+        store.add_job(rid, "enhance", working_claim)
     segments = copy.deepcopy(current["segments"])
     segments[1]["text"] = "Changed before job acceptance."
     store.save_transcript(

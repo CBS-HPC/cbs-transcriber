@@ -10,6 +10,11 @@ from .transcript_merge import _index, _valid_timing
 from .transcripts import MAX_TRANSCRIPT_BYTES
 
 FORMAT = "cbs-local-timing-apply-v1"
+NEW_FORMAT = "cbs-local-timing-apply-v2"
+CLOUD_FORMAT = "cbs-cloud-timing-apply-v2"
+POLICY_KEY = "timing_apply_policy"
+POLICY = "invalidate-source-alignment-fit-v1"
+MARKER = "alignment_hints_stale"
 MAP_FIELDS = ("text", "start", "end", "words", "word_timing", "words_current")
 MAX_DOCUMENT_BYTES = 2 * MAX_TRANSCRIPT_BYTES + 1024 * 1024
 
@@ -23,7 +28,34 @@ def _digest(value):
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _policy(params):
+    if POLICY_KEY not in params:
+        return None
+    if params[POLICY_KEY] != POLICY:
+        raise ValueError("The frozen timing application policy is invalid or unsupported.")
+    return POLICY
+
+
+def freeze_policy(params):
+    if POLICY_KEY in params:
+        raise ValueError("Timing application policy is created only when work is accepted.")
+    return {**params, POLICY_KEY: POLICY}
+
+
+def input_hash(params):
+    value = {"source": params["source_snapshot"], "output": params["realign_output"]}
+    if _policy(params) is not None:
+        value[POLICY_KEY] = POLICY
+    return _digest(value)
+
+
 def assert_params_preserved(previous, proposed, *, authority=None, policy=None):
+    _policy(previous)
+    _policy(proposed)
+    if (POLICY_KEY in previous) != (POLICY_KEY in proposed) or previous.get(
+        POLICY_KEY
+    ) != proposed.get(POLICY_KEY):
+        raise ValueError("Frozen timing application policy cannot be changed.")
     if authority is not None:
         from . import timing_working
 
@@ -112,10 +144,14 @@ def _inputs(db, recording_id, result_id, params):
     outputs = output.get("passages") if "passages" in output else {params.get("segment_id"): output}
     if not isinstance(outputs, dict) or not outputs or any(key not in frozen for key in outputs):
         raise ValueError("The timing output does not match its frozen passages.")
-    return frozen, outputs, _digest({"source": source, "output": output})
+    return frozen, outputs, input_hash(params)
 
 
-def _candidate(passage, timing):
+def _candidate(passage, timing, *, apply_policy=None):
+    if apply_policy not in (None, POLICY):
+        raise ValueError("The timing application policy is invalid or unsupported.")
+    if apply_policy is not None and MARKER in passage and passage[MARKER] is not True:
+        raise ValueError("The frozen alignment hint evidence is invalid.")
     if (
         not isinstance(timing, dict)
         or timing.keys() - {"words", "word_timing", "start", "end"}
@@ -164,10 +200,14 @@ def _candidate(passage, timing):
             raise ValueError(
                 "Unbounded passage timing must use only its own completely timed words."
             )
+    if apply_policy is not None:
+        updated[MARKER] = True
     return updated
 
 
-def _successor(segments, frozen, outputs):
+def _successor(segments, frozen, outputs, *, apply_policy=None):
+    if apply_policy not in (None, POLICY):
+        raise ValueError("The timing application policy is invalid or unsupported.")
     changed = copy.deepcopy(segments)
     applied, skipped = [], []
     for index, passage in enumerate(segments):
@@ -175,17 +215,14 @@ def _successor(segments, frozen, outputs):
         if identifier not in outputs:
             continue
         # Validate producer output independently, including targets which have since changed.
-        _candidate(frozen[identifier], outputs[identifier])
-        if _digest({field: passage[field] for field in MAP_FIELDS if field in passage}) != _digest(
-            {
-                field: frozen[identifier][field]
-                for field in MAP_FIELDS
-                if field in frozen[identifier]
-            }
+        _candidate(frozen[identifier], outputs[identifier], apply_policy=apply_policy)
+        fields = MAP_FIELDS + ((MARKER,) if apply_policy is not None else ())
+        if _digest({field: passage[field] for field in fields if field in passage}) != _digest(
+            {field: frozen[identifier][field] for field in fields if field in frozen[identifier]}
         ):
             skipped.append(identifier)
             continue
-        changed[index] = _candidate(passage, outputs[identifier])
+        changed[index] = _candidate(passage, outputs[identifier], apply_policy=apply_policy)
         applied.append(identifier)
     skipped.extend(
         identifier for identifier in outputs if identifier not in {s["id"] for s in segments}
@@ -193,7 +230,44 @@ def _successor(segments, frozen, outputs):
     return changed, applied, skipped
 
 
+def _cloud_successor(segments, frozen, outputs, *, apply_policy=None):
+    if apply_policy is not None:
+        return _successor(segments, frozen, outputs, apply_policy=apply_policy)
+    # Preserve the original cloud transform, including its absent/get comparison semantics.
+    changed, applied, skipped = copy.deepcopy(segments), [], []
+    for segment in changed:
+        identifier = segment["id"]
+        if identifier not in outputs:
+            continue
+        if identifier not in frozen or any(
+            segment.get(key) != frozen[identifier].get(key) for key in MAP_FIELDS
+        ):
+            skipped.append(identifier)
+            continue
+        timing = outputs[identifier]
+        segment.update(
+            words=copy.deepcopy(timing["words"]),
+            word_timing=timing["word_timing"],
+            words_current=True,
+        )
+        if "start" in timing and (segment["start"] is None or segment["end"] is None):
+            segment.update(start=timing["start"], end=timing["end"])
+        applied.append(identifier)
+    skipped.extend(
+        identifier for identifier in outputs if identifier not in {s["id"] for s in changed}
+    )
+    return changed, applied, skipped
+
+
 def _existing(db, recording_id, result_id, job, params, input_hash):
+    apply_policy = _policy(params)
+    from . import result_roles, timing_working
+
+    authority = result_roles.job_authority(db, job["id"], recording_id, "timing")
+    if apply_policy is not None and authority is None:
+        raise ValueError("The timing application policy has no trusted acceptance receipt.")
+    if authority is not None:
+        timing_working.validate_authorized_params(authority, "timing", params)
     receipt = params.get("realign_apply_receipt")
     if (
         not isinstance(receipt, dict)
@@ -208,7 +282,9 @@ def _existing(db, recording_id, result_id, job, params, input_hash):
             "applied_ids",
             "skipped_ids",
         }
-        or receipt.get("format") != FORMAT
+        | ({POLICY_KEY} if apply_policy is not None else set())
+        or receipt.get("format") != (NEW_FORMAT if apply_policy is not None else FORMAT)
+        or receipt.get(POLICY_KEY) != apply_policy
         or receipt.get("input_sha256") != input_hash
         or any(
             not isinstance(receipt[key], dict) or set(receipt[key]) != {"id", "payload_sha256"}
@@ -258,6 +334,7 @@ def _existing(db, recording_id, result_id, job, params, input_hash):
         or version["sequence"] != previous["sequence"] + 1
         or version["source_version_id"] != previous["source_version_id"]
         or context.get("job_id") != job["id"]
+        or (apply_policy is not None and context.get(POLICY_KEY) != apply_policy)
         or version["action"] not in {"timing_realign", "save_no_change"}
     ):
         raise ValueError("The applied timing version failed its integrity check.")
@@ -265,7 +342,9 @@ def _existing(db, recording_id, result_id, job, params, input_hash):
     frozen = {item["id"]: item for item in params["source_snapshot"]["segments"]}
     output = params["realign_output"]
     outputs = output.get("passages") if "passages" in output else {params.get("segment_id"): output}
-    successor, applied, skipped = _successor(payload["segments"], frozen, outputs)
+    successor, applied, skipped = _successor(
+        payload["segments"], frozen, outputs, apply_policy=apply_policy
+    )
     if (
         encode_payload(successor, payload["speakers"])[0] != version["payload"]
         or applied != receipt.get("applied_ids")
@@ -292,6 +371,30 @@ def _existing(db, recording_id, result_id, job, params, input_hash):
     return receipt
 
 
+def verify_cloud_receipt(db, recording_id, result_id, job, params):
+    """Exact fresh cloud host proof; local artifact validation is deliberately not implied."""
+    receipt = params.get("realign_receipt")
+    from . import repair_cloud
+
+    if (
+        _policy(params) != POLICY
+        or not isinstance(receipt, dict)
+        or receipt.get("format") != CLOUD_FORMAT
+        or receipt.get("fingerprint") != repair_cloud.application_fingerprint(job)
+    ):
+        raise ValueError("The applied cloud timing receipt is invalid.")
+    adapted = {key: value for key, value in receipt.items() if key != "fingerprint"}
+    adapted["format"] = NEW_FORMAT
+    return _existing(
+        db,
+        recording_id,
+        result_id,
+        job,
+        {**params, "realign_apply_receipt": adapted},
+        input_hash(params),
+    )
+
+
 def apply(store, recording_id, result_id, job_id, revision, *, working_choice=None):
     from .result_actions import append_edit
     from .store import now
@@ -312,9 +415,12 @@ def apply(store, recording_id, result_id, job_id, revision, *, working_choice=No
             params = json.loads(job["params"])
             if not isinstance(params, dict):
                 raise ValueError("The frozen timing request is invalid.")
+            apply_policy = _policy(params)
             from . import result_roles, timing_working
 
             authority = result_roles.job_authority(db, job_id, recording_id, "timing")
+            if apply_policy is not None and authority is None:
+                raise ValueError("The timing application policy has no trusted acceptance receipt.")
             if authority is not None:
                 timing_working.validate_authorized_params(authority, "timing", params)
             if job["state"] != "completed" or params.get("realign") is not True:
@@ -360,7 +466,9 @@ def apply(store, recording_id, result_id, job_id, revision, *, working_choice=No
                     )
                 if current["revision"] != revision:
                     raise ValueError("This transcript changed. Reload before applying timing.")
-                segments, applied, skipped = _successor(payload["segments"], frozen, outputs)
+                segments, applied, skipped = _successor(
+                    payload["segments"], frozen, outputs, apply_policy=apply_policy
+                )
                 if applied:
                     evidence = None
                     if params.get("timing_artifact_policy") is not None:
@@ -379,6 +487,7 @@ def apply(store, recording_id, result_id, job_id, revision, *, working_choice=No
                         payload["speakers"],
                         action="timing_realign",
                         context={"job_id": job_id}
+                        | ({POLICY_KEY: apply_policy} if apply_policy is not None else {})
                         | ({"segment_id": applied[0]} if len(outputs) == 1 else {}),
                         reason=None,
                         timing_artifacts=evidence,
@@ -396,7 +505,8 @@ def apply(store, recording_id, result_id, job_id, revision, *, working_choice=No
                             warning = timing_working.FOLLOW_WARNING
                     params["realign_applied"] = "applied"
                     params["realign_apply_receipt"] = {
-                        "format": FORMAT,
+                        "format": NEW_FORMAT if apply_policy is not None else FORMAT,
+                        **({POLICY_KEY: apply_policy} if apply_policy is not None else {}),
                         "version": version,
                         "previous": {"id": head["id"], "payload_sha256": head["payload_sha256"]},
                         "base_revision": revision,

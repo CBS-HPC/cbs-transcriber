@@ -120,6 +120,109 @@ def test_lost_reply_is_idempotent_with_old_revision(case, monkeypatch):
     )
 
 
+@pytest.mark.parametrize("fresh", [False, True], ids=["legacy", "v2"])
+def test_marked_cloud_apply_reopen_lost_reply_uses_its_actual_successor_generation(
+    tmp_path, monkeypatch, fresh
+):
+    import json
+
+    from cbs_transcriber import local_timing, result_roles, timing_working
+    from cbs_transcriber.store import Store
+
+    study = bundle_fixtures.study.__wrapped__(tmp_path)
+    store, recording, result, *_ = study
+    rid, result_id = recording["id"], result["id"]
+    current = store.recording(rid)
+    segments = copy.deepcopy(current["segments"])
+    segments[1].update(
+        words=[
+            {
+                "word": "God",
+                "start": 2.1,
+                "end": 3,
+                "char_start": 0,
+                "char_end": 3,
+                "manual_timing": True,
+            },
+            {"word": "morgen.", "start": None, "end": None, "char_start": 4, "char_end": 11},
+        ],
+        word_timing=False,
+        words_current=True,
+    )
+    current = store.save_transcript(rid, segments, current["speakers"], current["revision"])
+    role = current["result_roles"]
+    version = store.result_versions(rid, result_id)[0]
+    plan = result_roles.preview(store, rid, version["id"], current["revision"], role["revision"])
+    result_roles.apply(
+        store, rid, version["id"], current["revision"], role["revision"], plan["fingerprint"]
+    )
+    enqueue = store.enqueue_enhancement
+
+    def enqueue_timing(recording_id, result_id, revision, params):
+        job = enqueue(recording_id, result_id, revision, params | {"realign": True})
+        if not fresh:
+            # Synthetic historical acceptance: no policy, but genuine frozen Working authority.
+            frozen = dict(job["params"])
+            frozen.pop(local_timing.POLICY_KEY)
+            store.execute("UPDATE jobs SET params=? WHERE id=?", (json.dumps(frozen), job["id"]))
+            seal = json.loads(
+                store.one(
+                    "SELECT role_json FROM working_job_authorities WHERE job_id=?", (job["id"],)
+                )["role_json"]
+            )
+            store.execute(
+                "UPDATE working_job_authorities SET role_json=? WHERE job_id=?",
+                (
+                    json.dumps(
+                        seal["role"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    ),
+                    job["id"],
+                ),
+            )
+            return store.job(job["id"])
+        return job
+
+    monkeypatch.setattr(store, "enqueue_enhancement", enqueue_timing)
+    value = cloud_fixtures.execution.__wrapped__(study, tmp_path, monkeypatch)
+    repair_remote.process(value.remote, value.job["id"], runner=cloud_fixtures.fake_alignment)
+    cloud_fixtures.terminal(value)
+    value.controller.harvest()
+    value.controller.publish()
+    store.update_job(value.job["id"], state="failed")
+    before = store.recording(rid)
+    proof = repair_cloud.validate_local_outputs(store, store.job(value.job["id"]))
+    snapshot = store.snapshot_project
+    monkeypatch.setattr(
+        store, "snapshot_project", lambda *_: (_ for _ in ()).throw(OSError("lost reply"))
+    )
+    with pytest.raises(OSError, match="lost reply"):
+        apply(value, revision=before["revision"])
+    monkeypatch.setattr(store, "snapshot_project", snapshot)
+    committed = store.recording(rid)
+    versions = store.result_versions(rid, result_id)
+    job = store.job(value.job["id"])
+    assert (local_timing.MARKER in committed["segments"][1]) is fresh
+    assert job["params"]["realign_receipt"].get("format") == (
+        local_timing.CLOUD_FORMAT if fresh else None
+    )
+    assert committed["result_roles"]["working"]["version_id"] == versions[0]["id"]
+    with store.connection() as db:
+        saved = db.execute(
+            "SELECT * FROM result_versions WHERE id=?", (versions[0]["id"],)
+        ).fetchone()
+        previous = db.execute(
+            "SELECT * FROM result_versions WHERE id=?", (saved["predecessor_id"],)
+        ).fetchone()
+        assert timing_working._timing_receipt(db, rid, result_id, job, previous, saved)
+    reopened = Store(store.root)
+    again = reopened.apply_repair_timing(
+        rid, result_id, job["id"], before["revision"], proof["fingerprint"]
+    )
+    assert again["segments"] == committed["segments"]
+    assert again["result_roles"] == committed["result_roles"]
+    assert reopened.result_versions(rid, result_id) == versions
+
+
 @pytest.mark.parametrize("make_working", [False, True])
 def test_cloud_timing_explicit_choice_retries_only_the_same_decision(case, make_working):
     store, rid = case.store, case.recording["id"]

@@ -8,10 +8,20 @@ import json
 from . import result_merges
 from .history import conflict_review_metadata, encode_payload, validate_reason
 from .result_actions import append_edit
-from .transcript_merge import MAX_DETAILS, _index, _timing, _valid_timing, merge_payload
+from .transcript_merge import (
+    MAX_DETAILS,
+    NEW_POLICY_VERSION,
+    _adoption_policy,
+    _index,
+    _timing,
+    _timing_identity,
+    _valid_timing,
+    merge_payload,
+)
 from .transcripts import MAX_TRANSCRIPT_BYTES, edit_segment
 
 FORMAT = "cbs-result-conflict-review-v1"
+NEW_FORMAT = "cbs-result-conflict-review-v2"
 GROUPS = ("wording", "timing", "speaker")
 SUMMARY_FIELDS = (
     "decisions",
@@ -91,11 +101,12 @@ def _speaker_refusal(theirs, current, base, ours, incoming):
     return None
 
 
-def review_payload(base, current, incoming, creation, decisions):
+def review_payload(base, current, incoming, creation, decisions, *, policy=None):
     """Recompute every selected field from exact snapshots, preserving unselected dictionaries."""
     decisions = validate_decisions(decisions)
     # Reuse the established bounded lineage and creation-to-base correspondence checks.
-    merge_payload(base, current, incoming, creation)
+    merge_payload(base, current, incoming, creation, policy=policy)
+    fresh = _adoption_policy(policy, base, current, incoming, creation)
     indexes = [_index(item) for item in (base, current, incoming, creation)]
     base_index, current_index, incoming_index, creation_index = indexes
     mapping = {
@@ -189,6 +200,8 @@ def review_payload(base, current, incoming, creation, decisions):
             if passage["text"] != theirs["text"]:
                 result[index] = edit_segment(passage, "free", theirs["text"])
         elif group == "timing":
+            if fresh and _timing_identity(passage) == _timing_identity(theirs):
+                continue
             for field in ("start", "end", "words", "word_timing", "words_current"):
                 if field in theirs:
                     passage[field] = copy.deepcopy(theirs[field])
@@ -197,6 +210,8 @@ def review_payload(base, current, incoming, creation, decisions):
             # A validated legacy complete map need not already have an explicit marker.
             if theirs.get("words"):
                 passage["words_current"] = True
+            if fresh:
+                passage["alignment_hints_stale"] = True
         else:
             label = theirs.get("speaker", "UNKNOWN")
             passage["speaker"] = label
@@ -232,10 +247,12 @@ def _plan(store, db, recording_id, result_id, incoming_id, revision, decisions):
         snapshots["incoming"],
         snapshots["creation"],
         decisions,
+        policy=NEW_POLICY_VERSION,
     )
     evidence = conflict_review_metadata(
         {
-            "format": FORMAT,
+            "format": NEW_FORMAT,
+            "timing_adoption_policy": NEW_POLICY_VERSION,
             **lineage["references"],
             "decisions": validate_decisions(decisions),
             "summary": reviewed["summary"],
@@ -363,6 +380,7 @@ def verify_historical(row, captured):
             parents["incoming"]["payload"],
             parents["creation"]["payload"],
             evidence["decisions"],
+            policy=evidence.get("timing_adoption_policy"),
         )
         encoded, digest = encode_payload(reviewed["segments"], reviewed["speakers"])
         if (
@@ -383,7 +401,12 @@ def public_projection(row, version_aliases):
     evidence = row["conflict_review_evidence"]
     ordinals = row["conflict_review_ordinals"]
     return {
-        "format": FORMAT,
+        "format": evidence["format"],
+        **(
+            {"timing_adoption_policy": evidence["timing_adoption_policy"]}
+            if "timing_adoption_policy" in evidence
+            else {}
+        ),
         **{
             name + "_version": version_aliases[evidence[name]["version_id"]]
             for name in ("base", "incoming", "creation")

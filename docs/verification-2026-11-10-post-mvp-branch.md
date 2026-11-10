@@ -80,8 +80,9 @@ now preserves literal parameter tails/case/Unicode, normalizes only file prefixe
 Pytest's XML name mapping. Exact raw inventories, per-case outcomes and all source hashes
 reconcile. Full-repository Ruff lint/format pass; production source stayed unchanged.
 
-The additional five-module provider browser gate (25 cases) is still in progress. The earlier
-eight-case assembled browser gate and scoped Library/editor gates passed; no claim is made
+The additional five-module provider browser gate subsequently completed at parent checkpoint
+`67068dc`: 25 distinct passes after scoped test-only fixture corrections, independently reviewed.
+The earlier eight-case assembled browser gate and scoped Library/editor gates passed; no claim is made
 that all 621 browser cases have been run on this branch.
 
 ## Remaining decisions and acceptance
@@ -94,7 +95,9 @@ Anonymisation identifier scope, pseudonyms and mapping custody/publication need 
 
 The [timing-hint remedy](proposals/legacy-timing-hints-2026-11-10.md) now has independent
 design Go after adding versioned timing adoption and preserving explicit unchecked cloud
-history scope. It has not been implemented; no runtime writer or portable pin was changed.
+history scope. No runtime writer or portable pin was changed in this parent receipt. A later
+isolated child now implements it under ADR 0169; see its separate
+[verification](verification-2026-11-10-timing-hints.md). Neither branch is installed.
 
 The Text prototype is off by default; see [opt-in/revert and limits](testing/text-editor-follow-prototype.md).
 Synthetic Windows Chromium is not Mac/Safari/Firefox/IME/zoom/high-contrast/screen-reader

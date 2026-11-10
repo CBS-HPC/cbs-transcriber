@@ -1108,6 +1108,8 @@ def merge_passages(segments, identifier, direction, speaker_id=None, speakers=No
     elif speaker_id not in known:
         raise ValueError("Choose an existing speaker from this result.")
     merged = copy.deepcopy(left)
+    if right.get("alignment_hints_stale") is True:
+        merged["alignment_hints_stale"] = True
     merged["text"] = left["text"] + " " + right["text"]
     if len(merged["text"]) > 200_000:
         raise ValueError("A merged passage must be at most 200,000 characters.")

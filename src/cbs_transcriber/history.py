@@ -294,11 +294,23 @@ def merge_metadata(value):
     }
     if (
         not isinstance(value, dict)
-        or set(value) != {"format", *references, "summary"}
-        or value.get("format") != "cbs-enhancement-merge-v1"
+        or value.get("format") not in ("cbs-enhancement-merge-v1", "cbs-enhancement-merge-v2")
+        or set(value)
+        != {"format", *references, "summary"}
+        | (
+            {"timing_adoption_policy"}
+            if value.get("format") == "cbs-enhancement-merge-v2"
+            else set()
+        )
+        or (
+            value.get("format") == "cbs-enhancement-merge-v2"
+            and value.get("timing_adoption_policy") != "cbs-transcript-merge-v2"
+        )
     ):
         raise ValueError("The saved merge evidence is invalid.")
     output = {"format": value["format"]}
+    if "timing_adoption_policy" in value:
+        output["timing_adoption_policy"] = value["timing_adoption_policy"]
     for name in references:
         output[name] = _version_reference(value[name], "merge")
     summary = value["summary"]
@@ -314,12 +326,18 @@ def merge_metadata(value):
 
 def conflict_review_metadata(value):
     """Validate explicit group decisions; never accept a client-authored merged payload."""
-    from .result_conflicts import FORMAT, SUMMARY_FIELDS, validate_decisions
+    from .result_conflicts import FORMAT, NEW_FORMAT, SUMMARY_FIELDS, validate_decisions
 
     if (
         not isinstance(value, dict)
-        or set(value) != {"format", "base", "incoming", "creation", "decisions", "summary"}
-        or value.get("format") != FORMAT
+        or value.get("format") not in (FORMAT, NEW_FORMAT)
+        or set(value)
+        != {"format", "base", "incoming", "creation", "decisions", "summary"}
+        | ({"timing_adoption_policy"} if value.get("format") == NEW_FORMAT else set())
+        or (
+            value.get("format") == NEW_FORMAT
+            and value.get("timing_adoption_policy") != "cbs-transcript-merge-v2"
+        )
     ):
         raise ValueError("The saved conflict review evidence is invalid.")
     summary = value["summary"]
@@ -330,7 +348,12 @@ def conflict_review_metadata(value):
     ):
         raise ValueError("The saved conflict review evidence is invalid.")
     return {
-        "format": FORMAT,
+        "format": value["format"],
+        **(
+            {"timing_adoption_policy": value["timing_adoption_policy"]}
+            if "timing_adoption_policy" in value
+            else {}
+        ),
         **{
             name: _version_reference(value[name], "conflict review")
             for name in ("base", "incoming", "creation")

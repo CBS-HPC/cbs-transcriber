@@ -28,8 +28,8 @@ PAYLOAD_SHA256 = "7fc37c490bcf1fe0268299f383b9a4951cf1ae351631fd6c5b17ce4cd54656
 ARTIFACTS_SHA256 = "8bccd9ecb0b4b971af7d20c1b33b349c09ff1729e43f7d99ef7b98e40fe810eb"
 CAPTURE_SHA256 = "e383f827430b3af7d19d91561dc675c04b25a87c709573cb9281cd2b4e02d9fe"
 INVENTORY_SHA256 = "fe60f40479739e10ef232d59d81bc897e497d30314eeaccc70f574f392516b73"
-TRANSCRIPTS_SHA256 = "dcfb95696694c42667d8d1f68618866cb8931a346044e2f572d062297d85845b"
-TIMING_SHA256 = "928f6c22a74d5a1287ddab381ef7b1b874a1df69053bb2f5de21d1e05baa0d2c"
+TRANSCRIPTS_SHA256 = "a40875a15031263ddad17446a3332673987dcb9c34f0ff3875fe73e9e656abce"
+TIMING_SHA256 = "f5b680bc30cb74573fbf1e16f77b34514cdd6b4446a705ada19f71cd7c6e173d"
 RUNTIME_SHA256 = "3ffdee5c209f5ea8188cd2a23a1793334c255f359ded8f96a9ec270f422b16e8"
 NATIVE_SHA256 = "480368001624167d89fc8d1577430305e4a4b89b5e5db911ee956885da8d89e6"
 PROVIDER_SHA256 = "c67c2469f32db5e2187d43945c02b29a3d1e80940ffaee1141fcaac1b85915e9"
@@ -1077,6 +1077,10 @@ class Semantics:
             fail()
         params = self.json(self.text("jobs", "params", "id", job_id))
         job = {"id": job_id, "recording_id": recording_id, "kind": owner[1], "params": params}
+        if "timing_apply_policy" in params and original.get(
+            "timing_apply_policy"
+        ) != self.timing.apply_policy(params):
+            fail()
         try:
             references = self.timing.historical_references(evidence, job)
             required = self.timing.inventory(evidence, job, creation=reference)
@@ -1094,9 +1098,7 @@ class Semantics:
             fail()
         if (
             params["realign_apply_receipt"].get("input_sha256")
-            != hashlib.sha256(
-                canonical({"source": params["source_snapshot"], "output": params["realign_output"]})
-            ).hexdigest()
+            != hashlib.sha256(canonical(self.timing.input_binding(params))).hexdigest()
         ):
             fail()
         source = self.json(
@@ -1198,6 +1200,17 @@ class Semantics:
 
     def job_receipts(self):
         safe = "CASE WHEN json_valid(params) THEN params ELSE 'null' END"
+        for (job_id,) in self.rows(
+            f"SELECT id FROM jobs WHERE json_type({safe},'$.timing_apply_policy') IS NOT NULL"
+        ):
+            row = self.one("SELECT policy FROM working_job_authorities WHERE job_id=?", (job_id,))
+            if row is None or row[0] != "timing":
+                fail()
+            seal = self.json(
+                self.text("working_job_authorities", "role_json", "job_id", job_id, maximum=4096)
+            )
+            if type(seal) is not dict or seal.get("format") != "cbs-timing-job-authority-v2":
+                fail()
         for job_id, recording_id in self.rows(
             f"SELECT id,recording_id FROM jobs WHERE json_type({safe},"
             f"'$.provider_artifact_policy') IS NOT NULL OR json_type({safe},"
@@ -1862,11 +1875,24 @@ class Semantics:
             if job is None or job[0] != recording_id or policy not in {"result", "timing"}:
                 fail()
             raw = self.text("working_job_authorities", "role_json", "job_id", job_id, maximum=4096)
-            role = self.json(raw)
+            sealed = self.json(raw)
+            apply_policy = None
+            if type(sealed) is dict and "format" in sealed:
+                if (
+                    policy != "timing"
+                    or set(sealed) != {"format", "role", "timing_apply_policy"}
+                    or sealed["format"] != "cbs-timing-job-authority-v2"
+                    or sealed["timing_apply_policy"] != "invalidate-source-alignment-fit-v1"
+                ):
+                    fail()
+                apply_policy = sealed["timing_apply_policy"]
+                role = sealed["role"]
+            else:
+                role = sealed
             if type(role) is not dict or set(role) != {"revision", "working"}:
                 fail()
             integer(role["revision"])
-            if role["revision"] >= 2**63 or canonical(role).decode("utf-8") != raw:
+            if role["revision"] >= 2**63 or canonical(sealed).decode("utf-8") != raw:
                 fail()
             working = role["working"]
             if role["revision"] == 0:
@@ -1907,6 +1933,10 @@ class Semantics:
                     fail()
             params = self.json(self.text("jobs", "params", "id", job_id))
             if type(params) is not dict:
+                fail()
+            if ("timing_apply_policy" in params) != (apply_policy is not None) or params.get(
+                "timing_apply_policy"
+            ) != apply_policy:
                 fail()
             intent, acceptance = params.get("input_intent"), params.get("input_acceptance")
             if intent is not None and acceptance is not None:
