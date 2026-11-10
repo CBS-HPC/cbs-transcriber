@@ -278,7 +278,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and
-  real Windows/Mac/UCloud acceptance. The simplified UCloud backup flow uses a uniquely
+  real Windows/Mac/UCloud acceptance. **Post-MVP simplification:** remove the Remove from list
+  (hide-library) action and its explanatory text; keep Open and Delete permanently. Review how
+  previously hidden libraries remain accessible when retiring the feature. Removing a hide
+  preference must never delete library files or imply permanent-deletion consent.
+  The simplified UCloud backup flow uses a uniquely
   configured project and a location selector; exact destination and recovery fencing remain
   internal (ADR0139). Broader integration and real transfer acceptance remain open.
   Initial findings and simplification priorities: [Library audit](docs/audits/library-module-2026-11-03.md).
