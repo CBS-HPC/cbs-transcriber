@@ -10,6 +10,8 @@ Supporting references: [application audit plan](docs/audits/application-audit-pl
 [transcription and Activity audit](docs/audits/transcription-batch-2026-10-30.md),
 [weekend plan and Settings backup design](docs/work-plans/weekend-2026-10-31.md),
 [SPEC](SPEC.md), and [architecture decisions](docs/decisions/README.md).
+The [post-MVP audit and proposed sequence](docs/work-plans/post-mvp-2026-11-10.md) separates
+missing implementation, pending acceptance, workflow decisions and explicitly parked work.
 
 ## Colleague MVP — 11 November 2026
 
@@ -395,10 +397,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   the draft, typing focus, cursor/selection and undo; use available valid word timing without
   inventing times for new words or blocking editing. Review scrolling and responsiveness on
   long passages. This editable-word following is planned, not implemented in the MVP.
-  **Current update:** conservative preservation
-  is implemented, verified offline and loaded in rc3 (ADR 0156):
-  unchanged words keep exact times, replacement words inherit the original interval, inserted
-  words stay untimed. Automatic timing estimates and the broader redesign remain post-MVP;
+  **Released MVP 0.1.0:** the fresh timing-independent manual policy (ADR 0166) preserves proven
+  unchanged/replacement intervals and leaves inserted or ambiguous words untimed, without
+  blocking wording changes. ADR 0156 retains the older conservative generation for history.
+  Automatic timing estimates and the broader redesign remain post-MVP;
   any future estimate must be labelled and distinct from aligned/verified timing.
 - [ ] **Legacy alignment-hint provenance.** Same-result realignment of an unmarked passage can
   retain older alignment-fit hints. Design an explicitly versioned remedy without changing
@@ -424,7 +426,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
   explicit provider policy and review behavior; assess privacy, costs and recovery before rollout.
-- [ ] **Anonymisation.** No production in-app detector, model or review workflow exists. Turn
+- [ ] **Anonymisation — parked pending a new decision.** No production in-app detector, model
+  or review workflow exists. When explicitly resumed, turn
   the reviewed design and synthetic demo into a workflow with evaluated detectors, researcher
   span review, separate derived results, pseudonym decisions and export-leak tests. Resolve
   key custody/retention and scope before using real research data; text-only redaction does not
@@ -438,20 +441,21 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   [Research workflow](docs/research-workflow-roadmap.md).
 - [ ] **Working-transcript defaults.** User authorized implementation of automatic Working
   designation for the first result and processing successors, rollback to earlier versions, and
-  a choice when editing an older version. The implementation is merged and the app has restarted
-  with the existing library on schema 18. HTTP readiness was verified; no user-visible acceptance
-  or Working-version mutation was performed. Focused synthetic migration, manual edits, timing
+  a choice when editing an older version. These flows are included in released MVP 0.1.0;
+  its current database schema is 19. Focused synthetic migration, manual edits, timing
   choices, Undo, browser prompts, producer/authority and isolated restore checks passed. Broader
   corruption, report and concurrency verification and real-provider acceptance remain open.
   Refreshed merge/conflict previews now use their own fresh Working authority while keeping
   unsaved editor drafts separate; synthetic stale-refresh and closed-preview checks cover B376.
   See ADR 0133 for the scope of the synthetic evidence.
-- [ ] **Existing sole-result Working designation.** Automatically designate eligible existing
-  recordings with exactly one untouched version. ADR 0141 is implemented on the isolated
-  `claude/working-existing` branch with synthetic checks: untouched-passage evidence, restored
-  library refusal, job/authority fences, owned-folder snapshot refresh with derived staleness
-  recovery and bounded startup. Not merged or active: obtain independent review, then back up
-  and accept on a real library. Job-finish re-evaluation was not adopted (next start covers it).
+- [ ] **Existing sole-result Working designation — current-schema gap.** The ADR 0141
+  implementation is present in main and called at startup, but its schema-18 guard refuses
+  the current schema 19. Eligible old sole results can still need explicit Set as working.
+  Extend/review current-schema eligibility without simply removing the guard; retain untouched-
+  passage evidence, restored-library refusal, job/authority fences, owned-folder snapshot
+  refresh/recovery and startup bounds. The 27 genuine-schema-18/current-schema-refusal checks
+  pass; current-schema support and real activation remain open. Job-finish re-evaluation was
+  not adopted. See the [release limitation](docs/verification-2026-11-10-mvp-release.md#remaining-acceptance).
   [Earlier review](docs/proposals/existing-sole-working-review-2026-11-04.md).
 - [ ] **NVivo and REFI-QDA (T88a/T88c).** The acceptance pack is synthetic; test actual
   transcript imports on Windows and Mac and implement/validate REFI-QDA codebook/project
@@ -478,9 +482,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   signed installers, Mac signing/notarization and managed-device permissions remain open.
   Public v0.1.0 assets and anonymous installation are available; the user's uv-tool startup on
   this PC is verified. Old development history remains private in the separate repository.
-- [ ] **Publication and licensing.** Resolve the app licence, CBS fonts/logos, redistributed
-  scripts/archives, attribution, model terms and history/publication policy before release.
-  The user approves a clean public MVP repository/release; the existing private history retains
+- [ ] **Remaining licensing and institutional decisions.** The clean public MVP repository/
+  release and its publication/font checks are complete. Choose the app reuse licence and
+  resolve remaining institutional/model terms. The existing private history retains
   the removed reference bundle. The actual CBS font's embedded terms permit CBS/collaborator
   distribution; retain that separate notice and other third-party attributions. No broad app
   open-source licence has been selected. [Audit](docs/audits/licensing-2026-10-30.md).
@@ -504,8 +508,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   to help where useful. Review the proposed copy for non-technical users before applying it.
 
 - [ ] **Post-MVP empty start-page redesign.** When the current library has no projects, show
-  just the existing upper-left CBS Transcriber logo/wordmark in the main area, reversing its
-  colours to blue artwork/text on the light background. Remove the promotional headings,
+  just the CBS Transcriber logo/title in the main area. Use the user's
+  [supplied CBS logo](docs/design-assets/cbs-logo-white-on-blue.png) as the artwork reference,
+  retaining the requested reversed colours: blue artwork/text on the light background.
+  Remove the promotional headings,
   waveform, feature labels and large blue welcome panel. Keep project creation accessible
   through the existing navigation. Review the layout before implementation; the existing-
   project overview is outside this empty-state change.
@@ -542,11 +548,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Completed evidence
 
-Bulk recording-language selection and explicit Deselect all are integrated in the current
-integration branch; activation and real-user acceptance remain separate.
+Bulk recording-language selection and explicit Deselect all are included in released MVP
+0.1.0; representative real-user acceptance remains separate.
 
-Fresh model-selection defaults and Danish labels are implemented; activation and real model
-acceptance remain separate.
+Fresh model-selection defaults and Danish labels are included in MVP 0.1.0; actual model
+quality/coverage acceptance remains separate.
 Follow playback and uncertainty controls start enabled; manual scrolling no longer turns off
 Follow playback. Both controls remain manually switchable.
 
@@ -559,5 +565,5 @@ running version. Update this worklist when implementation or acceptance actually
 ## Project settings save
 
 - Staged name, classification, language and storage changes use explicit Save/Cancel;
-  synthetic tests cover conflicts, move confirmation and uncertain replies. Live acceptance
-  remains to be checked after the app update.
+  synthetic tests cover conflicts, move confirmation and uncertain replies. Included in MVP
+  0.1.0; full real-user settings/move acceptance remains open.
