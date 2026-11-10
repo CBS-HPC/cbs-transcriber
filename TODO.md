@@ -476,6 +476,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
+- [ ] **Post-MVP README simplification and uninstall guide.** Shorten the main README around
+  ordinary-user installation, starting, updating and removal; move technical/reference detail
+  into linked docs. Make uninstall steps prominent: stop the app, run
+  `uv tool uninstall cbs-transcriber`, and remove its optional shortcut. Explain which library,
+  recording, model-cache and credential data remain, with separate explicit cleanup guidance.
+  A brief uninstall paragraph already exists; review its clarity and placement after MVP.
+
 - [ ] **Post-MVP explanatory-text review.** Review feature-description and information boxes
   across the app; shorten long text, remove repetition and use plain, action-focused wording.
   Keep essential instructions, consequences and recovery guidance clear; move secondary detail
