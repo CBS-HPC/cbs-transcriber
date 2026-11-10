@@ -488,10 +488,12 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Keep essential instructions, consequences and recovery guidance clear; move secondary detail
   to help where useful. Review the proposed copy for non-technical users before applying it.
 
-- [ ] **Post-MVP empty start-page redesign.** Discuss a minimal start page when the current
-  library has no projects: primarily the CBS Transcriber logo/title, with creating the first
-  project easy to find. Review the layout before implementation; this proposal concerns the
-  empty state, rather than changing the overview of existing projects.
+- [ ] **Post-MVP empty start-page redesign.** When the current library has no projects, show
+  just the existing upper-left CBS Transcriber logo/wordmark in the main area, reversing its
+  colours to blue artwork/text on the light background. Remove the promotional headings,
+  waveform, feature labels and large blue welcome panel. Keep project creation accessible
+  through the existing navigation. Review the layout before implementation; the existing-
+  project overview is outside this empty-state change.
 
 - [ ] **Optional post-MVP idea: branded shortcut icons.** Consider automatically assigning a
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
