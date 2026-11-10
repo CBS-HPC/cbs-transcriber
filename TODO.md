@@ -471,6 +471,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
+- [ ] **Post-MVP explanatory-text review.** Review feature-description and information boxes
+  across the app; shorten long text, remove repetition and use plain, action-focused wording.
+  Keep essential instructions, consequences and recovery guidance clear; move secondary detail
+  to help where useful. Review the proposed copy for non-technical users before applying it.
+
 - [ ] **Post-MVP empty start-page redesign.** Discuss a minimal start page when the current
   library has no projects: primarily the CBS Transcriber logo/title, with creating the first
   project easy to find. Review the layout before implementation; this proposal concerns the
