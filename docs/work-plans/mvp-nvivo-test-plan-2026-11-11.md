@@ -3,7 +3,8 @@
 This is a companion to [the MVP plan](mvp-2026-11-11.md). It asks one question: do the
 CBS Transcriber exports work in the NVivo you actually use? Plan about 90 minutes, after the
 app walkthrough. Use only the synthetic test pack and public or consented test recordings,
-never real interview data. Nothing here has been tested in desktop NVivo yet (TODO.md:220).
+never real interview data. Use the released **MVP 0.1.0** and record the exact NVivo build.
+Nothing here has been tested in desktop NVivo yet; see the NVivo acceptance item in TODO.md.
 Your results are the first real evidence.
 
 ## 0. Before you start
@@ -109,5 +110,5 @@ relevant, the same passage in CBS Transcriber.
 3. Keep the exported file. Attach it only if it comes from the synthetic pack or public test audio.
 4. Send your results sheet and screenshots to the maintainer through the agreed Teams chat or email,
    the same day if a problem blocks further testing.
-5. The maintainer reproduces the problem and records it in TODO.md (NVivo item, line 220) or
+5. The maintainer reproduces the problem and records it in TODO.md (NVivo acceptance item) or
    SPEC §B bug memory. Format fixes need their own regression test before the next build.

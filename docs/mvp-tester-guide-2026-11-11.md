@@ -1,5 +1,9 @@
 # Colleague test — 11 November 2026
 
+Test **MVP 0.1.0**, available from the [release page](https://github.com/CBS-HPC/cbs-transcriber/releases/tag/v0.1.0).
+Use the [installation and Desktop shortcut guide](../README.md#install-and-start-windows-and-macos)
+if installing it yourself. Record the actual label; this checklist is for the released MVP.
+
 Allow about one hour for the app walkthrough. The maintainer supplies an installed app,
 configured accounts and agreed non-sensitive test recordings. Use the separate
 [NVivo test plan](work-plans/mvp-nvivo-test-plan-2026-11-11.md) for NVivo acceptance.
@@ -27,20 +31,22 @@ an unexpected library. Record the release label and browser in the feedback form
 4. **Transcribe.** With the maintainer, select the agreed provider and model and start the
    requested test. Observe Activity. Live runs use the separately agreed account and cost scope;
    the maintainer can supply prepared results for the editing checks below.
-   For a separately authorized UCloud handoff check, save edits and close the app after its
-   UCloud job has been accepted. Relaunch and use that Activity card's Reconnect/Retry action.
-   Confirm it uses the same UCloud job ID and retrieves its results without another allocation.
 5. **Listen and navigate.** Open a result. Use Play transcript, pause, replay a passage and
    change playback speed. Try Follow playback, scroll manually, then continue playback.
    Does the transcript remain easy to follow?
 6. **Edit while listening.** Open a passage for editing, replay it and change a few words.
    Save. Reopen it, type a different change and Cancel. Check that the saved wording remains.
    Note any lost cursor position, jump, unexpected prompt or noticeable delay.
-   Double-click a rendered word: it should open Text, without a duplicated saved-text panel.
+   Double-click a rendered word: Text should open with that word selected and no duplicated
+   saved-text panel. Save should be disabled until you change the text; reverting the draft
+   to the saved text should disable it again. Cancel should close editing promptly.
    Append one word, save and inspect Word and timing: existing words retain their times and
-   the added word is untimed. A simple replacement retains the old word's interval. An ambiguous
-   edit may refuse saving while keeping the draft; record any confusing message.
+   the added word is untimed. A simple replacement retains the old word's interval. Ambiguous
+   timing should leave affected words untimed, with a nonblocking explanation. Word timing
+   must not prevent saving manual wording changes.
 7. **Edit structure and speakers.** Split a suitable passage at the cursor and use Undo split.
+   Split should be disabled at the start/end, inside a word, or while text changes are unsaved.
+   A valid split between words must also work when some words have no timing.
    Merge two passages and use Undo merge. Rename a speaker and change the speaker for one passage. Delete a
    disposable passage. Confirm unrelated passages and speaker names remain as expected.
    Open Deleted passages and restore it. Confirm its exact text returns, later edits elsewhere
@@ -56,7 +62,7 @@ an unexpected library. Record the release label and browser in the feedback form
    before choosing an answer, and record whether the wording was understandable.
 9. **Compare and export.** If a second result is available, compare it. Export Word and readable
    text and open them. Export the project ZIP using Working versions and check that the intended
-   recordings are included. Export NVivo for your platform and use the separate NVivo plan.
+   recordings are included. If testing NVivo, use the separate NVivo plan below.
    In project Export Settings, deselect one recording and choose two formats. Check that the ZIP
    includes only those selections and uses recording-name folders; any format skip is reported.
    An untimed result may need Word timing before a timed export is available.
@@ -67,10 +73,27 @@ an unexpected library. Record the release label and browser in the feedback form
    Start preparing a ZIP with originals, close Export Settings and edit another passage while
    Activity reports preparation. Download the ready ZIP through Activity. Cancel a preparation
    and discard an unwanted prepared ZIP; neither action should alter source recordings.
-10. **Back up and restart.** When Activity is idle, open Library → Backups, choose Create backup
-    and wait for its result. Save the backup receipt. The maintainer checks the backup and
-    restores it into a different library. Close and restart the app when idle; confirm your saved
-    wording, speaker names and Working choices remain.
+10. **Restart.** Save edits and wait until Activity is idle. Stop the app with Ctrl+C in its
+    terminal, then start it again from the shortcut. Confirm your saved wording, speaker names,
+    review marks and Working choices remain. Closing only the browser tab does not stop the app.
+
+## Optional separately arranged checks
+
+- **NVivo:** use the [NVivo test plan and results sheet](work-plans/mvp-nvivo-test-plan-2026-11-11.md).
+  The synthetic pack has known Danish/English wording, speakers and timestamps; actual NVivo
+  imports remain unverified. Allow up to 90 minutes separately from the app walkthrough.
+- **UCloud interruption/recovery:** with the maintainer and an agreed test/account scope,
+  close the app after the remote job has been accepted, then relaunch and use Reconnect/Retry.
+  Record the UCloud job ID before and after; recovery should not create another allocation.
+  Live shutdown/relaunch acceptance is still open, so this is not a routine colleague prerequisite.
+- **Backup/restore and permanent library deletion:** maintainer-led acceptance on disposable
+  data only. Some backup/restore controls are hidden in MVP; do not enable unfinished features
+  for the ordinary walkthrough. Restore into a separate library, never over the test project.
+
+Known limitations: spelling assistance and automatic CBS shortcut icons are outside this MVP.
+Existing sole results in an older test library may require explicit Set as working; step 8
+checks a newly created first result. Long transcripts can take several seconds to save/split:
+record observed delays rather than expecting the small-file response time.
 
 ## Feedback
 

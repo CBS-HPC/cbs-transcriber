@@ -136,12 +136,16 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   the layered unit/browser gates and the remaining real acceptance limits.
   [MVP plan](docs/work-plans/mvp-2026-11-11.md) · [Tester guide and feedback](docs/mvp-tester-guide-2026-11-11.md) ·
   [NVivo test plan](docs/work-plans/mvp-nvivo-test-plan-2026-11-11.md).
+  - [x] Update the colleague walkthrough for released MVP 0.1.0: timing-independent manual
+    saves/splits, explicit installed-app/shortcut instructions, feedback form and separate
+    optional NVivo, cloud-handoff and maintainer-only backup/deletion acceptance.
   - [x] Release profile mechanism and MVP hide list (ADR 0145): `--profile`/`CBS_TRANSCRIBER_PROFILE`/
     packaged `release.json`, `GET /api/features`, `data-feature` hiding, server refusals and open
     recovery routes. Synthetic unit and MVP browser walkthrough checks pass on `claude/mvp-profile`.
   - [x] Prepare and verify the local MVP rc1 packaging branch with `release.json` = mvp.
     Packaged-profile tests, the MVP walkthrough and isolated installation smoke pass.
-    Main stays full; keep the packaging branch local and distribute its tagged source ZIP.
+    Main stays full. This is the historical rc1 checkpoint; current user distribution is the
+    published v0.1.0 wheel plus matching constraints, as described in README.
   - [ ] Complete real-device/provider/backup/NVivo acceptance. A fresh monolithic full-suite
     run on the exact packaged RC remains distinct from the documented layered verification.
 
@@ -445,8 +449,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   actual Desktop/Start menu install or click. Validate clean Windows x64, Apple Silicon
   macOS 14+ and Intel Mac installations, updates, removal and shortcuts on actual systems;
   signed installers, Mac signing/notarization and managed-device permissions remain open.
-  Public/anonymous release installation is being prepared under the user's explicit approval;
-  keep the old development history private and publish only the clean snapshot.
+  Public v0.1.0 assets and anonymous installation are available; the user's uv-tool startup on
+  this PC is verified. Old development history remains private in the separate repository.
 - [ ] **Publication and licensing.** Resolve the app licence, CBS fonts/logos, redistributed
   scripts/archives, attribution, model terms and history/publication policy before release.
   The user approves a clean public MVP repository/release; the existing private history retains
