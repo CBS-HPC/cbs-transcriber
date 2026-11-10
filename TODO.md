@@ -167,10 +167,17 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   successful short batches on several models; this does not validate every model, recording
   length or workload. Verify remaining models and larger workloads, timing/speaker outputs,
   Stop/recovery, cleanup and resource use. Do not silently fall back to a full GPU.
-- [ ] **Splitting large batches across MIG allocations.** Evaluate when and how one large batch
-  should use multiple 1g MIG allocations. Measure throughput, startup overhead, memory, queue
-  time and cost; design allocation limits and per-file recovery. Automatic splitting does not
-  currently exist, and a policy should follow measured evidence and a separate decision.
+- [ ] **Post-MVP smart transcription scheduling — strategy discussion.** Expand the batch-
+  splitting review into a scheduling policy: when to keep one shared UCloud job and when to
+  split a selection across two or more 1g MIG jobs; whether shorter recordings should run
+  first, using duration/estimated work rather than compressed file size; and whether users
+  need explicit priority or original-order controls. Compare time to first usable transcript,
+  total completion time, model compatibility/reuse, startup and queue overhead, transfer
+  bottlenecks, memory and cost. Discuss allocation/budget limits, balancing long recordings
+  without starving them, progress and per-file recovery/cleanup across multiple jobs.
+  Preserve already-frozen jobs and avoid duplicate transcription during retry/restart.
+  Automatic splitting/sorting is not implemented; agree a measured strategy and separate
+  architecture decision before implementation. This discussion stays outside MVP.
 - [ ] **Old UCloud obligations (T80/T80b).** Inspect and safely recover or explicitly dispose
   remaining legacy single-job and batch cleanup obligations; retain unresolved journals and
   user-visible controls. Emptying UCloud Trash or discarding unpreserved output requires the
@@ -487,7 +494,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   speech profile/allocation, sizing and provider release before downstream adoption. Existing
   vLLM work remains distinct from native Transcriber.
 - [ ] **Provider-wide capacity policies.** Deferred design for UCloud Transcriber/vLLM and other
-  provider limits; do not change frozen jobs or imply that current lanes are a global limit.
+  provider limits; coordinate native batches with the smart transcription scheduling review
+  above. Do not change frozen jobs or imply that current lanes are a global limit.
 - [ ] **OpenAI passage re-transcription.** Bounded clips and explicit per-request cost confirmation
   remain planned. PDF and ELAN/EAF export are candidates only when a concrete workflow needs them.
 - [ ] **Future cloud-hosted projects and multi-device sync.** Outside the current project scope;
