@@ -37,9 +37,8 @@ or script execution. Ask CBS IT if creation or launch is blocked; this flow does
 computer policy.
 
 Version 0.1.0 leaves the launcher's icon at the system default; it does not automatically
-assign a CBS icon. Custom icons are supported by the operating systems, but automatic
-assignment needs a separate launcher update and platform verification. It does not require
-changing your recordings or reinstalling Python.
+assign a CBS icon. Automatic branded icons are an optional post-MVP investigation, with no
+commitment to implement them. The shortcut command above works with the current default icon.
 
 Open the Windows launcher from Start or Desktop. On macOS, open `CBS Transcriber.command`
 from your home Applications folder or Desktop in Terminal. Keep the terminal open;

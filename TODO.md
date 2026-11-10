@@ -460,6 +460,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
+- [ ] **Optional post-MVP idea: branded shortcut icons.** Consider automatically assigning a
+  CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
+  investigation candidate, not a committed feature or MVP requirement.
+
 - [ ] **Post-MVP connected-provider selectors.** Offer providers in project/recording
   transcription selectors only after successful configuration and a connection check in
   Settings. Fresh presets or missing credentials alone must not appear ready to use. Bind
