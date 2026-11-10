@@ -137,15 +137,22 @@ If the command is not found, run `uv tool update-shell`, reopen the terminal and
 Save edits and stop any earlier running copy before launching the newly installed app.
 Only one process can open a given library; changing ports does not remove that restriction.
 
-Optional: create a Windows Start menu or macOS Applications launcher, then exit without
-starting the app:
+Optional: create a **Desktop shortcut** after installation. Run this same command in Windows
+PowerShell or macOS Terminal:
 
 ```text
-cbs-transcriber --create-shortcut --profile mvp
+cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp
 ```
 
-For a Desktop launcher, add `--shortcut-location desktop`. Creation is explicit and refuses
-an existing same-name launcher. See [launcher options and removal](docs/installation-shortcuts.md).
+Windows creates `CBS Transcriber.lnk` on your Desktop; macOS creates
+`~/Desktop/CBS Transcriber.command`, which opens in Terminal when double-clicked. Keep that
+terminal open while working; Ctrl+C stops the app. Creation itself exits without starting
+another app or opening a library. Shortcuts currently use the system's default icon.
+
+For a Windows Start menu or macOS `~/Applications` launcher instead, omit
+`--shortcut-location desktop`. Existing same-name launchers are never overwritten. See
+[launcher options and removal](docs/installation-shortcuts.md). Native Mac launcher acceptance
+remains pending.
 
 ### First start
 

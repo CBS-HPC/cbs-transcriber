@@ -1,15 +1,20 @@
 # Optional launchers for wheel and source installations
 
-After [installing the app](../README.md#install-and-start-windows-and-macos), run:
+After [installing the app](../README.md#install-and-start-windows-and-macos), create a Desktop
+launcher with the same command in **Windows PowerShell** or **macOS Terminal**:
 
 ```text
-cbs-transcriber --create-shortcut --profile mvp
+cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp
 ```
+
+Windows creates `CBS Transcriber.lnk` on your Desktop; macOS creates
+`~/Desktop/CBS Transcriber.command`. Creation exits without starting another app instance.
+Omit `--shortcut-location desktop` for the default destinations listed below.
 
 For a developer/source installation, run this from its installed app folder instead:
 
 ```text
-uv run --locked cbs-transcriber --create-shortcut --profile mvp
+uv run --locked cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp
 ```
 
 This explicit action creates one launcher for the current user, then exits without opening a
@@ -20,16 +25,21 @@ library or starting a server. Installation and ordinary startup never create lau
 | Windows x64 | Your Start menu's Programs folder | `CBS Transcriber.lnk` |
 | Apple Silicon/macOS 14+ or Intel Mac | `~/Applications` | `CBS Transcriber.command` |
 
-For a Desktop launcher, add `--shortcut-location desktop`:
+For a Start menu or home Applications launcher instead, run:
 
 ```text
-cbs-transcriber --create-shortcut --profile mvp --shortcut-location desktop
+cbs-transcriber --create-shortcut --profile mvp
 ```
 
 Windows resolves the system's current-user folder, including redirected/localised Desktop
 folders; macOS uses `~/Desktop`. Managed computers may restrict PowerShell, Windows Script Host
 or script execution. Ask CBS IT if creation or launch is blocked; this flow does not change
 computer policy.
+
+Version 0.1.0 leaves the launcher's icon at the system default; it does not automatically
+assign a CBS icon. Custom icons are supported by the operating systems, but automatic
+assignment needs a separate launcher update and platform verification. It does not require
+changing your recordings or reinstalling Python.
 
 Open the Windows launcher from Start or Desktop. On macOS, open `CBS Transcriber.command`
 from your home Applications folder or Desktop in Terminal. Keep the terminal open;

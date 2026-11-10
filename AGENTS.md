@@ -33,8 +33,11 @@ repository visibility changes require explicit user authorization; never embed t
    features but does not reduce dependency downloads. If PATH is missing, use
    `uv tool update-shell` and reopen the terminal. Stop an earlier app process before opening
    its library from the installed copy; closing a browser tab does not release the lease.
-4. Optional launcher: `cbs-transcriber --create-shortcut --profile mvp`; add
-   `--shortcut-location desktop` for Desktop. See docs/installation-shortcuts.md. Never
+4. Optional Desktop launcher on Windows/macOS:
+   `cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp`.
+   Windows creates a .lnk; macOS creates an executable .command file. Both currently use
+   system-default icons; custom icon assignment is not implemented in v0.1.0. Omit the
+   location option for Start menu / ~/Applications. See docs/installation-shortcuts.md. Never
    silently overwrite a launcher, install dependencies, migrate a library or start processing.
 5. Update only after saving edits, finishing/stopping jobs, making a complete backup and
    stopping the app. Install the next approved wheel plus matching constraints, adding
