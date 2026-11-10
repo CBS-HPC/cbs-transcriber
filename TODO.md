@@ -316,6 +316,12 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Backups and data governance
 
+- [ ] **Post-MVP Dropbox backup destination — evaluation.** Review Dropbox for storing
+  verified complete library backups and their restore receipts. Compare API transfers with a
+  Dropbox-synced backup folder; consider setup, interrupted transfers, storage limits, retention
+  and integrity-checked restore. Keep the active working library local; this is backup/restore,
+  not active cloud hosting or multi-device synchronization. Implementation is not yet decided.
+
 - [ ] **Real backup and restore acceptance (T91/T91c).** The working library stays on the
   computer. Library → Backups implements capture, UCloud connection/upload/resume, isolated
   restore to a new library and manual retention controls with synthetic API/browser checks.
