@@ -569,6 +569,32 @@ Future public commits must descend only from the clean public main history.
   10 November 2026. Do not re-add them as a runtime or development dependency.
 - Use descriptive errors without exposing upstream credentials or transcript bodies.
 
+## Development usage documentation
+
+Keep [the AI development usage ledger](docs/development-usage.md) and its
+[machine-readable checkpoints](docs/development-usage.json) current at release, major milestone
+and handoff boundaries. Track Codex and Claude separately, including subagents, with explicit
+project scope, UTC/Copenhagen dates, cutoff, release/commit and coverage limits. Keep the MVP
+0.1.0 baseline fixed; put later planning/implementation in separate, non-overlapping phases.
+Do not sum cumulative checkpoints as if they were additional usage.
+
+For Codex, use retained project session usage records read-only. Deduplicate repeated snapshots
+and inherited fork counters; count new work in main and subagent sessions once. Cached input is
+already included in input, and reasoning is already included in output. Retain the method,
+source snapshot identities and reconciliation checks privately. Never commit raw chat logs,
+session IDs, account balances, billing statements, credentials or personal filesystem paths.
+
+Distinguish recorded tokens, rate-card credit equivalents, actual credits debited and monetary
+estimates. Record model/rates/source/as-of date, speed and whether it is user-confirmed. Standard
+speed is confirmed for the MVP Codex baseline. Do not apply API prices or current rates as proof
+of historical Edu billing; CBS's contracted price, included credits and licence fees are separate.
+Unknown values stay null/pending, not zero. Preserve historical assumptions when adding updates.
+
+The user assigned Claude's MVP accounting to Claude. Leave that entry pending until Claude
+supplies its own scoped evidence; Codex must not estimate it or start a Claude audit. Do not
+combine providers' incompatible credit units or report a full AI total while a provider is missing.
+Usage accounting does not authorize paid calls, provider jobs or changes to the running app.
+
 ## Workflow
 
 Implement the approved plan autonomously. Update TODO checkboxes as work passes verification.

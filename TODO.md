@@ -472,6 +472,12 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Installation, publication and service
 
+- [ ] **Claude MVP usage documentation — assigned to Claude by the user.** Claude will add
+  its own scoped token/cost evidence to the [development usage ledger](docs/development-usage.md).
+  The Codex MVP baseline is documented, with Standard speed confirmed and cost estimates
+  separated from actual billing. Keep future milestones/phases current under AGENTS.md;
+  leave Claude and combined AI totals pending until its figures are supplied.
+
 - [ ] **Installation and deployment (T92/T94/T106).** The primary guide now uses a versioned
   GitHub wheel plus lock-derived runtime constraints through uv tool install, without Git.
   Installed-package/source shortcuts and the locked source fallback exist. A fresh isolated

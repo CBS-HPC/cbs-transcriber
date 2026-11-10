@@ -1,0 +1,146 @@
+{
+  "format": "cbs-ai-development-usage-v1",
+  "recorded_date": "2026-11-10",
+  "purpose": "AI development effort; app provider/GPU/storage costs and human time excluded",
+  "checkpoints": [
+    {
+      "id": "codex-mvp-0.1.0",
+      "provider": "Codex",
+      "phase": "MVP development through publication",
+      "release": "v0.1.0",
+      "public_source_commit": "5cf2e64d5fe5980586f9ec3d170b216eb1f98384",
+      "start_utc": "2026-10-20T09:06:25.858Z",
+      "cutoff_utc": "2026-11-10T12:41:11Z",
+      "cutoff_europe_copenhagen": "2026-11-10T13:41:11+01:00",
+      "last_included_usage_utc": "2026-11-10T12:40:44.622Z",
+      "scope": "retained indexed local CBS Transcriber sessions; includes pre-release audits and experiments",
+      "sessions": {
+        "total": 173,
+        "main": 2,
+        "subagents": 171
+      },
+      "positive_usage_updates": 50455,
+      "recorded_tokens": {
+        "input_tokens": 13404097619,
+        "cached_input_tokens": 13239098112,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 22392838,
+        "reasoning_output_tokens": 12097151,
+        "total_tokens": 13426490457
+      },
+      "uncached_input_tokens": 164999507,
+      "by_model": {
+        "gpt-6.1-sol": {
+          "input_tokens": 7181271712,
+          "cached_input_tokens": 7057645056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 18504284,
+          "reasoning_output_tokens": 10793153,
+          "total_tokens": 7199775996
+        },
+        "gpt-6.1-terra": {
+          "input_tokens": 6222825907,
+          "cached_input_tokens": 6181453056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3888554,
+          "reasoning_output_tokens": 1303998,
+          "total_tokens": 6226714461
+        }
+      },
+      "by_session_role": {
+        "main": {
+          "input_tokens": 3625672122,
+          "cached_input_tokens": 3593532544,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5961832,
+          "reasoning_output_tokens": 3331899,
+          "total_tokens": 3631633954
+        },
+        "subagent": {
+          "input_tokens": 9778425497,
+          "cached_input_tokens": 9645565568,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 16431006,
+          "reasoning_output_tokens": 8765252,
+          "total_tokens": 9794856503
+        }
+      },
+      "reconciliation": {
+        "duplicate_snapshots_ignored_across_scanned_records": 1159,
+        "inherited_fork_baseline_excluded": 322286626,
+        "cumulative_delta_equals_last_request_sum": true,
+        "counter_anomalies": 0,
+        "independent_read_only_review": "accepted observed local token total, not exact project billing"
+      },
+      "speed": {
+        "tier": "Standard",
+        "confirmed_by_user": true,
+        "confirmation_date": "2026-11-10"
+      },
+      "credit_equivalent": {
+        "status": "estimate from published rate card; not a verified debit",
+        "value": "37698.723285",
+        "source": "https://learn.chatgpt.com/docs/pricing",
+        "rates_viewed_date": "2026-11-10",
+        "rates_per_million_uncached_cached_output": {
+          "gpt-6.1-sol": [
+            "50",
+            "2.5",
+            "250"
+          ],
+          "gpt-6.1-terra": [
+            "25",
+            "1.25",
+            "125"
+          ]
+        },
+        "by_model": {
+          "gpt-6.1-sol": "28451.51644",
+          "gpt-6.1-terra": "9247.206845"
+        }
+      },
+      "actual_project_credits_debited": null,
+      "actual_project_cost": null,
+      "cbs_contract_price_per_credit": null,
+      "monetary_benchmarks": [
+        {
+          "currency": "USD",
+          "price_per_credit": "0.04",
+          "estimated_consumption_value": "1507.95",
+          "source": "https://technology.berkeley.edu/news/new-chatgpt-credit-limit-options"
+        },
+        {
+          "currency": "USD",
+          "price_per_credit": "0.05",
+          "estimated_consumption_value": "1884.94",
+          "source": "https://tdx.vanderbilt.edu/TDClient/33/Portal/Requests/Service/233/OpenAI-EDU-ChatGPT-New-Feature-Request"
+        }
+      ],
+      "benchmark_limits": "CBS terms/historical rates unverified; excludes licence fee; included/prepaid credits may cover consumption; no exchange-rate conversion",
+      "coverage_limits": [
+        "deleted/unindexed sessions may be absent",
+        "other computers/cloud-only work may be absent",
+        "raw histories and account balances retained outside Git",
+        "post-publication work excluded"
+      ]
+    },
+    {
+      "id": "claude-mvp-pending",
+      "provider": "Claude",
+      "phase": "MVP development",
+      "status": "pending Claude accounting",
+      "owner": "Claude, assigned by user",
+      "tokens": null,
+      "actual_credits": null,
+      "actual_cost": null,
+      "codex_must_not_fill": true
+    }
+  ],
+  "combined_ai_total": {
+    "status": "pending Claude evidence and compatible scopes/units",
+    "value": null
+  },
+  "post_mvp": {
+    "status": "separate checkpoints required; not included in MVP baseline"
+  }
+}
