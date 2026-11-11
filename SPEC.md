@@ -34,6 +34,11 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   or release. Limit frontend decisions to explicit requests; broader choices await colleague
   feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
   project creation remains accessible through existing navigation at narrow widths too.
+- Planned first-launch onboarding (11 November): offer UCloud API key entry and optional
+  Hugging Face token entry on the front page, reusing Settings checks and credential storage.
+  Keep later Settings access; empty libraries alone do not imply first use. Credential setup
+  does not implicitly prepare models or start processing. This frontend addition is not yet
+  implemented; the ordinary empty-page layout remains the current delivered behavior.
 - Planned anonymisation uses an anonymisation LLM running on UCloud (user direction,
   11 November 2026). Exact model, hosting interface, identifier scope and mapping custody
   remain undecided. The local synthetic demo is review/evaluation scaffolding, not the

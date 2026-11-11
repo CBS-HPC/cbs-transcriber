@@ -555,6 +555,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   project creation stays accessible at narrow widths too; synthetic browser checks pass.
   Existing project-overview layout is unchanged; installed MVP remains unchanged.
 
+- [ ] **First-launch front-page connection setup — requested 11 November.** Let a first-time
+  user enter the UCloud API key and an optional Hugging Face access token directly on the
+  front page. Reuse the existing Settings validation and secure credential-storage flow;
+  keep credentials editable later in Settings. This is first-use onboarding, not a prompt
+  on every empty project/library. Saving credentials must not implicitly start preparation,
+  downloads or processing. Layout remains to be reviewed; planned, not implemented.
+
 - [ ] **Optional post-MVP idea: branded shortcut icons.** Consider automatically assigning a
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
   investigation candidate, not a committed feature or MVP requirement.
