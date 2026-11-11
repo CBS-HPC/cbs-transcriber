@@ -613,6 +613,12 @@ an opt-in prototype. CBS Runtime work is offline ownership/recovery design and m
 anonymisation is decision-ready design and synthetic local prototyping. Neither authorizes
 preparation, paid jobs, private uploads or live cleanup. Missing-output reruns are design only.
 
+The user's 11 November provider direction is to deactivate the direct OpenAI service while
+retaining its shared OpenAI-compatible API transport for a possible UCloud transcription
+endpoint. This is a planned change, not an implemented flag: preserve saved data and specify
+queued/running/Retry handling before activation. Protocol reuse does not authorize enabling
+deferred Custom/UCloud vLLM UI or testing a live endpoint.
+
 The reviewed timing-hint remedy is implemented and independently verified at `4e7f671` on local
 `codex/post-mvp-timing-hints`, based on post-MVP checkpoint `7cf165c`. That worktree owns only
 the backend policy/receipt/merge/validation slice in ADR 0169 and its synthetic tests. Do not

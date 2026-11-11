@@ -555,6 +555,15 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   project creation stays accessible at narrow widths too; synthetic browser checks pass.
   Existing project-overview layout is unchanged; installed MVP remains unchanged.
 
+- [ ] **Deactivate direct OpenAI backend — decided 11 November.** Remove OpenAI-hosted
+  service setup and models from ordinary user choices, and refuse new direct OpenAI
+  transcription requests. Retain the shared OpenAI-compatible client/protocol code, endpoint
+  configuration and relevant tests for a possible future UCloud transcription service using
+  that protocol. Do not delete saved results/history, credentials or configuration evidence.
+  Define existing queued/running work and Retry behavior before activating this change;
+  hiding the UI alone is insufficient. Keep native UCloud Transcriber unchanged and do not
+  activate the separately deferred Custom/UCloud vLLM UI. Planned, not implemented.
+
 - [ ] **First-launch front-page connection setup — requested 11 November.** Let a first-time
   user enter the UCloud API key and an optional Hugging Face access token directly on the
   front page. Reuse the existing Settings validation and secure credential-storage flow;

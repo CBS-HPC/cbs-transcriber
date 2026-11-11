@@ -14,6 +14,13 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - Current provider UI offers OpenAI and UCloud only. Custom and UCloud vLLM are deferred;
   retain their existing saved configurations, research results and frozen jobs for compatibility.
   Built-in connection names are internal; Available models is part of basic Settings.
+- Post-MVP provider decision (11 November): deactivate the direct OpenAI service in normal
+  setup, model/provider choices and new transcription admission. Retain the OpenAI-compatible
+  client/protocol implementation for a possible future UCloud-hosted transcription endpoint;
+  protocol compatibility does not establish deployment or model capability. Preserve saved
+  results/history and credentials/configuration evidence. Specify queued/running/retry handling
+  before activation, without silently cancelling work or starting new paid calls. This decision
+  is planned; the installed MVP and current provider implementation are unchanged.
 - CBS service rollout is a separate pilot decision: access, ownership, support, approved processing
   and measured total operating cost. Current local architecture does not imply shared hosting/SSO.
 - Managed local library outside repository/OneDrive; retain originals.
