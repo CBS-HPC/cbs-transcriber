@@ -767,6 +767,52 @@ html.busy * {
   margin: 0;
   font-size: clamp(30px, 5vw, 44px);
 }
+.first-use-active .empty-library-brand {
+  min-height: 0;
+  padding: 20px 16px;
+  gap: 12px;
+}
+.first-use-setup {
+  max-width: 520px;
+  margin: 0 auto 28px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+}
+.first-use-setup h2 {
+  margin: 0 0 10px;
+}
+.first-use-setup p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.first-use-setup > label {
+  display: grid;
+  gap: 7px;
+  margin: 16px 0;
+  font-size: 12px;
+}
+.first-use-setup input[type="password"] {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.first-use-setup > .checkbox-label {
+  display: flex;
+  align-items: flex-start;
+}
+.first-use-setup .field-note {
+  float: none;
+}
+.first-use-setup .dialog-actions {
+  flex-wrap: wrap;
+}
+#hf-panel .dialog-actions {
+  flex-wrap: wrap;
+}
 .library-toolbar {
   display: flex;
   justify-content: flex-start;
@@ -2294,6 +2340,14 @@ select {
 .job .field-note {
   display: block;
   float: none;
+}
+.hf-setup-stages {
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.hf-setup-stages p {
+  margin: 3px 0;
 }
 .job p {
   font-size: 10px;

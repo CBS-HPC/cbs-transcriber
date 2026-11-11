@@ -154,6 +154,35 @@ and prior evidence files were rehashed unchanged. The private aggregate SHA-256 
 Later work, including final verification/documentation, is excluded. This phase stays open;
 billing, rates, speed and Claude usage remain null/pending.
 
+The morning milestone continues the same phase through **11 November, 10:04:07 UTC /
+11:04:07 Copenhagen**, on local `codex/post-mvp-morning` (base `e445376`), with work in
+progress rather than an installed release. Its last included usage event is 10:04:04.859 UTC.
+
+| Morning cumulative checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 666,158,875 |
+| Cached input, already included above | 657,701,120 |
+| Uncached input | 8,457,755 |
+| Output | 1,587,661 |
+| Reasoning output, already included above | 837,961 |
+| Total | **667,746,536** |
+
+The additional interval after the preceding cutoff contains **278,197,216 tokens**; do not
+add the cumulative totals. All included updates remain `gpt-6.1-sol`: 209,742,397 main-chat
+and 458,004,139 subagent tokens, across one main and ten contributing subagent sessions.
+The retained scope remains 183 sessions, with 2,665 positive updates and 16 excluded duplicate
+snapshots in the cumulative window. The new interval has 1,037 positive updates.
+
+Independent read review reproduced the prior checkpoint, fixed MVP baseline and every
+included token/model/role/day total, and checked all 2,665 positive usage events against
+source counters/timestamps and their own-session metadata. The saved verifier rehashed all
+183 current prefixes; the read reviewer checked its hash-bound evidence without repeating
+the full 2.27 GB scan. All prior reports remain unchanged. The new private aggregate SHA-256 is
+`7ee5a8c15a3b8b47f6c7c5be5dbb09e656c77c88bd8ab042b88266811c93825e`.
+Events after the cutoff are excluded. Deleted or unindexed sessions, other computers and
+cloud-only history may be absent. The phase stays open, subsets are not added twice, and
+post-MVP speed, rates, credit equivalent, actual billing/cost and Claude figures stay unknown.
+
 Add separate non-overlapping phases for post-MVP planning/implementation and subsequent
 releases. Record explicit boundaries, provider/model, input/cache/output categories, scope,
 coverage gaps and rate assumptions. If a cumulative milestone view is useful, label it as

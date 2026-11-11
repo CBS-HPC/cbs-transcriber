@@ -5,11 +5,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from admission_support import COMPATIBLE_API_URL, configure_compatible
 from test_input_admission_api import uploaded
 from test_native_model_profiles import native_settings, raw_profile
 
 from cbs_transcriber import provider_connection, providers
-from cbs_transcriber.providers import OPENAI_URL, Settings
+from cbs_transcriber.providers import Settings
 
 
 def models(monkeypatch, *listed):
@@ -25,6 +26,8 @@ def models(monkeypatch, *listed):
 
 def check_save(client, monkeypatch, *, key="synthetic-key", listed=None):
     saved = client.get("/api/settings").json()
+    if not saved["service_available"]:
+        saved = configure_compatible(client)
     models(monkeypatch, *(listed if listed is not None else (saved["model"],)))
     checked = client.post("/api/providers/check-models", json={**saved, "api_key": key})
     assert checked.status_code == 200, checked.text
@@ -42,9 +45,9 @@ def check_save(client, monkeypatch, *, key="synthetic-key", listed=None):
 
 
 def test_fresh_presets_and_credentials_alone_do_not_enable_new_choices(client, credentials):
-    initial = client.get("/api/settings").json()
-    assert initial["connection_state"] == "missing_credentials"
-    credentials.keys[OPENAI_URL] = "synthetic-key"
+    initial = configure_compatible(client)
+    assert initial["connection_state"] == "recheck_required"
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-key"
     configured = client.get("/api/settings").json()
     assert configured["has_key"] and not configured["connection_ready"]
     assert configured["connection_state"] == "recheck_required"
@@ -54,6 +57,12 @@ def test_fresh_presets_and_credentials_alone_do_not_enable_new_choices(client, c
 
 
 def test_check_is_not_a_save_and_only_advertised_models_become_ready(client, monkeypatch):
+    providers.save_profile(
+        client.app.state.store,
+        client.app.state.credentials,
+        "Unadvertised compatible model",
+        Settings(provider_type="custom", base_url=COMPATIBLE_API_URL, model="not-advertised"),
+    )
     advertised = {"whisper-1", client.get("/api/settings").json()["model"]}
     saved, _ = check_save(client, monkeypatch, listed=advertised)
     profiles = client.get("/api/providers").json()["providers"]
@@ -79,7 +88,7 @@ def test_check_proof_cannot_bless_changed_settings_or_credentials(
     client, monkeypatch, field, value
 ):
     models(monkeypatch, "whisper-1")
-    before = client.get("/api/settings").json()
+    before = configure_compatible(client)
     checked = client.post(
         "/api/providers/check-models", json={**before, "api_key": "checked-key"}
     ).json()
@@ -105,12 +114,10 @@ def test_credential_changes_invalidate_shared_models_and_saved_proof_without_net
     client, monkeypatch, credentials
 ):
     saved, _ = check_save(client, monkeypatch)
-    credentials.keys[OPENAI_URL] = "out-of-band-change"
+    credentials.keys[COMPATIBLE_API_URL] = "out-of-band-change"
     assert all(not p["connection_ready"] for p in client.get("/api/providers").json()["providers"])
     response = client.put("/api/settings", json={**saved, "api_key": "", "remember": False})
-    assert (
-        response.status_code == 200 and response.json()["connection_state"] == "missing_credentials"
-    )
+    assert response.status_code == 200 and response.json()["connection_state"] == "recheck_required"
 
 
 def test_explicit_failure_blocks_new_work_but_wrong_draft_key_does_not(client, monkeypatch):
@@ -140,7 +147,7 @@ def test_unsaved_check_and_stale_check_responses_cannot_activate_saved_connectio
     client, monkeypatch
 ):
     models(monkeypatch, "whisper-1")
-    saved = client.get("/api/settings").json()
+    saved = configure_compatible(client)
     assert (
         client.post(
             "/api/providers/check-models", json={**saved, "api_key": "draft-key"}
@@ -211,7 +218,7 @@ def test_unchecked_new_enqueue_rejected_then_checked_enqueue_freezes_no_receipt(
     assert response.status_code == 202, response.text
     params = response.json()[0]["params"]
     assert "connection_" not in json.dumps(params) and "fingerprint" not in json.dumps(params)
-    client.app.state.credentials.keys[OPENAI_URL] = "changed-after-acceptance"
+    client.app.state.credentials.keys[COMPATIBLE_API_URL] = "changed-after-acceptance"
     assert store.job(response.json()[0]["id"])["params"] == params
     assert saved["connection_ready"]
 
@@ -300,7 +307,8 @@ def test_malformed_saved_model_observation_fails_closed(client, monkeypatch, fie
 
 @pytest.mark.parametrize("raw", ["null", "0", "[]", "{", "[" * 1500 + "0" + "]" * 1500])
 def test_malformed_operational_settings_fail_closed(client, credentials, raw):
-    credentials.keys[OPENAI_URL] = "synthetic-key"
+    configure_compatible(client)
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-key"
     client.app.state.store.execute("INSERT INTO settings VALUES(10,?)", (raw,))
     response = client.get("/api/providers")
     assert response.status_code == 200

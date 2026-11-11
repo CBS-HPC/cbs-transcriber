@@ -50,6 +50,10 @@ Intel macOS core/API/UCloud without the incompatible local inference stack. Clea
 Windows/Apple Silicon/Intel acceptance remains pending; package plans are not OS acceptance.
 Wheel constraints pin release versions and selected artifacts, but tool installation does not
 consume the project uv.lock or establish its complete artifact-hash guarantees.
+The isolated post-MVP branch also contains a reviewed `scripts/install_latest.py` bootstrap
+for a stable install/update command. Its release asset is not published: keep the working
+versioned route until a separately authorized release uploads and verifies that asset. See
+`docs/releasing.md`; never rename a valid versioned wheel to `latest.whl`.
 
 Developers retain clone + `uv sync --locked` + `uv run --locked cbs-transcriber --profile mvp`
 in a fresh unsynced folder. Git is only needed for cloning/updating source. A source ZIP is a
@@ -97,6 +101,13 @@ Future public commits must descend only from the clean public main history.
   Preserve source-operation admission inhibitors and shutdown drain under the serving lease.
   Stream ready owned descriptors with unconditional response-dispatch cleanup; no ZIP Blob or
   schema migration. Ordinary editing remains available; restart continuation is not promised.
+- `huggingface_tasks.py`/`huggingface_prepare_worker.py` (ADR 0173) own server-lifetime HF
+  Save/Check Activity, pinned local preparation and coordination with the existing durable
+  Runtime owner. Keep tokens/fingerprints out of durable/public projections, public downloads
+  token-free, exact worker origin/pins and Stop/drain under the serving lease. An accepted
+  remote preparation task owns only its frozen public files/models; it cannot fetch with a
+  replacement HF token. Optional Runtime model plans and bounded journal/cache observations
+  preserve absent-plan legacy behavior. First-use setup must retain existing provider policy.
 - Manual edit hot paths (ADR 0159) may reuse canonical-format validation only with a fresh
   hash and fresh parsed objects; live ownership/context/CAS and inverse checks stay current.
   Targeted merge/split Apply can stop after its exact proof; advisory and Delete restoration
@@ -605,7 +616,17 @@ Usage accounting does not authorize paid calls, provider jobs or changes to the 
 
 ## Workflow
 
-Current post-MVP work (10 November 2026) stays on `codex/post-mvp-work`, descended from
+On 11 November the user authorized implementing the morning additions on isolated local
+`codex/post-mvp-morning` from `e445376`: first-launch UCloud/optional-HF setup, direct OpenAI
+deactivation with compatible transport retained, Activity-owned HF access/configured-model
+preparation, Runtime stability and stable latest-release installation. PII-Tracer is parked;
+future startup is on demand through UCloud, after Runtime stability and a later user decision. Follow
+`docs/work-plans/post-mvp-2026-11-11.md`. Preserve the installed running MVP and earlier
+verified branches; no main merge/push, Desktop update or app reload. Root owns SPEC/TODO/ADRs;
+delegate with separate file ownership and independent review. New frontend work is limited
+to these explicit requests. Do not infer missing anonymisation replacement/key policy.
+
+The earlier post-MVP checkpoint (10 November 2026) stays on `codex/post-mvp-work`, descended from
 the clean public history. Do not merge/push it to main, update Desktop main, publish a release
 or replace the installed MVP. Limit frontend decisions to the user's explicit changes;
 broader layouts and workflows await colleague feedback. Text-editor word following remains
@@ -615,15 +636,19 @@ preparation, paid jobs, private uploads or live cleanup. Missing-output reruns a
 
 The user's 11 November provider direction is to deactivate the direct OpenAI service while
 retaining its shared OpenAI-compatible API transport for a possible UCloud transcription
-endpoint. This is a planned change, not an implemented flag: preserve saved data and specify
-queued/running/Retry handling before activation. Protocol reuse does not authorize enabling
+endpoint. The morning branch implements this deactivation with scoped tests and independent
+review, retaining saved data, Stop, accepted-request drain and cached local finalization. The
+complete assembled synthetic gate has independent Go; activation remains separate and
+installed MVP behavior has not changed.
+Protocol reuse does not authorize enabling
 deferred Custom/UCloud vLLM UI or testing a live endpoint.
 
 The reviewed timing-hint remedy is implemented and independently verified at `4e7f671` on local
 `codex/post-mvp-timing-hints`, based on post-MVP checkpoint `7cf165c`. That worktree owns only
 the backend policy/receipt/merge/validation slice in ADR 0169 and its synthetic tests. Do not
-edit the parent's frozen source or merge this experiment back before independent review and
-its gates pass. Main, Desktop and installed MVP remain unchanged. No frontend redesign.
+edit the parent's frozen source. The child's complete synthetic gate and independent review
+have passed; the morning branch inherits it. Main, Desktop and installed MVP remain unchanged.
+No frontend redesign is implied by this backend inheritance.
 
 Implement the approved plan autonomously. Update TODO checkboxes as work passes verification.
 On failure, trace the cause and add a regression test where useful; record material lessons

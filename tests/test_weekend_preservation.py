@@ -17,6 +17,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+from admission_support import COMPATIBLE_API_URL
 from fastapi.testclient import TestClient
 
 from cbs_transcriber import jobs, media, providers
@@ -120,7 +121,7 @@ def test_two_projects_processing_review_export_backup_and_reopen(
     monkeypatch.setattr(media, "prepare_chunks", prepare_chunks)
     monkeypatch.setattr(providers, "transcribe_file", transcribe)
     monkeypatch.setattr("cbs_transcriber.enhancement.run_enhancement", enhance)
-    credentials.set(providers.OPENAI_URL, "synthetic-memory-only", False)
+    credentials.set(COMPATIBLE_API_URL, "synthetic-memory-only", False)
     root = tmp_path / "library"
     app = create_app(root, start_worker=False, credentials=credentials)
     store, queue = app.state.store, app.state.queue
@@ -209,7 +210,11 @@ def test_two_projects_processing_review_export_backup_and_reopen(
         child_id = new_id()
         provider_jobs = []
         for index in range(2):
-            params = {"settings": providers.Settings(capability="words").model_dump()}
+            params = {
+                "settings": providers.Settings(
+                    base_url=COMPATIBLE_API_URL, capability="words"
+                ).model_dump()
+            }
             if index == 0:
                 params["followup"] = {
                     "id": child_id,
@@ -552,7 +557,9 @@ def test_fresh_admission_complete_package_and_isolated_restore(
             source,
             credentials,
             "Synthetic API",
-            providers.Settings(model="whisper-1", capability="words", language="da"),
+            providers.Settings(
+                base_url=COMPATIBLE_API_URL, model="whisper-1", capability="words", language="da"
+            ),
             api_key=token,
             remember=False,
         )

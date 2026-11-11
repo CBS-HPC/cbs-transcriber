@@ -3,7 +3,7 @@ import threading
 from contextlib import contextmanager
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import configure_compatible, inspect_and_materialize
 from test_api import upload
 from test_runtime_batch_api import add_recording, transcribe
 from test_runtime_batch_api import prepared as prepared
@@ -231,6 +231,7 @@ def test_remote_obligations_are_retained_and_never_imply_discard(client, wav_byt
 
 def test_reserved_inspection_and_intent_use_fenced_cancel(client, wav_bytes, monkeypatch):
     uploaded = upload(client, wav_bytes)
+    configure_compatible(client)
     store = client.app.state.store
     provider = providers.public_profiles(store, client.app.state.credentials)["providers"][0]
     provider = providers.profile(store, provider["id"])

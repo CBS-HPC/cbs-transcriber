@@ -4,7 +4,12 @@ import json
 import sqlite3
 
 import pytest
-from admission_support import inspect_and_materialize, write_original_wav
+from admission_support import (
+    COMPATIBLE_API_URL,
+    configure_compatible,
+    inspect_and_materialize,
+    write_original_wav,
+)
 from test_native_model_profiles import native_settings, raw_profile
 
 from cbs_transcriber import media, providers
@@ -22,9 +27,26 @@ def by_model(client, provider_type="openai", server=OPENAI_URL, project=None):
     }
 
 
-def test_openai_connection_saves_all_catalog_models_and_only_selected_are_enabled(
-    client, credentials
-):
+def legacy_openai_catalog(client, enabled_models):
+    """Observe retained catalog expansion, then seed exact pre-deactivation model flags."""
+    store = client.app.state.store
+    with store.connection() as db:
+        providers._append_models(db, Settings())
+        for row in db.execute("SELECT id,value FROM providers").fetchall():
+            value = json.loads(row["value"])
+            if value["provider_type"] == "openai":
+                value["enabled"] = value["model"] in enabled_models
+                db.execute(
+                    "UPDATE providers SET value=? WHERE id=?", (json.dumps(value), row["id"])
+                )
+    return client.get("/api/settings").json()
+
+
+def test_direct_openai_save_preserves_legacy_catalog_models_and_flags(client, credentials):
+    store = client.app.state.store
+    legacy_openai_catalog(client, ["gpt-transcribe", "whisper-1"])
+    credentials.keys[OPENAI_URL] = "preserved-secret"
+    before = store.all("SELECT * FROM providers ORDER BY id")
     response = client.post(
         "/api/providers",
         json={
@@ -35,12 +57,13 @@ def test_openai_connection_saves_all_catalog_models_and_only_selected_are_enable
             "enabled_models": ["gpt-transcribe", "whisper-1"],
         },
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == 400 and "Direct OpenAI service is disabled" in response.text
+    assert store.all("SELECT * FROM providers ORDER BY id") == before
     saved = by_model(client)
     assert set(saved) == {m["model"] for m in provider_catalog()["openai"]["models"]}
     assert {m for m, p in saved.items() if p["enabled"]} == {"gpt-transcribe", "whisper-1"}
     assert all(p["has_key"] for p in saved.values())
-    assert credentials.keys == {OPENAI_URL: "synthetic-secret"}
+    assert credentials.keys == {OPENAI_URL: "preserved-secret"}
     assert "enabled_models" not in client.app.state.store.db_path.read_bytes().decode("latin1")
     assert "synthetic-secret" not in json.dumps(
         client.app.state.store.all("SELECT * FROM providers")
@@ -49,8 +72,9 @@ def test_openai_connection_saves_all_catalog_models_and_only_selected_are_enable
 
 def test_omitted_selection_and_enabled_field_preserve_existing_flags(client, credentials):
     store = client.app.state.store
-    original = client.get("/api/providers").json()["providers"][0]
+    original = legacy_openai_catalog(client, [])
     before_settings = client.get("/api/settings").json()
+    before = store.all("SELECT * FROM providers ORDER BY id")
     assert (
         client.put(
             f"/api/providers/{original['id']}",
@@ -61,27 +85,28 @@ def test_omitted_selection_and_enabled_field_preserve_existing_flags(client, cre
                 "enabled_models": [],
             },
         ).status_code
-        == 200
+        == 400
     )
-    before = store.all("SELECT * FROM providers ORDER BY id")
     assert not any(p["enabled"] for p in by_model(client).values())
     assert (
         client.put(
             f"/api/providers/{original['id']}",
             json={"name": original["name"], "provider_type": "openai", "model": "whisper-1"},
         ).status_code
-        == 200
+        == 400
     )
     assert store.all("SELECT * FROM providers ORDER BY id") == before
-    save_profile(store, credentials, original["name"], Settings(), identifier=original["id"])
+    with pytest.raises(ValueError, match="Direct OpenAI service is disabled"):
+        save_profile(store, credentials, original["name"], Settings(), identifier=original["id"])
     assert store.all("SELECT * FROM providers ORDER BY id") == before
-    assert client.put("/api/settings", json={"model": "whisper-1"}).status_code == 200
+    assert client.put("/api/settings", json={"model": "whisper-1"}).status_code == 400
     assert store.all("SELECT * FROM providers ORDER BY id") == before
     assert client.get("/api/settings").json()["id"] == before_settings["id"]
 
 
-def test_checklist_updates_flags_but_preserves_existing_settings_approvals_and_references(client):
+def test_direct_checklist_refusal_preserves_settings_approvals_and_references(client):
     store = client.app.state.store
+    legacy_openai_catalog(client, ["whisper-1"])
     settings = Settings(
         provider_type="openai",
         model="experimental-speech",
@@ -104,17 +129,16 @@ def test_checklist_updates_flags_but_preserves_existing_settings_approvals_and_r
             "enabled_models": ["experimental-speech"],
         },
     )
-    assert response.status_code == 200, response.text
+    assert response.status_code == 400 and "Direct OpenAI service is disabled" in response.text
     after = store.one("SELECT * FROM providers WHERE id=?", (legacy_id,))
     expected = json.loads(before["value"])
-    expected["enabled"] = True
     assert json.loads(after["value"]) == expected
     assert {k: after[k] for k in ("id", "name", "created")} == {
         k: before[k] for k in ("id", "name", "created")
     }
     assert store.recording(recording["id"])["provider_id"] == legacy_id
     assert client.get("/api/settings").json()["id"] == default_id
-    assert not by_model(client)["whisper-1"]["enabled"]
+    assert by_model(client)["whisper-1"]["enabled"]
 
 
 @pytest.mark.parametrize(
@@ -179,37 +203,36 @@ def test_native_checklists_are_isolated_by_server_and_project(client, credential
         )
 
 
-def test_explicit_empty_checklist_disables_unknown_saved_models_too(client):
+def test_direct_empty_checklist_preserves_unknown_saved_models_too(client):
     store = client.app.state.store
     legacy_id = raw_profile(store, Settings(provider_type="openai", model="experimental-speech"))
     source = client.get("/api/settings").json()
+    before = store.all("SELECT * FROM providers ORDER BY id")
     response = client.put(
         f"/api/providers/{source['id']}", json={"name": source["name"], "enabled_models": []}
     )
-    assert response.status_code == 200
-    assert not next(p for p in by_model(client).values() if p["id"] == legacy_id)["enabled"]
+    assert response.status_code == 400 and "Direct OpenAI service is disabled" in response.text
+    assert store.all("SELECT * FROM providers ORDER BY id") == before
+    assert next(p for p in by_model(client).values() if p["id"] == legacy_id)["enabled"]
 
 
 def test_model_flags_and_source_save_rollback_if_a_later_flag_update_fails(client, credentials):
     store = client.app.state.store
-    source = client.get("/api/settings").json()
-    assert (
-        client.put(f"/api/providers/{source['id']}", json={"name": source["name"]}).status_code
-        == 200
-    )
+    source = save_profile(store, credentials, "Native", native_settings())
     store.execute("""CREATE TRIGGER fail_model_flag BEFORE UPDATE ON providers
-        WHEN json_extract(NEW.value,'$.model')='gpt-4o-transcribe'
+        WHEN json_extract(NEW.value,'$.model')='medium'
         AND json_extract(NEW.value,'$.enabled')=0
         BEGIN SELECT RAISE(ABORT,'synthetic flag failure'); END""")
     before = store.all("SELECT * FROM providers ORDER BY id")
-    credentials.keys[OPENAI_URL] = "previous-synthetic-key"
+    scope = providers.credential_scope(Settings.model_validate(source))
+    credentials.keys[scope] = "previous-synthetic-key"
     with pytest.raises(sqlite3.IntegrityError, match="synthetic flag failure"):
         client.put(
             f"/api/providers/{source['id']}",
-            json={"name": "Changed", "enabled_models": [], "api_key": "do-not-save"},
+            json={**source, "name": "Changed", "enabled_models": [], "api_key": "do-not-save"},
         )
     assert store.all("SELECT * FROM providers ORDER BY id") == before
-    assert credentials.keys == {OPENAI_URL: "previous-synthetic-key"}
+    assert credentials.keys == {scope: "previous-synthetic-key"}
 
 
 @pytest.mark.parametrize("legacy_snapshot", [False, True])
@@ -217,8 +240,8 @@ def test_disabled_models_reject_new_transcription_and_selection_but_frozen_work_
     client, credentials, monkeypatch, legacy_snapshot
 ):
     store = client.app.state.store
-    source = client.get("/api/settings").json()
-    credentials.keys[OPENAI_URL] = "synthetic-key"
+    source = configure_compatible(client)
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-key"
     project = store.create_project("Synthetic")
     recording = store.create_recording(project["id"], "sample.wav")
     write_original_wav(store, recording)
@@ -247,9 +270,7 @@ def test_disabled_models_reject_new_transcription_and_selection_but_frozen_work_
             assert accepted.status_code == 202, accepted.text
             queued = inspect_and_materialize(store, credentials, [accepted.json()[0]["id"]])[0]
         frozen = store.one("SELECT params FROM jobs WHERE id=?", (queued["id"],))
-        response = client.put(
-            f"/api/providers/{source['id']}", json={"name": source["name"], "enabled_models": []}
-        )
+        response = client.put(f"/api/providers/{source['id']}", json={**source, "enabled": False})
         assert response.status_code == 200
         assert store.one("SELECT params FROM jobs WHERE id=?", (queued["id"],)) == frozen
         for path, method, payload in (
@@ -315,10 +336,10 @@ def test_flags_persist_across_restart_and_fanout_does_not_restore_disabled_exist
     from cbs_transcriber.app import create_app
 
     store = client.app.state.store
-    original = client.get("/api/settings").json()
+    original = save_profile(store, credentials, "Native", native_settings())
     response = client.put(
         f"/api/providers/{original['id']}",
-        json={"name": original["name"], "enabled_models": ["whisper-1"]},
+        json={**original, "enabled_models": ["medium"]},
     )
     assert response.status_code == 200
     before = store.all("SELECT * FROM providers ORDER BY id")
@@ -326,8 +347,10 @@ def test_flags_persist_across_restart_and_fanout_does_not_restore_disabled_exist
         create_app(store.root, start_worker=False, credentials=credentials)
     ) as restarted:
         assert {
-            p["model"] for p in restarted.get("/api/providers").json()["providers"] if p["enabled"]
-        } == {"whisper-1"}
+            p["model"]
+            for p in restarted.get("/api/providers").json()["providers"]
+            if p["service_available"] and p["enabled"]
+        } == {"medium"}
     assert store.all("SELECT * FROM providers ORDER BY id") == before
 
 

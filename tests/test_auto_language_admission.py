@@ -1,6 +1,7 @@
 """Internal full-ASR recovery support must not admit unsupported public Auto jobs."""
 
 import pytest
+from admission_support import configure_compatible
 
 from cbs_transcriber import enhancement, enhancement_api, features, providers
 from cbs_transcriber.transcripts import normalize_segments
@@ -8,7 +9,7 @@ from cbs_transcriber.transcripts import normalize_segments
 
 @pytest.fixture
 def protected_boundary(client, monkeypatch):
-    client.put("/api/settings", json={"api_key": "synthetic", "remember": False})
+    configure_compatible(client)
     store = client.app.state.store
     project = store.create_project("Synthetic")
     recording = store.create_recording(project["id"], "synthetic.wav")

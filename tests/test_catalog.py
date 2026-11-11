@@ -3,6 +3,7 @@ import re
 import pytest
 
 from cbs_transcriber.catalog import speech_catalog
+from cbs_transcriber.providers import OPENAI_URL, PROTECTED_DEFAULTS
 
 
 def test_v29_offline_catalog_has_pinned_candidate_provenance(client, monkeypatch):
@@ -36,8 +37,31 @@ def test_v29_offline_catalog_has_pinned_candidate_provenance(client, monkeypatch
         ("ucloud", {"base_url": "https://cloud.sdu.dk"}, ["protected"]),
     ],
 )
-def test_v28_new_defaults_and_saved_explicit_choices(client, provider_type, extra, approved):
+def test_v28_new_defaults_and_saved_explicit_choices(
+    client, credentials, provider_type, extra, approved
+):
     body = {"name": "Policy", "provider_type": provider_type, **extra}
+    if provider_type == "openai":
+        assert PROTECTED_DEFAULTS[provider_type] is False and approved == []
+        store = client.app.state.store
+        credentials.keys[OPENAI_URL] = "preserved-synthetic-key"
+        before = {
+            table: store.all(f"SELECT * FROM {table} ORDER BY id")
+            for table in ("providers", "settings")
+        }
+        keys = dict(credentials.keys)
+        for policy in ({}, {"approved_for": ["protected"]}):
+            response = client.post(
+                "/api/providers", json={**body, **policy, "api_key": "do-not-save"}
+            )
+            assert response.status_code == 400
+            assert "Direct OpenAI service is disabled" in response.text
+            assert {
+                table: store.all(f"SELECT * FROM {table} ORDER BY id")
+                for table in ("providers", "settings")
+            } == before
+            assert credentials.keys == keys
+        return
     response = client.post("/api/providers", json=body)
     assert response.status_code == 201, response.text
     provider = response.json()

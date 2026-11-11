@@ -172,5 +172,9 @@ record explicitly rather than rewriting its historical rationale.
 - [0167 — Checked connections for new transcription](0167-checked-provider-new-work.md)
 - [0168 — Release only the acquired preparation lock](0168-owned-preparation-lock-release.md)
 - [0169 — Versioned source alignment-fit hint invalidation](0169-versioned-timing-hint-invalidation.md)
+- [0170 — Deactivate direct OpenAI while retaining compatible transport](0170-deactivate-direct-openai-service.md)
+- [0171 — First-use UCloud and optional Hugging Face setup](0171-first-use-credential-setup.md)
+- [0172 — Runtime stamp proof and retained-lock preflight](0172-runtime-readiness-and-preparation-preflight.md)
+- [0173 — HF access and configured-model preparation in Activity](0173-huggingface-background-preparation.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

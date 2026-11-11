@@ -5,8 +5,10 @@ import json
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from cbs_transcriber import enhancement_api as api
@@ -65,6 +67,17 @@ def prepared(client, credentials, monkeypatch):
         def __init__(self):
             self.submissions, self.uploads, self.terminations, self.trashed = [], [], [], []
             self.folders, self.matches = set(), []
+            self._client = SimpleNamespace(stream=self.runtime_stream)
+
+        @contextmanager
+        def runtime_stream(self, method, path, *, params, **kwargs):
+            assert (method, path) == ("GET", "/api/files/retrieve")
+            assert params["id"].endswith("/.prepare-lock")
+            response = httpx.Response(404, stream=httpx.ByteStream(b""))
+            try:
+                yield response  # Synthetic storage has no retained preparation lock.
+            finally:
+                response.close()
 
         def __enter__(self):
             return self

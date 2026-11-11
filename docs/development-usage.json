@@ -1,6 +1,6 @@
 {
   "format": "cbs-ai-development-usage-v1",
-  "recorded_date": "2026-11-10",
+  "recorded_date": "2026-11-11",
   "purpose": "AI development effort; app provider/GPU/storage costs and human time excluded",
   "checkpoints": [
     {
@@ -246,6 +246,60 @@
           "cumulative_totals_must_not_be_added": true
         },
         "private_aggregate_sha256": "90d7119678b36e3a370afc563d4206eacc99146119d5f0cde5d2632b9ed5a256"
+      },
+      {
+        "id": "codex-post-mvp-20261111T100407Z",
+        "provider": "Codex",
+        "kind": "cumulative since phase start; do not sum checkpoints",
+        "start_exclusive_utc": "2026-11-10T12:41:11Z",
+        "cutoff_inclusive_utc": "2026-11-11T10:04:07Z",
+        "cutoff_copenhagen": "2026-11-11T11:04:07+01:00",
+        "last_included_usage_utc": "2026-11-11T10:04:04.859Z",
+        "development_branch": "codex/post-mvp-morning",
+        "base_commit": "e4453768e76e9bc69dcbc22cffa0df54c0d43e7a",
+        "source_status": "Local morning milestone with work in progress at cutoff; not an installed release.",
+        "model": "gpt-6.1-sol",
+        "tokens": {
+          "input": 666158875,
+          "cached_input_subset": 657701120,
+          "uncached_input": 8457755,
+          "output": 1587661,
+          "reasoning_output_subset": 837961,
+          "total": 667746536
+        },
+        "by_role_total_tokens": {
+          "main": 209742397,
+          "subagents": 458004139
+        },
+        "contributing_sessions": {
+          "main": 1,
+          "subagents": 10
+        },
+        "retained_project_sessions_scanned": 183,
+        "positive_usage_updates": 2665,
+        "duplicate_snapshots_excluded_in_window": 16,
+        "checks": {
+          "delta_equals_last_usage": true,
+          "model_and_role_totals_reconcile": true,
+          "frozen_mvp_prefixes_and_reports_unchanged": true,
+          "baseline_replay_matches": true,
+          "prior_checkpoint_replay_matches": true,
+          "counter_or_arithmetic_anomalies": 0,
+          "missing_or_invalid_records": 0
+        },
+        "speed": null,
+        "rate_assumptions": null,
+        "credit_equivalent": null,
+        "actual_credits": null,
+        "actual_cost": null,
+        "limits": "Retained indexed local project usage only; later/in-flight events, deleted/unindexed sessions, other computers and cloud-only work may be absent. No post-MVP rate/speed/billing claim or Claude estimate. Private identifiers, source hashes and reproduction details stay outside Git.",
+        "additional_since_prior_checkpoint": {
+          "start_exclusive_utc": "2026-11-10T17:47:12.528Z",
+          "end_inclusive_utc": "2026-11-11T10:04:07Z",
+          "tokens": 278197216,
+          "cumulative_totals_must_not_be_added": true
+        },
+        "private_aggregate_sha256": "7ee5a8c15a3b8b47f6c7c5be5dbb09e656c77c88bd8ab042b88266811c93825e"
       }
     ]
   }

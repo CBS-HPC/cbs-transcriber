@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from admission_support import configure_compatible
 
 from cbs_transcriber import providers
 
@@ -24,7 +25,7 @@ def vllm_payload():
 def test_default_settings_honors_a_supplied_version_before_restoring_policy_or_key(
     client, credentials
 ):
-    loaded = client.get("/api/settings").json()
+    loaded = configure_compatible(client)
     approved = client.put(
         "/api/providers/" + loaded["id"],
         json={**loaded, "approved_for": ["protected"], "expected_version": loaded["version"]},
@@ -59,7 +60,7 @@ def test_default_settings_honors_a_supplied_version_before_restoring_policy_or_k
 
 def test_default_switch_during_save_cannot_retarget_the_selected_profile(client, monkeypatch):
     store = client.app.state.store
-    first = client.get("/api/settings").json()
+    first = configure_compatible(client)
     second = client.post(
         "/api/providers",
         json={
@@ -84,7 +85,7 @@ def test_default_switch_during_save_cannot_retarget_the_selected_profile(client,
     saved = client.put(
         "/api/settings",
         json={
-            "provider_type": "openai",
+            "provider_type": "custom",
             "base_url": first["base_url"],
             "model": first["model"],
             "language": "da",

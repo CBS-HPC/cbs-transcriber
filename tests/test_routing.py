@@ -3,7 +3,7 @@
 import wave
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import COMPATIBLE_API_URL, inspect_and_materialize
 
 from cbs_transcriber import enhancement, enhancement_api, features, routing
 from cbs_transcriber.enhancement import EnhancementOptions
@@ -103,8 +103,13 @@ def test_router_checks_each_place_once_per_request(checks):
 
 def test_followups_route_each_recording_and_record_the_reason(checks):
     provider = {
-        "id": "openai",
-        "settings": Settings(provider_type="openai", model="whisper-1").model_dump(),
+        "id": "compatible",
+        "settings": Settings(
+            provider_type="custom",
+            base_url=COMPATIBLE_API_URL,
+            model="whisper-1",
+            capability="words",
+        ).model_dump(),
     }
     recordings = [
         {"id": "short", "duration": 120, "project_id": "p"},
@@ -118,7 +123,8 @@ def test_followups_route_each_recording_and_record_the_reason(checks):
         features.FeatureRequest(word_timing=True, speaker_labels=True),
         EnhancementOptions(execution="auto", align=True, diarize=True),
     )
-    short, long = followups["short", "openai"]["params"], followups["long", "openai"]["params"]
+    short = followups["short", "compatible"]["params"]
+    long = followups["long", "compatible"]["params"]
     assert short["enhancement"]["execution"] == "local" and "ucloud_api" not in short
     assert long["enhancement"]["execution"] == "ucloud" and long["ucloud_api"]
     assert long["provider_name"] == "UCloud WhisperX enhancement"
@@ -192,7 +198,10 @@ def test_followups_check_ucloud_with_their_own_speaker_need(checks, monkeypatch,
     provider = {
         "id": "diarize",
         "settings": Settings(
-            provider_type="openai", model="custom", capability="speakers"
+            provider_type="custom",
+            base_url=COMPATIBLE_API_URL,
+            model="custom",
+            capability="speakers",
         ).model_dump(),
     }
     followups = features.prepare_followups(

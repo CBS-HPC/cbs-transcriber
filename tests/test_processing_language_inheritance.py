@@ -3,6 +3,7 @@
 import threading
 
 import pytest
+from admission_support import COMPATIBLE_API_URL, configure_compatible
 from test_passage_alignment import passage_source as passage_source
 from test_passage_alignment import submit as submit_repair
 from test_passage_timing import process as process_timing
@@ -245,14 +246,16 @@ def test_concurrent_partial_processing_api_saves_keep_unrelated_fields(client):
 
 
 @pytest.mark.parametrize("explicit", [False, True])
-def test_omitted_openai_language_preserves_saved_value(client, explicit):
-    first = client.put("/api/settings", json={"language": "da"})
-    assert first.status_code == 200, first.text
+def test_omitted_compatible_language_preserves_saved_value(client, explicit):
+    configure_compatible(client)
     payload = {
-        "provider_type": "openai",
-        "base_url": "https://api.openai.com/v1",
+        "provider_type": "custom",
+        "base_url": COMPATIBLE_API_URL,
         "model": "whisper-1",
+        "capability": "words",
     }
+    first = client.put("/api/settings", json=payload | {"language": "da"})
+    assert first.status_code == 200, first.text
     if explicit:
         payload["language"] = "en"
     updated = client.put("/api/settings", json=payload)
@@ -260,12 +263,54 @@ def test_omitted_openai_language_preserves_saved_value(client, explicit):
     assert updated.json()["language"] == ("en" if explicit else "da")
 
 
+@pytest.mark.parametrize("explicit", [False, True])
+def test_disabled_openai_save_keeps_the_saved_language_and_configuration(client, explicit):
+    configure_compatible(client)
+    first = client.put(
+        "/api/settings",
+        json={
+            "provider_type": "custom",
+            "base_url": COMPATIBLE_API_URL,
+            "model": "whisper-1",
+            "capability": "words",
+            "language": "da",
+        },
+    )
+    assert first.status_code == 200, first.text
+    before = client.get("/api/settings").json()
+    store = client.app.state.store
+    rows = {
+        table: store.all(f"SELECT * FROM {table} ORDER BY rowid")
+        for table in ("settings", "providers")
+    }
+    payload = {
+        "provider_type": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "model": "whisper-1",
+    }
+    if explicit:
+        payload["language"] = "en"
+    response = client.put("/api/settings", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json() == {"detail": providers.DIRECT_OPENAI_DISABLED}
+    assert before["language"] == "da" and client.get("/api/settings").json() == before
+    assert {table: store.all(f"SELECT * FROM {table} ORDER BY rowid") for table in rows} == rows
+    assert client.get("/api/jobs").json() == []
+
+
 def test_concurrent_omitted_provider_language_keeps_explicit_update(client, credentials):
+    configure_compatible(client)
     store = client.app.state.store
     identifier = providers.default_provider_id(store)
     profile = providers.profile(store, identifier)
     barrier = threading.Barrier(3)
     errors = []
+    compatible = {
+        "provider_type": "custom",
+        "base_url": COMPATIBLE_API_URL,
+        "model": "whisper-1",
+        "capability": "words",
+    }
 
     def save(settings):
         barrier.wait()
@@ -277,10 +322,8 @@ def test_concurrent_omitted_provider_language_keeps_explicit_update(client, cred
             errors.append(error)
 
     writers = [
-        threading.Thread(
-            target=save, args=(providers.Settings(provider_type="openai", language="en"),)
-        ),
-        threading.Thread(target=save, args=(providers.Settings(provider_type="openai"),)),
+        threading.Thread(target=save, args=(providers.Settings(**compatible, language="en"),)),
+        threading.Thread(target=save, args=(providers.Settings(**compatible),)),
     ]
     for writer in writers:
         writer.start()

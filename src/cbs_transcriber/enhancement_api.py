@@ -97,6 +97,12 @@ FAILURES = {
     "preparing the runtime when asked (one time per app version).",
     "runtime-busy": "The UCloud runtime may be in use or have a leftover preparation lock. "
     "Check Activity for ongoing preparation; if none is running, the lock needs investigation.",
+    "runtime-preparation-lock": "A UCloud runtime preparation lock is present. "
+    "Check Activity; a retained lock needs investigation. No new allocation was submitted.",
+    "runtime-legacy-reader": "An older UCloud job may still use this runtime. Finish or "
+    "reconcile it before preparing shared runtime/models. No new allocation was submitted.",
+    "runtime-readiness-unknown": "UCloud runtime readiness could not be verified. "
+    "Check the connection and try again; unavailable evidence does not permit preparation.",
     "runtime-prepare": "Preparing the UCloud runtime failed. See prepare.log in the run folder "
     "on UCloud; no recording was uploaded.",
     "runtime": "The UCloud runtime could not start WhisperX. Prepare the runtime again.",
@@ -112,6 +118,20 @@ class RuntimeNotReady(ValueError):
 
 class Transient(ValueError):
     """A connection problem; the owned remote job may still be fine, so keep it for reconnect."""
+
+
+class RuntimePreflightBlocked(Transient):
+    """Curated observations only; never expose an upstream exception or response body."""
+
+    def __init__(self, code):
+        if code not in {
+            "runtime-preparation-lock",
+            "runtime-legacy-reader",
+            "runtime-readiness-unknown",
+        }:
+            raise ValueError("Unknown Runtime preflight category.")
+        self.code = code
+        super().__init__(FAILURES[code])
 
 
 def requirements_bytes():
@@ -638,6 +658,7 @@ def supervisor_script(settings, identifier, prepare, models=(), *, batch=False, 
         "__PYTHON__": PYTHON_VERSION,
         "__TORCH_INDEX__": TORCH_INDEX,
         "__REQ_SHA256__": requirements_hash(),
+        "__STAMP_BYTES__": str(len(runtime_stamp_bytes())),
         "__WAIT_SECONDS__": str(MANIFEST_WAIT_SECONDS),
         "__PREPARE_SECONDS__": str(PREPARE_SECONDS),
     }
@@ -746,10 +767,210 @@ def listed(client, path):
     return native.folder_listed(client, path)
 
 
+RUNTIME_CHECK_SECONDS = 8
+RUNTIME_REQUEST_SECONDS = 4
+RUNTIME_METADATA_BYTES = 64 * 1024
+
+
+def runtime_stamp_bytes():
+    return ('{"requirements_sha256":"' + requirements_hash() + '"}').encode("ascii")
+
+
+def _runtime_remaining(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise RuntimePreflightBlocked("runtime-readiness-unknown")
+    return min(RUNTIME_REQUEST_SECONDS, remaining)
+
+
+def _runtime_request(client, method, path, deadline, **kwargs):
+    try:
+        # ucloud-workflow 0.1.9 pins this HTTPX client. Its public request() eagerly
+        # buffers bodies; use only its streaming transport, preserving control headers.
+        with client._client.stream(
+            method,
+            path,
+            timeout=_runtime_remaining(deadline),
+            follow_redirects=False,
+            headers={"Accept-Encoding": "identity"},
+            **kwargs,
+        ) as reply:
+            if reply.status_code >= 400:
+                raise UCloudAPIError(
+                    "Runtime metadata request failed.", status_code=reply.status_code
+                )
+            if (
+                not reply.is_success
+                or reply.headers.get("Content-Encoding", "identity") != "identity"
+            ):
+                raise RuntimePreflightBlocked("runtime-readiness-unknown")
+            data = bytearray()
+            _runtime_remaining(deadline)
+            for block in reply.iter_raw():
+                _runtime_remaining(deadline)
+                if len(data) + len(block) > RUNTIME_METADATA_BYTES:
+                    raise RuntimePreflightBlocked("runtime-readiness-unknown")
+                data.extend(block)
+            _runtime_remaining(deadline)
+            return json.loads(data)
+    except (
+        httpx.HTTPError,
+        httpx.StreamError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        RecursionError,
+    ):
+        raise RuntimePreflightBlocked("runtime-readiness-unknown") from None
+
+
+def _runtime_absent(client, path, deadline):
+    # A missing hierarchy can produce 400 at every level. Only an existing parent's
+    # complete listing proving a required child absent establishes descendant absence.
+    child, token, seen = PurePosixPath(path), None, set()
+    for _ in range(16):
+        parent = child.parent
+        if parent == child:
+            break
+        try:
+            page = _runtime_request(
+                client,
+                "GET",
+                "/api/files/browse",
+                deadline,
+                params={
+                    "path": str(parent),
+                    "itemsPerPage": 250,
+                    **({"next": token} if token else {}),
+                },
+            )
+        except UCloudAPIError as exc:
+            if exc.status_code not in {400, 404}:
+                break
+            child, token, seen = parent, None, set()
+            continue
+        items = page.get("items") if isinstance(page, dict) else None
+        if (
+            not isinstance(items, list)
+            or len(items) > 250
+            or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("id"), str)
+                or not item["id"]
+                or str(PurePosixPath(item["id"])) != item["id"]
+                or ".." in PurePosixPath(item["id"]).parts
+                or PurePosixPath(item["id"]).parent != parent
+                for item in items
+            )
+        ):
+            break
+        if any(item["id"] == str(child) for item in items):
+            break  # A present but unreadable branch cannot prove absence below it.
+        token = page.get("next")
+        if token is None or token == "":
+            return None
+        if not isinstance(token, str) or token in seen:
+            break
+        seen.add(token)
+    raise RuntimePreflightBlocked("runtime-readiness-unknown")
+
+
+def runtime_metadata(client, path, *, deadline=None):
+    """Bounded API observation, not lstat/no-follow or physical path ownership proof."""
+    deadline = time.monotonic() + RUNTIME_CHECK_SECONDS if deadline is None else deadline
+    try:
+        item = _runtime_request(client, "GET", "/api/files/retrieve", deadline, params={"id": path})
+    except UCloudAPIError as exc:
+        if exc.status_code == 404:
+            return None
+        if exc.status_code != 400:
+            raise RuntimePreflightBlocked("runtime-readiness-unknown") from None
+        return _runtime_absent(client, path, deadline)
+    if not isinstance(item, dict) or item.get("id") != path:
+        raise RuntimePreflightBlocked("runtime-readiness-unknown")
+    _runtime_kind(item)
+    return item
+
+
+def _runtime_kind(item):
+    status = item.get("status", {})
+    if not isinstance(status, dict):
+        raise RuntimePreflightBlocked("runtime-readiness-unknown")
+    kind = status.get("type", item.get("type"))
+    if (
+        kind not in ("FILE", "DIRECTORY", "SOFT_LINK")
+        or "type" in item
+        and "type" in status
+        and item["type"] != status["type"]
+    ):
+        raise RuntimePreflightBlocked("runtime-readiness-unknown")
+    for source in (item, status):
+        for key in ("isSymlink", "isSymbolicLink", "symlink", "symbolicLink"):
+            if key in source and type(source[key]) is not bool:
+                raise RuntimePreflightBlocked("runtime-readiness-unknown")
+            if source.get(key) is True:
+                return "SOFT_LINK"
+    return kind
+
+
 def stamped(client, settings):
-    return listed(client, runtime_folder(settings)) and listed(
-        client, runtime_folder(settings) + "/stamp.json"
-    )
+    """Exact recipe bytes and reported kinds; the supervisor checks actual POSIX kinds."""
+    deadline = time.monotonic() + RUNTIME_CHECK_SECONDS
+    root = runtime_folder(settings)
+    folder = runtime_metadata(client, root, deadline=deadline)
+    if folder is None or _runtime_kind(folder) != "DIRECTORY":
+        return False
+    item = runtime_metadata(client, root + "/stamp.json", deadline=deadline)
+    if item is None or _runtime_kind(item) != "FILE":
+        return False
+    expected = runtime_stamp_bytes()
+    status = item.get("status", {})
+    size = status.get("sizeInBytes", item.get("sizeInBytes"))
+    if size is not None:
+        if type(size) is not int or size < 0:
+            raise RuntimePreflightBlocked("runtime-readiness-unknown")
+        if size != len(expected):
+            return False
+    try:
+        ticket = _runtime_request(
+            client,
+            "POST",
+            "/api/files/download",
+            deadline,
+            json={"items": [{"id": root + "/stamp.json"}]},
+        )
+        endpoint = native.transfer_url(settings.base_url, native.one_response(ticket)["endpoint"])
+        data = bytearray()
+        with httpx.Client(
+            timeout=_runtime_remaining(deadline), follow_redirects=False
+        ) as transport:
+            with transport.stream(
+                "GET", endpoint, headers={"Accept-Encoding": "identity"}
+            ) as stream:
+                if (
+                    not stream.is_success
+                    or stream.headers.get("Content-Encoding", "identity") != "identity"
+                ):
+                    raise RuntimePreflightBlocked("runtime-readiness-unknown")
+                _runtime_remaining(deadline)
+                for block in stream.iter_raw():
+                    _runtime_remaining(deadline)
+                    if len(data) + len(block) > len(expected):
+                        return False
+                    data.extend(block)
+                _runtime_remaining(deadline)
+        return bytes(data) == expected
+    except (
+        UCloudAPIError,
+        httpx.HTTPError,
+        httpx.StreamError,
+        ValueError,
+        KeyError,
+        TypeError,
+        RecursionError,
+    ):
+        raise RuntimePreflightBlocked("runtime-readiness-unknown") from None
 
 
 def ensure_folder(client, path):
@@ -1297,7 +1518,8 @@ class Run:
             runtime_product=self.runtime_product,
         )
         runtime = runtime_folder(self.settings)
-        runtime_batches.require_preparation_idle(self.store, self.settings, self.client)
+        if self.prepare:
+            runtime_batches.require_preparation_idle(self.store, self.settings, self.client)
         if not stamped(self.client, self.settings):
             if not self.prepare:
                 # Checked before allocating: an unprepared runtime never costs a B200 job.

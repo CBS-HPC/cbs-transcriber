@@ -71,7 +71,9 @@ take_lock() {
 }
 
 prepared() {
-  grep -qs '"requirements_sha256":"__REQ_SHA256__"' "$RT/stamp.json"
+  [ -f "$RT/stamp.json" ] && [ ! -L "$RT/stamp.json" ] || return 1
+  [ "$(stat -c '%s' -- "$RT/stamp.json" 2>/dev/null)" = '__STAMP_BYTES__' ] || return 1
+  cmp -s "$RT/stamp.json" <(printf '{"requirements_sha256":"%s"}' '__REQ_SHA256__')
 }
 
 install_runtime() {

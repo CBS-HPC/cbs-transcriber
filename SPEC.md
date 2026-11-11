@@ -11,7 +11,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - Windows and macOS; Python 3.13, uv, local .venv, Git main, pytest, Ruff.
   Validate real installation/playback on each OS before claiming platform acceptance.
 - FastAPI + build-free HTML/CSS/JS; SQLite; loopback only; single user.
-- Current provider UI offers OpenAI and UCloud only. Custom and UCloud vLLM are deferred;
+- Released MVP provider UI offers OpenAI and UCloud only. The isolated post-MVP branch
+  retires direct OpenAI under V212. Custom and UCloud vLLM are deferred;
   retain their existing saved configurations, research results and frozen jobs for compatibility.
   Built-in connection names are internal; Available models is part of basic Settings.
 - Post-MVP provider decision (11 November): deactivate the direct OpenAI service in normal
@@ -20,7 +21,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   protocol compatibility does not establish deployment or model capability. Preserve saved
   results/history and credentials/configuration evidence. Specify queued/running/retry handling
   before activation, without silently cancelling work or starting new paid calls. This decision
-  is planned; the installed MVP and current provider implementation are unchanged.
+  is implemented on the isolated morning branch; the installed MVP remains unchanged.
 - CBS service rollout is a separate pilot decision: access, ownership, support, approved processing
   and measured total operating cost. Current local architecture does not imply shared hosting/SSO.
 - Managed local library outside repository/OneDrive; retain originals.
@@ -41,11 +42,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   or release. Limit frontend decisions to explicit requests; broader choices await colleague
   feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
   project creation remains accessible through existing navigation at narrow widths too.
-- Planned first-launch onboarding (11 November): offer UCloud API key entry and optional
+- Post-MVP first-launch onboarding (11 November): offer UCloud API key entry and optional
   Hugging Face token entry on the front page, reusing Settings checks and credential storage.
-  Keep later Settings access; empty libraries alone do not imply first use. Credential setup
-  does not implicitly prepare models or start processing. This frontend addition is not yet
-  implemented; the ordinary empty-page layout remains the current delivered behavior.
+  Keep later Settings access; empty libraries alone do not imply first use. UCloud-only setup
+  starts no preparation. The user's later HF decision explicitly queues access/configured-model
+  preparation in Activity under ADR 0173. Implementation is on the isolated morning branch;
+  the installed app's ordinary empty-page layout remains unchanged.
 - Planned anonymisation uses an anonymisation LLM running on UCloud (user direction,
   11 November 2026). The hosting catalogue identifies PII-Tracer as the candidate: a PII
   token classifier served through `/v1/pii`, not a chat-completions model. Integration,
@@ -53,6 +55,13 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   The local synthetic demo is review/evaluation scaffolding, not the
   intended inference backend. This direction does not activate jobs, upload data or claim
   an implemented anonymisation workflow; real execution/integration remains separately scoped.
+- PII-Tracer implementation is parked by the user pending CBS Runtime stability. Its future
+  app flow should start the model on demand through UCloud API control; no current endpoint
+  uptime, inference credential, deployment authority or replacement/key policy is inferred.
+- The next approved release should include a stable latest-release installer, retaining valid
+  versioned wheel names. Resolve one stable release and its matching wheel/constraints/digests;
+  do not install rolling main or synchronize a serving environment. Until that asset is
+  published, current versioned MVP installation commands remain the available route.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space
   permits, wrapping on narrow screens. Uncertainty controls follow Next to review.
 - UI: Text / Word and timing editor dropdown defaults to Text; audio/video switch retains position.
@@ -297,6 +306,53 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V216: Install-latest resolves one public stable release and one matching versioned wheel/
+  constraints pair, rejects ambiguous/foreign/malformed assets and verifies GitHub SHA-256
+  digests before uv installation. Preserve copy/no-config flags, explicit update intent and
+  isolation from the project environment; a running default-port app blocks installation.
+  Never auto-start, kill an app or publish assets. An unpublished stable URL is labelled as such.
+- V215: Explicit nonempty primary HF Settings/first-use token Save starts a server-lifetime
+  Activity setup task, not inline
+  model work; no-worker tests remain inert. Current token/plan fences, pinned cached-file reuse,
+  metadata access/terms checks and configured local/UCloud policy govern each stage. Local set
+  is existing speakers/coarse/da/en, not every advertised ASR model. Optional versioned remote
+  plan checks every selected supported Runtime cache beyond the base stamp at its documented
+  metadata/receipt scope, preserving legacy
+  absent-plan behavior and one durable remote owner/no uncertain resubmission. Stop/drain,
+  capture/switch/lease and partial outcomes remain honest. Tokens/fingerprints stay private;
+  no restart-continuation or global readiness claim follows from the ephemeral parent. Legacy
+  Save aliases do not trigger unrelated preparation but all writers invalidate stale work;
+  absent-token updates neither enqueue nor cancel unchanged work. Explicit Check queues the
+  saved token through the same Activity owner; different unsaved drafts require Save first.
+  A native-only configuration does not select Runtime weights: UCloud setup needs at least
+  one enabled supported CBS Runtime profile and reports that missing choice explicitly.
+  Before durable-child acceptance, bind exact verified speaker files under the parent's
+  access/token fence; the accepted child cannot fetch or borrow replacement HF credentials.
+  Repeated Save reuses a completed nonarchived plan only after fresh full cache-witness checks;
+  its bounded journal receipt alone is not current readiness or a full weight-hash proof.
+- V214: CBS Runtime host/supervisor agree on exact bounded canonical requirements stamp bytes.
+  Host checks API-reported kinds/explicit link flags, not physical lstat proof; shell requires
+  a regular non-link stamp. Unknown reads never grant readiness/preparation. New singleton/
+  shared/standalone PREPARE=1 submissions refuse retained locks and known legacy readers
+  independently of stamp validity before uploads/job-submission POST. Read-only ticket POSTs
+  remain observations. PREPARE=0 cached readers and same-allocation recovery
+  retain authority. Preflight absence is not ownership; shell locks and legacy-reader fences
+  remain. No lock stealing, cache deletion, frozen-job rewrite or disabled generation activation.
+- V212: Direct OpenAI service (family or normalized official endpoint host) cannot receive new
+  setup/model-list/audio requests in the post-MVP build, including custom-label and queued/Retry
+  paths. Refuse before SDK/audio/credential/check-state mutation where applicable. Preserve
+  nonofficial compatible transport, native UCloud, frozen settings, saved evidence, Stop and
+  complete local raw/chunk finalization; accepted requests drain. Never infer cache completeness
+  from the fresh-only audio-plan helper alone. ADR 0170; mocked no-outbound checks.
+- V213: First-use home setup reuses exact UCloud discovery/save proofs and credential storage;
+  optional HF uses Save and V215's explicitly chosen background workflow, never the old inline
+  download-capable Check route. UCloud-only setup starts no preparation/processing. A nonsecret
+  browser completion marker follows explicit Save/Skip,
+  not project count or boot; late discovery cannot write after Skip/navigation, accepted saves
+  finish honestly, and partial outcomes are explicit. Secrets stay out of localStorage/logs/URLs.
+  Existing setup and later Settings remain usable; storage-unavailable fallback is graceful.
+  Existing visible UCloud profiles hand off to their exact Settings context; automatic fresh
+  duplicates cannot bypass disabled-model or Protected-denial choices.
 - V211: Fresh verified timing requests freeze the host-only invalidation policy at their exact
   source/role acceptance boundary (ADR 0169); missing policy stays byte-exact legacy, unknown
   policy refuses and mutation cannot remove/retarget it. Applied/replaced passages and changed
@@ -1817,6 +1873,11 @@ T130|x|Off-by-default actual Text textarea playback-overlay prototype; 28 distin
 T131|x|Offline CBS Runtime release confined to acquired lock/marker identities and exact contents; no recursive removal or reclaim; synthetic checks with explicit Linux/symlink limits|V116,I.enhance-api,ADR0168
 T132|x|Audit seventeen hidden work areas, explicit missing-only native rerun/owned-folder inventory design and synthetic bilingual anonymisation review proofs; production/privacy/live acceptance remain open|V8,V18,V20,I.native-batch
 T133|x|Isolated versioned timing-hint invalidation, sealed fresh authority and exact legacy local/cloud/merge/conflict dispatch; complete child backend 5574 passed/26 skipped, independent Go; unmerged/uninstalled, cloud history not_checked|V89,V200,V211,I.history,I.transcript,ADR0169
+T134|x|Branch-only direct OpenAI retirement preserves compatible transport, evidence and cache-only finalization; scoped and assembled synthetic gates pass; installed MVP unchanged|V212,V209,I.providers,ADR0170
+T135|x|Branch-only first-use UCloud/optional HF setup reuses checks/storage and Activity workflow; 67 relevant browser cases pass; no installed update|V213,V212,V215,I.providers,ADR0171,ADR0173
+T136|x|Exact Runtime host/shell stamps and retained-lock/reader preflight verified offline; no reclaim, historical recovery or real Runtime acceptance implied|V214,V116,I.enhance-api,ADR0172
+T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans and credential/ownership fences verified with mocked providers; parent server-lifetime and child durable|V215,V213,V214,I.enhance-api,ADR0173
+T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1904,3 +1965,14 @@ B425|2026-11-10|First timing-policy implementation trusted a known parameter val
 B426|2026-11-10|New merge/conflict generation dispatch used set membership on unvalidated JSON values, raising TypeError for list/dict formats instead of a clean invalid-evidence refusal|V211; validate stored generation type before dispatch and retain ValueError refusal for malformed/unknown generations
 B427|2026-11-10|First contained timing-policy seal reader materialized role_json before applying its bounded text reader|V8,V211; select only policy, then use the accounted 4096-byte reader; oversized-role resource refusal regression and source repin
 B428|2026-11-10|A same-size Windows test corruption could retain every filesystem witness, so the late-change test nondeterministically expected refusal without observable drift|V8,V137; reproduce equal witnesses and controlled red/green, then explicitly advance/assert test mtime; retain corruption/refusal assertions, quiescent transport contract and unchanged product; affected module rerun
+B429|2026-11-11|Runtime host accepted any stamp path while the shell required its digest, allowing a wrong-digest stamp to bypass the known-legacy-reader fence before a destructive install branch|V214,V116; synthetic Store/listing/Bash reproduction; exact stamp agreement and preparation-flag-based reader/retained-lock preflight, with metadata proof limits explicit
+B430|2026-11-11|Direct OpenAI retirement initially left native-shaped official-host discovery/client constructors and specialized language/allocation saves reachable through sibling paths|V212; enforce the same service-availability gate before keys, clients or mutation while preserving cached finalization and pure protocol kernels; 43 scoped deactivation regressions
+B431|2026-11-11|Provider-tab fallback repeatedly selected a native-shaped but service-disabled official-host profile, recursing instead of reaching the healthy UCloud tab|V212,V213; choose only visible service-available fallback profiles and test bad-first/healthy and only-disabled lists
+B432|2026-11-11|HF setup checked its frozen token fingerprint and then fetched credentials again, allowing a replacement token to reach an old task's Hub/helper call between those reads|V215; read once, compare that actual value to the frozen fingerprint and hand off the same value; before/after credential-race and accepted-call-drain regressions
+B433|2026-11-11|The new HF helper's speaker mode echoed a supplied worker digest without verifying the sibling source bytes, although public preparation mode verified them|V215; verify both owned source hashes in every mode before imports/downloads, with changed-source refusal tests
+B434|2026-11-11|HF metadata checks buffered complete account/model response bodies even though access decisions use only status headers|V215; status-only HTTPX streaming contexts close both responses without consuming bodies; real-client unreadable-body red/green regression preserves redirect and authentication semantics
+B435|2026-11-11|HF child I/O thread startup occurred before its cleanup try/finally, so a thread-start failure could leak the accepted child and pipes beyond the library lease|V215; begin ownership cleanup immediately after process creation, stop/reap and join only started threads before closing pipes; injected second-thread-start failure regression
+B436|2026-11-11|First-use setup could create a default-enabled/default-approved duplicate when an existing native profile had lost its key, bypassing that profile's explicit disabled models or Protected denial|V212,V213; hand existing profiles and draft key to exact Settings controls instead of automatic creation, preserving IDs/versions/flags/approvals; saved-profile browser regression
+B437|2026-11-11|A later token/settings change or shutdown overwrote an explicit HF Stop reason while the accepted child handoff drained, losing Stop for the child that task actually created|V215; keep sticky private user intent independently of display/supersede reasons, cancel an owned child once after handoff and never cancel an attached owner; barrier-controlled regressions
+B438|2026-11-11|HF durable-owner admission checked the parent before waiting for SQLite's writer, allowing Stop or a token change during that wait to become stale before insertion|V215; recheck the parent after writer acquisition immediately before insert/attachment, retain postacceptance drain and exact owner return; actual held-writer regression
+B439|2026-11-11|An adapted Settings absence assertion could pass before the dialog loaded, hiding an inverted native-tab expectation in the test|V8; wait for the visible dialog before negative/absence assertions and retain separate retired-OpenAI and available-UCloud oracles

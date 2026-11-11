@@ -152,6 +152,9 @@ def require_setup(settings, key):
 
 
 def client_for(settings, key, *, timeout=30):
+    from .providers import require_service_available
+
+    require_service_available(settings)
     # Construct directly: from_env() would read another environment and choose CPU defaults.
     return UCloudClient(
         CloudSettings(

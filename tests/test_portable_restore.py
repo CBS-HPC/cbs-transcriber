@@ -83,7 +83,12 @@ def test_connection_receipt_is_preserved_as_source_without_restoring_readiness(
 
     source = package[1]
     profile = providers.profile(source, providers.default_provider_id(source))
-    settings = providers.Settings.model_validate(profile["settings"])
+    settings = providers.Settings(
+        provider_type="custom",
+        base_url="https://compatible.invalid/v1",
+        model="synthetic-checked-model",
+        capability="json",
+    )
     key = "synthetic-checked-provider"
     credentials.keys[providers.credential_scope(settings)] = key
     checks = provider_connection.Checks()

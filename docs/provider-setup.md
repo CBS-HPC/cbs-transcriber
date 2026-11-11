@@ -4,6 +4,13 @@ MVP 0.1.0 offers OpenAI and UCloud. Open **Settings**, save a connection, then c
 **Provider** and **Model** when starting transcription. Connection setup does not transcribe
 recordings. Importing, reviewing and exporting an existing transcript needs no service key.
 
+The unreleased post-MVP branch disables the direct OpenAI service while retaining saved
+results and shared compatible-protocol code. Its first-use page offers UCloud setup and an
+optional HF token; saving that token queues access/configured-model preparation in Activity.
+UCloud-only connection setup starts no preparation. UCloud model preparation requires an
+enabled CBS Runtime profile; native Transcriber models do not select those weights. The
+published MVP retains the behavior described below until a separately approved update.
+
 ## OpenAI
 
 Enter an API key in the OpenAI tab and save. **Available models** controls which models appear

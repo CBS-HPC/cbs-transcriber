@@ -21,6 +21,10 @@ from .ucloud_native import (
 )
 
 OPENAI_URL = "https://api.openai.com/v1"
+DIRECT_OPENAI_DISABLED = (
+    "Direct OpenAI service is disabled in this version of CBS Transcriber. "
+    "Choose UCloud in Settings for new transcription."
+)
 OPENAI_AUTO_LANGUAGE_ERROR = (
     "Leave the OpenAI language hint blank for automatic language detection; do not enter 'auto'."
 )
@@ -98,6 +102,23 @@ def _uses_openai_language_hint(settings):
         settings.provider_type == "openai"
         or urlparse(settings.base_url).hostname == "api.openai.com"
     )
+
+
+def direct_openai(settings):
+    """App service policy, independent of the retained compatible request protocol."""
+    if settings.provider_type == "openai":
+        return True
+    hostname = urlparse(settings.base_url).hostname or ""
+    try:
+        hostname = hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        pass
+    return hostname.rstrip(".").casefold() == "api.openai.com"
+
+
+def require_service_available(settings):
+    if direct_openai(settings):
+        raise ValueError(DIRECT_OPENAI_DISABLED)
 
 
 class Settings(BaseModel):
@@ -446,6 +467,7 @@ def save_runtime_language(store, credentials, identifier, language, expected_ver
             )
         payload = json.loads(row["value"])
         settings = Settings.model_validate(payload)
+        require_service_available(settings)
         if settings.provider_type != "ucloud" or not whisperx_model(settings):
             raise ValueError("Choose an existing CBS Runtime / WhisperX model configuration.")
         if (fixed := fixed_runtime_language(settings)) and language != fixed:
@@ -478,6 +500,7 @@ def save_native_language(store, credentials, identifier, language, expected_vers
             raise StaleProvider("These settings changed. Reopen Settings; nothing was saved.")
         payload = json.loads(row["value"])
         settings = Settings.model_validate(payload)
+        require_service_available(settings)
         if settings.provider_type != "ucloud" or whisperx_model(settings):
             raise ValueError("Choose an existing UCloud Transcriber model configuration.")
         if payload.get("language") != language or "language" not in payload:
@@ -501,6 +524,7 @@ def save_native_allocation(store, credentials, identifier, allocation, expected_
         raise StaleProvider("These settings changed. Reopen Settings; nothing was saved.")
     payload = json.loads(row["value"])
     settings = Settings.model_validate(payload)
+    require_service_available(settings)
     if settings.provider_type != "ucloud" or whisperx_model(settings):
         raise ValueError("Choose a native Transcriber model, not a CBS Runtime model.")
     setup = settings.ucloud_transcriber
@@ -698,6 +722,7 @@ def save_profile(
 ):
     from .store import new_id, now
 
+    require_service_available(settings)
     if identifier is None:
         settings = fresh_native_settings(settings)
     normalize_vllm_model(settings)
@@ -924,6 +949,7 @@ def set_default_provider(store, identifier, credentials=None):
 
 def require_enabled(settings):
     """Only new selection/submission checks this flag; frozen workers and retries keep running."""
+    require_service_available(settings)
     if not settings.enabled:
         raise ValueError(
             "Model is disabled. Enable it in Settings before starting a new transcription."
@@ -1023,6 +1049,7 @@ def status_message(exc):
 
 def check_models(settings, key, http_client=None):
     """Inspect account-visible model IDs without sending audio or starting paid work."""
+    require_service_available(settings)
     if settings.provider_type == "ucloud":
         raise ValueError("Use Check UCloud setup for the native Transcriber provider.")
     require_key(settings, key)
@@ -1133,6 +1160,7 @@ def transcription_fields(settings):
 
 def transcribe_file(path, settings, key, http_client=None, *, request_fields=None):
     """Send one part; request_fields replays a frozen descriptor's exact logical fields."""
+    require_service_available(settings)
     defaults = transcription_fields(settings)
     require_key(settings, key)
     if http_client is not None and http_client.follow_redirects:

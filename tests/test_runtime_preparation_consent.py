@@ -3,11 +3,13 @@
 ADR 0098. Every readiness probe is mocked: no UCloud, Hugging Face or paid call is made."""
 
 import copy
+import json
 import threading
 import time
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from admission_support import inspect_and_materialize
 from test_runtime_batch_api import add_profile, add_recording, assert_queue_unlocked, plan
@@ -405,6 +407,41 @@ class Listing:
 
     def __init__(self, folders, *, fail=False):
         self.folders, self.fail, self.timeouts = set(folders), fail, []
+        self._client = SimpleNamespace(stream=self.control_stream)
+
+    @contextmanager
+    def control_stream(self, method, path, *, params=None, **kwargs):
+        if self.fail:
+            raise httpx.ConnectError("Synthetic offline drive")
+        if (method, path) == ("GET", "/api/files/retrieve"):
+            identifier = params["id"]
+            status = 200 if identifier in self.folders else 404
+            payload = {
+                "id": identifier,
+                "status": {"type": "FILE" if identifier.endswith("/stamp.json") else "DIRECTORY"},
+            }
+        else:
+            assert (method, path) == ("POST", "/api/files/download")
+            status, payload = 200, {"responses": [{"endpoint": "https://cloud.invalid/stamp"}]}
+        response = httpx.Response(
+            status,
+            stream=httpx.ByteStream(json.dumps(payload).encode()),
+        )
+        try:
+            yield response
+        finally:
+            response.close()
+
+    @contextmanager
+    def stream(self, method, endpoint, **kwargs):
+        assert method == "GET" and endpoint == "https://cloud.invalid/stamp"
+        response = httpx.Response(
+            200, stream=httpx.ByteStream(enhancement_api.runtime_stamp_bytes())
+        )
+        try:
+            yield response
+        finally:
+            response.close()
 
     def __enter__(self):
         return self
@@ -427,6 +464,7 @@ def drive(monkeypatch, listing):
         return listing
 
     monkeypatch.setattr(enhancement_api.native, "client_for", client_for)
+    monkeypatch.setattr(enhancement_api.httpx, "Client", lambda **kwargs: listing)
     monkeypatch.setattr(
         enhancement_api.native,
         "folder_listed",

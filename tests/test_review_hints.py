@@ -61,8 +61,17 @@ def test_logprobs_are_requested_only_where_openai_supports_them(tmp_path):
 
     for model, capability in (("gpt-4o-transcribe", "json"), ("whisper-1", "words")):
         settings = Settings(provider_type="openai", model=model, capability=capability)
+        compatible = settings.model_copy(
+            update={"provider_type": "custom", "base_url": "https://compatible.invalid/v1"}
+        )
         with httpx.Client(transport=httpx.MockTransport(handle)) as client:
-            providers.transcribe_file(audio, settings, "sk-test", http_client=client)
+            providers.transcribe_file(
+                audio,
+                compatible,
+                "sk-test",
+                http_client=client,
+                request_fields=providers.transcription_fields(settings),
+            )
     assert b'name="include[]"' in forms[0] and b"logprobs" in forms[0]
     assert b"include" not in forms[1]
 

@@ -266,7 +266,9 @@ def test_v125_new_saves_reject_literal_auto_but_legacy_settings_still_load(
     )
     snapshot = settings.model_dump_json()
     before = store.all("SELECT * FROM providers ORDER BY id")
-    with pytest.raises(ValueError, match="auto"):
+    with pytest.raises(
+        ValueError, match="auto" if kind == "native" else "Direct OpenAI service is disabled"
+    ):
         providers.save_profile(
             store, credentials, "Unsupported hint", settings, api_key="synthetic"
         )
@@ -302,8 +304,11 @@ def test_v125_openai_literal_auto_refuses_before_key_file_or_client(monkeypatch,
     monkeypatch.setattr(providers, "require_key", refuse)
     monkeypatch.setattr(providers, "OpenAI", refuse)
     monkeypatch.setattr(providers, "DefaultHttpxClient", refuse)
+    settings = providers.Settings(language=language)
     with pytest.raises(ValueError, match="Leave the OpenAI language hint blank"):
-        providers.transcribe_file(Unopened(), providers.Settings(language=language), "")
+        providers.transcription_fields(settings)
+    with pytest.raises(ValueError, match="Direct OpenAI service is disabled"):
+        providers.transcribe_file(Unopened(), settings, "")
 
 
 @pytest.mark.parametrize(
@@ -329,9 +334,11 @@ def test_v125_custom_profile_cannot_send_literal_auto_to_the_official_host(
     monkeypatch.setattr(providers, "DefaultHttpxClient", refuse)
     monkeypatch.setattr(providers, "require_key", refuse)
     with pytest.raises(ValueError, match="Leave the OpenAI language hint blank"):
+        providers.transcription_fields(settings)
+    with pytest.raises(ValueError, match="Direct OpenAI service is disabled"):
         providers.save_profile(store, credentials, "Official custom", settings, api_key="synthetic")
     assert store.all("SELECT * FROM providers ORDER BY id") == before
-    with pytest.raises(ValueError, match="Leave the OpenAI language hint blank"):
+    with pytest.raises(ValueError, match="Direct OpenAI service is disabled"):
         providers.transcribe_file(Unopened(), settings, "")
     assert providers.Settings.model_validate_json(settings.model_dump_json()).language == " AUTO "
 
@@ -345,6 +352,12 @@ def test_v125_runtime_language_on_the_official_host_does_not_bypass_the_hint_gua
     )
     before = row(store, identifier)
     with pytest.raises(ValueError, match="Leave the OpenAI language hint blank"):
+        providers.transcription_fields(
+            native_settings(
+                model="whisperx/large-v3", base_url="https://api.openai.com", language="auto"
+            )
+        )
+    with pytest.raises(ValueError, match="Direct OpenAI service is disabled"):
         providers.save_runtime_language(
             store, credentials, identifier, "auto", version(store, identifier)
         )
@@ -386,11 +399,18 @@ def test_v125_blank_openai_hint_keeps_both_language_parameters_omitted(tmp_path,
         calls.append(request.url.path)
         return httpx.Response(200, json={"text": "Synthetic."})
 
+    settings = providers.Settings(model=model, language="")
+    fields = providers.transcription_fields(settings)
+    assert "language" not in fields and "languages" not in fields
+    compatible = settings.model_copy(
+        update={"provider_type": "custom", "base_url": "https://speech.invalid/v1"}
+    )
     providers.transcribe_file(
         path,
-        providers.Settings(model=model, language=""),
+        compatible,
         "synthetic-key",
         httpx.Client(transport=httpx.MockTransport(reply)),
+        request_fields=fields,
     )
     assert calls == ["/v1/audio/transcriptions"]
 

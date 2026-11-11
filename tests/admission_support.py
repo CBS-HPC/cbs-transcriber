@@ -8,6 +8,23 @@ import wave
 
 from cbs_transcriber import input_admission, original_inspection
 
+COMPATIBLE_API_URL = "https://compatible.invalid/v1"
+
+
+def configure_compatible(client, *, model="whisper-1", capability="words"):
+    """Explicit current Save of a synthetic nonofficial endpoint, without a Check or request."""
+    response = client.put(
+        "/api/settings",
+        json={
+            "provider_type": "custom",
+            "base_url": COMPATIBLE_API_URL,
+            "model": model,
+            "capability": capability,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
 
 def checked_connection(store, credentials, provider_id=None, *, models=None):
     """Explicit successful synthetic Settings check; no transport or credential changes.

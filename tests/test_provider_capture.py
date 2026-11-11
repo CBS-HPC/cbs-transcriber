@@ -8,13 +8,13 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-from admission_support import checked_connection, inspect_and_materialize
+from admission_support import COMPATIBLE_API_URL, checked_connection, inspect_and_materialize
 from conftest import finish_media
 from report_support import selected_view_report
 
 from cbs_transcriber import media, portable_capture, provider_capture, providers
 from cbs_transcriber.jobs import JobQueue
-from cbs_transcriber.providers import OPENAI_URL, Settings
+from cbs_transcriber.providers import Settings
 from cbs_transcriber.transcripts import edit_segment
 
 SECRET = "SYNTHETIC_PROVIDER_SECRET_CANARY"
@@ -318,9 +318,11 @@ def test_legacy_and_unmarked_jobs_keep_exact_earlier_behavior(
     store.execute(
         "UPDATE recordings SET status='ready',duration=900 WHERE id=?", (recording["id"],)
     )
-    credentials.keys[OPENAI_URL] = "synthetic-key"
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-key"
     legacy = store.add_job(
-        recording["id"], "transcribe", {"settings": Settings().model_dump(), "revision": 0}
+        recording["id"],
+        "transcribe",
+        {"settings": Settings(base_url=COMPATIBLE_API_URL).model_dump(), "revision": 0},
     )
     folder = store.directory(recording["id"]) / "test-chunks"
     folder.mkdir()

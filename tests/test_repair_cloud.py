@@ -475,11 +475,20 @@ def test_local_apply_proof_rejects_modified_timings_and_nonterminal_owner(execut
 def api_execution(execution, credentials, current_transcriber_application, tmp_path, monkeypatch):
     fake = RepairUCloud(current_transcriber_application, tmp_path / "simulated-worker")
     api_fixtures.runtime_ready(fake)
+
+    def streamed(request):
+        response = fake.handle(request)
+        return httpx.Response(
+            response.status_code,
+            headers=response.headers,
+            stream=httpx.ByteStream(response.content),
+        )
+
     monkeypatch.setattr(
         httpx,
         "Client",
         lambda *args, **kwargs: api_fixtures.REAL_CLIENT(
-            *args, **kwargs, transport=httpx.MockTransport(fake.handle)
+            *args, **kwargs, transport=httpx.MockTransport(streamed)
         ),
     )
     monkeypatch.setattr(api, "read_remote", REAL_READ_REMOTE)

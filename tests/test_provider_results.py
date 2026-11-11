@@ -1,17 +1,31 @@
 import json
 import sqlite3
 
-from admission_support import checked_connection, inspect_and_materialize
+from admission_support import (
+    COMPATIBLE_API_URL,
+    checked_connection,
+    configure_compatible,
+    inspect_and_materialize,
+)
 from conftest import finish_media
 
 from cbs_transcriber.catalog import provider_catalog
-from cbs_transcriber.providers import OPENAI_MODELS, OPENAI_URL, Settings
+from cbs_transcriber.providers import Settings
 from cbs_transcriber.store import Store
 from cbs_transcriber.transcripts import edit_segment, normalize_segments
 
 
 def provider(client, name, model, **extra):
-    response = client.post("/api/providers", json={"name": name, "model": model, **extra})
+    response = client.post(
+        "/api/providers",
+        json={
+            "name": name,
+            "provider_type": "custom",
+            "base_url": COMPATIBLE_API_URL,
+            "model": model,
+            **extra,
+        },
+    )
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -102,15 +116,18 @@ def test_v5_v13_named_providers_default_and_endpoint_credentials(client, credent
         remember=False,
     )
     configured = client.get("/api/providers").json()["providers"]
-    assert {p["model"] for p in configured} == set(OPENAI_MODELS)
+    assert {p["model"] for p in configured} == {
+        provider_catalog()["openai"]["default"],
+        second["model"],
+    }
     assert {p["id"] for p in configured} >= {original, second["id"]}
     assert "synthetic-secret" not in client.get("/api/providers").text
     assert "synthetic-secret" not in client.app.state.store.db_path.read_bytes().decode("latin1")
-    assert credentials.get(OPENAI_URL) == "synthetic-secret"
+    assert credentials.get(COMPATIBLE_API_URL) == "synthetic-secret"
     checked_connection(client.app.state.store, credentials, second["id"])
     client.put("/api/providers/default", json={"provider_id": second["id"]})
     assert client.get("/api/settings").json()["model"] == second["model"]
-    client.put("/api/settings", json={"model": "custom-model", "capability": "json"})
+    client.put("/api/settings", json={**second, "model": "custom-model", "capability": "json"})
     assert (
         next(
             p for p in client.get("/api/providers").json()["providers"] if p["id"] == second["id"]
@@ -125,7 +142,7 @@ def test_v5_v13_named_providers_default_and_endpoint_credentials(client, credent
     assert client.get("/api/providers").json()["default_provider_id"] == original
     client.delete(f"/api/providers/{third['id']}")
     remaining = client.get("/api/providers").json()["providers"]
-    assert {p["model"] for p in remaining} == set(OPENAI_MODELS) - {second["model"]}
+    assert {p["model"] for p in remaining} == {provider_catalog()["openai"]["default"]}
     for configured in remaining:
         if configured["id"] != original:
             assert client.delete(f"/api/providers/{configured['id']}").status_code == 200
@@ -139,13 +156,14 @@ def test_v12_v13_multiple_provider_results_are_frozen_and_do_not_overwrite(
     store = client.app.state.store
     store.save_transcript(r["id"], normalize_segments([{"text": "My reviewed text"}]), {}, 0)
     original = store.recording(r["id"])
-    first = client.get("/api/providers").json()["providers"][0]
-    # A new library starts with the catalog's OpenAI default (ADR 0126: gpt-transcribe).
+    # The historical default stays readable; generic new execution uses a synthetic service.
+    first = configure_compatible(
+        client, model=provider_catalog()["openai"]["default"], capability="json"
+    )
     assert first["model"] == provider_catalog()["openai"]["default"] == "gpt-transcribe"
     second = provider(client, "Other model", "other", capability="json")
-    credentials.keys[OPENAI_URL] = "fake-key"
-    checked_connection(store, credentials, first["id"])
-    checked_connection(store, credentials, second["id"])
+    credentials.keys[COMPATIBLE_API_URL] = "fake-key"
+    checked_connection(store, credentials, first["id"], models=[first["model"], second["model"]])
     chosen = client.patch(f"/api/recordings/{r['id']}/provider", json={"provider_id": second["id"]})
     assert chosen.json()["provider_id"] == second["id"]
     with store.library_lock():
@@ -172,7 +190,10 @@ def test_v12_v13_multiple_provider_results_are_frozen_and_do_not_overwrite(
         )
         jobs = inspect_and_materialize(store, credentials, [job["id"] for job in jobs])
         # Freeze executable settings before changing the saved provider configuration.
-        client.put(f"/api/providers/{second['id']}", json={"name": "Changed", "model": "new"})
+        changed = client.put(
+            f"/api/providers/{second['id']}", json={**second, "name": "Changed", "model": "new"}
+        )
+        assert changed.status_code == 200, changed.text
         calls = []
 
         def transcribe(path, settings, key):
@@ -270,7 +291,8 @@ def test_v12_imports_create_separate_recoverable_results(client, wav_bytes):
 
 def test_v13_invalid_provider_does_not_queue_partial_work(client, wav_bytes, credentials):
     r = recording(client, wav_bytes)
-    credentials.keys[OPENAI_URL] = "fake-key"
+    configure_compatible(client)
+    credentials.keys[COMPATIBLE_API_URL] = "fake-key"
     p = client.get("/api/providers").json()["default_provider_id"]
     before = len(client.get("/api/jobs").json())
     response = client.post(

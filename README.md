@@ -8,6 +8,10 @@ The current release is **MVP 0.1.0**. Some unfinished features are hidden. Windo
 and selected workflows have been exercised on the development PC; clean-device Windows and
 Mac acceptance is still pending. See the [release checks and limits](docs/verification-2026-11-10-mvp-release.md).
 
+This local post-MVP branch is **unreleased**. It disables the direct OpenAI service and adds
+first-use UCloud/optional-HF setup with background model preparation. The published MVP and
+installation commands below are unchanged; see the [branch verification](docs/verification-2026-11-11-post-mvp-morning.md).
+
 ## Install and start (Windows and macOS)
 
 Use the versioned release with **uv**, which installs the app in its own environment.
@@ -69,6 +73,11 @@ Keep the wheel and constraints from the **same release**, including `--link-mode
 Copy mode avoids Windows Cloud Files/hardlink failures such as error 396. Installation
 fetches packages; it does not start transcription or download inference model weights.
 See [download alternatives and troubleshooting](docs/installation.md) if it stops.
+
+A reusable latest-release installer is prepared for a future release. **It is not yet
+published with v0.1.0**; use the working versioned command above. The
+[stable install/update command](docs/installation.md#stable-latest-release-installer) will
+keep the same URL once its release asset is published.
 
 ### 3. Start the app
 

@@ -2,10 +2,10 @@
 
 import sqlite3
 
-from test_native_model_profiles import raw_profile
+from test_native_model_profiles import native_settings, raw_profile
 
 from cbs_transcriber.catalog import provider_catalog, ucloud_models
-from cbs_transcriber.providers import Settings, load_settings
+from cbs_transcriber.providers import Settings, load_settings, save_profile
 from cbs_transcriber.store import Store
 
 
@@ -52,33 +52,37 @@ def test_builtin_visibility_defaults_are_explicit_and_danish_models_are_identifi
     assert all(m["name"].endswith("(Danish)") for m in cloud if m.get("fixed_language") == "da")
 
 
-def test_model_delta_preserves_untouched_duplicates_and_rejects_stale_versions(client):
+def test_model_delta_preserves_untouched_duplicates_and_rejects_stale_versions(client, credentials):
     store = client.app.state.store
-    source = client.get("/api/settings").json()
+    settings = native_settings()
+    source = save_profile(store, credentials, "Native source", settings)
     duplicate = raw_profile(
         store,
-        Settings(provider_type="openai", model="gpt-transcribe", enabled=False),
+        settings.model_copy(update={"enabled": False}),
         "Disabled duplicate",
     )
     body = {
-        "name": source["name"],
-        "provider_type": "openai",
-        "model": source["model"],
+        **source,
         "expected_version": source["version"],
-        "enabled_models": ["gpt-transcribe"],
-        "enabled_models_touched": ["whisper-1"],
-        "enabled_model_versions": {},
+        "enabled_models": [settings.model],
+        "enabled_models_touched": ["medium"],
+        "enabled_model_versions": {
+            row["id"]: row["version"]
+            for row in client.get("/api/providers").json()["providers"]
+            if row["provider_type"] == "ucloud" and row["model"] == "medium"
+        },
     }
-    assert client.put(f"/api/providers/{source['id']}", json=body).status_code == 200
+    saved = client.put(f"/api/providers/{source['id']}", json=body)
+    assert saved.status_code == 200, saved.text
     duplicate_before = store.one("SELECT * FROM providers WHERE id=?", (duplicate,))
     assert Settings.model_validate_json(duplicate_before["value"]).enabled is False
 
     profiles = client.get("/api/providers").json()["providers"]
-    versions = {p["id"]: p["version"] for p in profiles if p["model"] == "gpt-transcribe"}
+    versions = {p["id"]: p["version"] for p in profiles if p["model"] == settings.model}
     current = next(p for p in profiles if p["id"] == source["id"])
     body.update(
         expected_version=current["version"],
-        enabled_models_touched=["gpt-transcribe"],
+        enabled_models_touched=[settings.model],
         enabled_model_versions=versions,
     )
     changed = Settings.model_validate_json(duplicate_before["value"]).model_copy(
@@ -91,9 +95,9 @@ def test_model_delta_preserves_untouched_duplicates_and_rejects_stale_versions(c
 
     profiles = client.get("/api/providers").json()["providers"]
     body["enabled_model_versions"] = {
-        p["id"]: p["version"] for p in profiles if p["model"] == "gpt-transcribe"
+        p["id"]: p["version"] for p in profiles if p["model"] == settings.model
     }
-    raw_profile(store, Settings(provider_type="openai", model="gpt-transcribe"), "New duplicate")
+    raw_profile(store, settings, "New duplicate")
     before = store.all("SELECT * FROM providers ORDER BY id")
     assert client.put(f"/api/providers/{source['id']}", json=body).status_code == 409
     assert store.all("SELECT * FROM providers ORDER BY id") == before

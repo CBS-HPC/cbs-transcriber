@@ -2,17 +2,28 @@ import sqlite3
 import sys
 
 import pytest
-from admission_support import checked_connection, inspect_and_materialize
+from admission_support import checked_connection, configure_compatible, inspect_and_materialize
 
 from cbs_transcriber import enhancement, enhancement_api, language_preferences, media, providers
 from cbs_transcriber.store import Store
 from cbs_transcriber.transcripts import normalize_segments
 
 
+def save_compatible_settings(client, **changes):
+    current = client.get("/api/settings").json()
+    assert current["provider_type"] == "custom"
+    if "model" in changes:
+        changes.setdefault("capability", providers.Settings(model=changes["model"]).capability)
+    response = client.put("/api/settings", json={**current, **changes})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 @pytest.fixture
 def prepared(client, monkeypatch, wav_bytes):
     monkeypatch.setattr(enhancement, "check_runtime", lambda options, **kw: {"ready": True})
-    client.put("/api/settings", json={"api_key": "synthetic", "remember": False})
+    configure_compatible(client)
+    save_compatible_settings(client, api_key="synthetic", remember=False)
     store = client.app.state.store
     checked_connection(store, client.app.state.credentials, models=list(providers.OPENAI_MODELS))
     project = store.create_project("Feature choices")
@@ -87,7 +98,7 @@ def test_french_word_timing_followup_is_still_rejected(client, prepared):
     rid, _, _ = prepared
     store = client.app.state.store
     language_preferences.save(store, "recording", rid, "fr", 0)
-    client.put("/api/settings", json={"model": "gpt-4o-transcribe"})
+    save_compatible_settings(client, model="gpt-4o-transcribe")
     response = client.post("/api/transcriptions", json=request(rid))
     assert response.status_code == 400, response.text
     assert "Word timing" in response.text
@@ -174,7 +185,7 @@ def test_v45_missing_runtime_or_untimed_speaker_dependency_prevents_asr(
     assert failed["params"]["input_intent"]["error"]["code"] == "preparation_failed"
     assert "followup" not in failed["params"]
 
-    client.put("/api/settings", json={"model": "gpt-4o-transcribe"})
+    save_compatible_settings(client, model="gpt-4o-transcribe")
     response = client.post(
         "/api/transcriptions", json=request(rid, requested_features={"speaker_labels": True})
     )
@@ -251,7 +262,7 @@ def test_v46_cancel_parent_cancels_only_its_followup(client, prepared):
 )
 def test_v45_native_capabilities_cannot_be_disabled(client, prepared, model, native):
     rid, _, _ = prepared
-    client.put("/api/settings", json={"model": model})
+    save_compatible_settings(client, model=model)
     response = client.post(
         "/api/transcriptions",
         json=request(
@@ -327,7 +338,7 @@ def test_v45_cloud_plan_is_frozen_and_protected_policy_checked_before_work(
     rid, _, calls = prepared
     store, queue = client.app.state.store, client.app.state.queue
     store.execute("UPDATE projects SET classification='protected'")
-    client.put("/api/settings", json={"approved_for": ["protected"]})
+    save_compatible_settings(client, approved_for=["protected"])
     connection = providers.save_profile(
         store,
         credentials,

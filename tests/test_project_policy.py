@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from admission_support import checked_connection, inspect_and_materialize
+from admission_support import COMPATIBLE_API_URL, checked_connection, inspect_and_materialize
 from conftest import finish_media
 from prior_schema import remove_later_additions
 
@@ -232,7 +232,14 @@ def test_v17_check_api_uses_draft_key_without_saving_or_queueing(client, monkeyp
         )
 
     monkeypatch.setattr("cbs_transcriber.app.check_models", checked)
-    response = client.post("/api/providers/check-models", json={"api_key": "draft-synthetic-key"})
+    response = client.post(
+        "/api/providers/check-models",
+        json={
+            "provider_type": "custom",
+            "base_url": COMPATIBLE_API_URL,
+            "api_key": "draft-synthetic-key",
+        },
+    )
     assert response.status_code == 200 and len(response.json()["models"]) == 5
     assert "draft-synthetic-key" not in response.text
     assert not client.app.state.credentials.keys

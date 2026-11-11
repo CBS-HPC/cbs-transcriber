@@ -5,6 +5,45 @@ The ordinary-user route is a versioned release wheel and its matching constraint
 installed with uv. No GitHub account, Git, Node.js or separate FFmpeg is required for the
 public release. Use approved prerequisite routes on managed computers.
 
+## Stable latest-release installer
+
+**Prepared, not published:** v0.1.0 does not contain `install_latest.py`. Continue using
+the working [versioned MVP installation command](../README.md#2-install-mvp-010) until a
+separately approved release publishes that asset. The command below would currently return
+404; it is shown for the future release procedure, not as today's installation step.
+
+After publication, the same command will install the latest published stable release on
+Windows PowerShell or macOS Terminal:
+
+```text
+uv run --no-project --no-config --no-env-file --python 3.13 https://github.com/CBS-HPC/cbs-transcriber/releases/latest/download/install_latest.py
+```
+
+Save edits, finish/stop jobs, make a complete backup and stop every app copy before an update.
+After publication, use that same command with an explicit update option:
+
+```text
+uv run --no-project --no-config --no-env-file --python 3.13 https://github.com/CBS-HPC/cbs-transcriber/releases/latest/download/install_latest.py --update
+```
+
+The standard-library script resolves one release and its exact version-named wheel and
+constraints together. It checks their downloaded lengths and SHA-256 digests against that
+release's GitHub asset metadata before calling `uv tool install` with `--no-config --link-mode
+copy`. Only `--update` adds `--reinstall-package cbs-transcriber`. It reuses the invoking uv
+executable, including an explicitly selected newer uv when Conda shadows PATH.
+
+The script holds the default local port 8765 through installation and refuses if it is
+already in use. This protects the ordinary running app; it cannot discover every copy started
+on a custom port, so stop those yourself too. It never opens a library, starts the app,
+creates a shortcut, downloads inference models or synchronizes the current source project's
+environment. Start `cbs-transcriber` yourself afterward.
+
+The stable script URL trusts this GitHub repository and HTTPS; asset digests are not an
+independent signature or a guarantee for every dependency artifact. A missing digest,
+mismatched version/hash, ambiguous assets, unexpected redirect or unavailable release stops
+installation. Keep the explicit versioned route for reproducibility and restricted networks.
+See the [maintainer release procedure and primary sources](releasing.md).
+
 ## Release and platform limits
 
 The current wheel release is [v0.1.0](https://github.com/CBS-HPC/cbs-transcriber/releases/tag/v0.1.0).

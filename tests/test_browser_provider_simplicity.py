@@ -1,13 +1,22 @@
 """Minimal settings paths and stale mutation responses use synthetic credentials only."""
 
 import pytest
+from admission_support import checked_connection
+from browser_provider_support import mock_native_check
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
 from test_browser import provider_advanced
+from test_native_model_profiles import raw_profile
 
 from cbs_transcriber.catalog import provider_catalog, ucloud_models
-from cbs_transcriber.providers import Settings, credential_scope, public_profiles, save_profile
+from cbs_transcriber.providers import (
+    Settings,
+    credential_scope,
+    public_profiles,
+    save_profile,
+    set_default_provider,
+)
 
 pytestmark = pytest.mark.browser
 
@@ -25,9 +34,34 @@ pytestmark = pytest.mark.browser
     ],
 )
 def test_builtin_connections_preserve_profiles_and_control_available_models(
-    page, local_app, tab, kind, models, excluded
+    page, local_app, monkeypatch, tab, kind, models, excluded
 ):
     app = local_app.server.config.app
+    if kind == "openai":
+        # Direct-service settings are archived; no editable model controls or passive writes.
+        for index, model in enumerate(models):
+            raw_profile(
+                app.state.store,
+                Settings(
+                    model=model,
+                    language=["da", "en"][index],
+                    concurrent_chunks=index + 1,
+                    approved_for=[] if index else ["protected"],
+                    enabled=not index,
+                ),
+                "Research " + model,
+            )
+        before = app.state.store.all("SELECT * FROM providers ORDER BY id")
+        page.goto(local_app.url)
+        page.locator("#settings-open").click()
+        expect(page.locator("#settings-dialog")).to_be_visible()
+        expect(page.get_by_role("tab", name=tab, exact=True)).to_have_count(0)
+        expect(page.locator('[data-enabled-model="gpt-4o-transcribe"]')).to_have_count(0)
+        expect(page.locator("#bulk-provider-kind option[value=openai]")).to_have_count(0)
+        assert app.state.store.all("SELECT * FROM providers ORDER BY id") == before
+        assert not app.state.store.all("SELECT id FROM jobs")
+        return
+    mock_native_check(monkeypatch, key="shared-connection-draft-key")
     saved = []
     writes = []
     catalog_models = provider_catalog()["openai"]["models"] if kind == "openai" else ucloud_models()
@@ -87,6 +121,7 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
     expected_models = {p["model"] for p in catalog_models}
     page.goto(local_app.url + f"/#/projects/{project['id']}")
     page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name=tab, exact=True).click()
     expect(page.locator(".provider-manager")).to_be_hidden()
     expect(page.locator("#provider-preset")).not_to_be_visible()
@@ -107,6 +142,8 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
         )
     expect(page.locator("#api-key")).to_have_value("shared-connection-draft-key")
     assert {row["id"]: row for row in app.state.store.all("SELECT * FROM providers")} == before
+    page.locator("#connect-ucloud").click()
+    expect(page.locator("#ucloud-check-results")).to_contain_text("Synthetic connection checked")
     page.get_by_role("button", name="Save settings", exact=True).click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
     assert writes and "language" not in writes[-1]
@@ -137,9 +174,10 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
     page.locator("#file-provider-kind").select_option(kind)
     expect(page.locator(f'#file-provider option[value="{disabled["id"]}"]')).to_have_count(0)
     page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name=tab, exact=True).click()
     expect(page.locator("#api-key")).to_have_value("")
-    expect(page.locator("#key-status")).to_have_text("Key available")
+    expect(page.locator("#key-status")).to_have_text("Connection checked")
     expect(page.locator(f'[data-enabled-model="{excluded}"]')).not_to_be_checked()
     page.locator(f'[data-enabled-model="{excluded}"]').check()
     page.get_by_role("button", name="Save settings", exact=True).click()
@@ -159,10 +197,12 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
     assert not app.state.store.all("SELECT id FROM jobs")
 
 
-def test_provider_basic_setup_and_reopen_preserve_keys(page, local_app):
+def test_provider_basic_setup_and_reopen_preserve_keys(page, local_app, monkeypatch):
     app = local_app.server.config.app
+    mock_native_check(monkeypatch, key="synthetic-basic-key")
     page.goto(local_app.url)
     page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator(".provider-manager")).to_be_hidden()
     expect(page.locator("#provider-advanced")).not_to_have_attribute("open", "")
     expect(page.locator("#provider-name")).not_to_be_visible()
@@ -172,20 +212,21 @@ def test_provider_basic_setup_and_reopen_preserve_keys(page, local_app):
     expect(page.locator("#language")).not_to_be_visible()
     page.locator("#provider-advanced > summary").click()
     expect(page.locator("#provider-preset")).not_to_be_visible()
-    expect(page.locator("#check-models")).to_be_visible()
+    expect(page.locator("#check-models")).to_be_hidden()
     expect(page.locator("#provider-model-options")).to_be_visible()
     page.locator("#api-key").fill("synthetic-basic-key")
-    expect(page.locator("#provider-policy-summary")).to_contain_text("Not allowed")
+    expect(page.locator("#provider-policy-summary")).to_contain_text("Allowed")
     page.get_by_role("button", name="Save settings", exact=True).click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
     saved = next(
         p
         for p in public_profiles(app.state.store, app.state.credentials)["providers"]
-        if p["model"] == "whisper-1"
+        if p["model"] == "large-v3"
     )
     page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator("#api-key")).to_have_value("")
-    expect(page.locator("#key-status")).to_have_text("Key available")
+    expect(page.locator("#key-status")).to_have_text("Connection checked")
     provider_advanced(page)
     expect(page.locator("#provider-name")).not_to_be_visible()
     expect(page.locator("#provider-name")).to_be_disabled()
@@ -194,13 +235,13 @@ def test_provider_basic_setup_and_reopen_preserve_keys(page, local_app):
     settings = Settings.model_validate_json(
         app.state.store.one("SELECT value FROM providers WHERE id=?", (saved["id"],))["value"]
     )
-    assert settings.model == "whisper-1" and settings.capability == "words"
-    assert settings.approved_for == []
+    assert settings.model == "large-v3" and settings.capability == "words_speakers"
+    assert settings.approved_for == ["protected"]
     assert (
         app.state.store.one("SELECT name FROM providers WHERE id=?", (saved["id"],))["name"]
         == saved["name"]
     )
-    assert app.state.credentials.get(settings.base_url) == "synthetic-basic-key"
+    assert app.state.credentials.get(credential_scope(settings)) == "synthetic-basic-key"
     assert not app.state.store.all("SELECT id FROM jobs")
 
 
@@ -214,6 +255,7 @@ def test_deferred_families_preserve_advanced_policy_and_credentials(
     monkeypatch.setattr("cbs_transcriber.app.check_models", no_check)
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", no_check)
     app = local_app.server.config.app
+    seed_native(app)
     saved = save_profile(
         app.state.store,
         app.state.credentials,
@@ -237,9 +279,8 @@ def test_deferred_families_preserve_advanced_policy_and_credentials(
     before = app.state.store.one("SELECT * FROM providers WHERE id=?", (saved["id"],))
     page.goto(local_app.url)
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_text(
-        ["OpenAI API", "UCloud", "Hugging Face", "Local Processing"]
-    )
+    expect(page.locator("#settings-dialog")).to_be_visible()
+    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
     expect(page.locator("#ucloud-vllm-setup")).not_to_be_visible()
     provider_advanced(page)
     expect(page.locator("#forget-hosting-keys")).not_to_be_visible()
@@ -252,14 +293,14 @@ def test_deferred_families_preserve_advanced_policy_and_credentials(
     assert not app.state.store.all("SELECT id FROM jobs")
 
 
-def seed_native(app):
-    return save_profile(
+def seed_native(app, *, base_url="https://cloud.sdu.dk"):
+    saved = save_profile(
         app.state.store,
         app.state.credentials,
         "Research native connection",
         Settings(
             provider_type="ucloud",
-            base_url="https://cloud.sdu.dk",
+            base_url=base_url,
             model="large-v3",
             capability="words_speakers",
             approved_for=[],
@@ -272,14 +313,18 @@ def seed_native(app):
         ),
         api_key="synthetic-control-key",
         remember=False,
+        enabled_models=[m["model"] for m in ucloud_models()],
     )
+    checked_connection(app.state.store, app.state.credentials, saved["id"])
+    return saved
 
 
 @pytest.mark.parametrize("operation", ["save", "forget-key"])
 def test_late_provider_mutation_preserves_newer_configuration_drafts(page, local_app, operation):
     app = local_app.server.config.app
-    first = public_profiles(app.state.store, app.state.credentials)["providers"][0]
-    second = seed_native(app)
+    first = seed_native(app)
+    second = seed_native(app, base_url="https://cloud-second.example.test")
+    set_default_provider(app.state.store, first["id"])
     held = []
 
     def hold(route):
@@ -291,6 +336,7 @@ def test_late_provider_mutation_preserves_newer_configuration_drafts(page, local
     page.route(f"**/api/providers/{first['id']}", hold)
     page.goto(local_app.url)
     page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     provider_advanced(page)
     if operation == "save":
         page.get_by_role("button", name="Save settings", exact=True).click()
@@ -301,7 +347,8 @@ def test_late_provider_mutation_preserves_newer_configuration_drafts(page, local
         message = "Saved endpoint key forgotten"
     expect(page.locator("#settings-provider")).to_have_value(first["id"])
     assert held
-    page.get_by_role("tab", name="UCloud", exact=True).click()
+    # The retained named-profile select exercises a different exact Settings context.
+    page.locator("#settings-provider").select_option(second["id"], force=True)
     provider_advanced(page)
     page.locator("#native-storage").fill("/newer-unsaved-storage")
     page.locator("#api-key").fill("newer-unsaved-control-key")
@@ -317,79 +364,68 @@ def test_late_provider_mutation_preserves_newer_configuration_drafts(page, local
     expect(page.locator("#provider-name")).to_be_disabled()
 
 
-@pytest.mark.parametrize(
-    "tab,excluded",
-    [
-        ("OpenAI API", "gpt-4o-transcribe-diarize"),
-        ("UCloud", "medium"),
-    ],
-)
+@pytest.mark.parametrize("tab,excluded", [("UCloud", "medium"), ("Hugging Face", None)])
 def test_late_provider_refresh_retains_new_connection_and_available_model_drafts(
     page, local_app, tab, excluded
 ):
     app = local_app.server.config.app
-    native = seed_native(app)
-    first = (
-        native
-        if tab == "OpenAI API"
-        else public_profiles(app.state.store, app.state.credentials)["providers"][0]
-    )
+    first = seed_native(app)
     held = []
     page.route(f"**/api/providers/{first['id']}", lambda route: held.append(route))
     page.goto(local_app.url)
     page.locator("#settings-open").click()
-    page.get_by_role(
-        "tab", name="UCloud" if tab == "OpenAI API" else "OpenAI API", exact=True
-    ).click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     provider_advanced(page)
     page.once("dialog", lambda dialog: dialog.accept())
     page.locator("#forget-key").click()
     assert held
     page.get_by_role("tab", name=tab, exact=True).click()
-    page.locator("#api-key").fill("newer-connection-token-draft")
-    expect(page.locator("#provider-advanced")).not_to_have_attribute("open", "")
-    page.locator(f'[data-enabled-model="{excluded}"]').uncheck()
+    token = page.locator("#api-key" if excluded else "#hf-settings-token")
+    expect(token).to_be_enabled()
+    token.fill("newer-connection-token-draft")
+    if excluded:
+        expect(page.locator("#provider-advanced")).not_to_have_attribute("open", "")
+        page.locator(f'[data-enabled-model="{excluded}"]').uncheck()
     held[0].fulfill(response=held[0].fetch())
     expect(page.locator("#toast")).to_have_text("Saved endpoint key forgotten")
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.get_by_role("tab", name=tab, exact=True)).to_have_attribute("aria-selected", "true")
-    expect(page.locator("#api-key")).to_have_value("newer-connection-token-draft")
-    expect(page.locator(f'[data-enabled-model="{excluded}"]')).not_to_be_checked()
+    expect(token).to_have_value("newer-connection-token-draft")
+    if excluded:
+        expect(page.locator(f'[data-enabled-model="{excluded}"]')).not_to_be_checked()
 
 
 def test_unknown_openai_models_keep_settings_and_available_model_controls(page, local_app):
     app = local_app.server.config.app
-    saved = [
-        save_profile(
+    seed_native(app)
+    identifiers = [
+        raw_profile(
             app.state.store,
-            app.state.credentials,
+            Settings(
+                provider_type="openai",
+                model=model,
+                capability="segments",
+                language="da",
+                enabled=bool(index),
+            ),
             "Saved " + model,
-            Settings(provider_type="openai", model=model, capability="segments", language="da"),
         )
-        for model in ("experimental-speech-a", "experimental-speech-b")
+        for index, model in enumerate(("experimental-speech-a", "experimental-speech-b"))
     ]
+    before = {
+        identifier: app.state.store.one("SELECT * FROM providers WHERE id=?", (identifier,))
+        for identifier in identifiers
+    }
     page.goto(local_app.url)
     page.locator("#settings-open").click()
-    expect(page.locator("#provider-preset")).not_to_be_visible()
-    expect(page.locator("#provider-model-options [data-enabled-model]")).to_have_count(7)
-    for item in saved:
-        expect(page.get_by_role("checkbox", name=item["model"], exact=True)).to_be_checked()
-    page.get_by_role("checkbox", name=saved[0]["model"], exact=True).uncheck()
-    page.get_by_role("button", name="Save settings", exact=True).click()
-    expect(page.locator("#settings-dialog")).not_to_be_visible()
-    for index, item in enumerate(saved):
-        current = Settings.model_validate_json(
-            app.state.store.one("SELECT value FROM providers WHERE id=?", (item["id"],))["value"]
-        )
-        assert current.model == item["model"] and current.capability == "segments"
-        assert current.language == "da" and current.enabled == bool(index)
-    page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
-    expect(page.locator("#provider-advanced")).not_to_have_attribute("open", "")
-    expect(page.locator("#check-models")).to_be_visible()
-    page.locator("#settings-dialog").screenshot(path="test-results/openai-basic-availability.png")
-    expect(page.get_by_role("checkbox", name=saved[0]["model"], exact=True)).not_to_be_checked()
-    expect(page.get_by_role("checkbox", name=saved[1]["model"], exact=True)).to_be_checked()
+    expect(page.get_by_role("tab", name="OpenAI API", exact=True)).to_have_count(0)
+    expect(page.locator('[data-enabled-model^="experimental-speech-"]')).to_have_count(0)
+    page.get_by_role("button", name="Save settings", exact=True).click()
+    expect(page.locator("#settings-dialog")).to_be_hidden()
+    for identifier, row in before.items():
+        assert app.state.store.one("SELECT * FROM providers WHERE id=?", (identifier,)) == row
+    expect(page.locator("#bulk-provider-kind option[value=openai]")).to_have_count(0)
     assert not app.state.store.all("SELECT id FROM jobs")
 
 
@@ -397,12 +433,13 @@ def test_all_builtin_models_can_be_disabled_and_reenabled_without_losing_connect
     page, local_app
 ):
     app = local_app.server.config.app
+    native = seed_native(app)
     project = app.state.store.create_project("Temporarily disabled models")
     page.goto(local_app.url + f"/#/projects/{project['id']}")
     page.locator("#settings-open").click()
-    page.locator("#api-key").fill("retained-connection-key")
+    expect(page.locator("#settings-dialog")).to_be_visible()
     options = page.locator("#provider-model-options [data-enabled-model]")
-    expect(options).to_have_count(5)
+    expect(options).to_have_count(len(ucloud_models()))
     for option in options.all():
         option.uncheck()
     page.get_by_role("button", name="Save settings", exact=True).click()
@@ -411,22 +448,35 @@ def test_all_builtin_models_can_be_disabled_and_reenabled_without_losing_connect
     expect(page.locator("#bulk-provider-kind")).to_have_text("No enabled models")
     expect(page.locator("#bulk-provider")).to_have_text("No enabled models")
     expect(page.locator("#transcribe-selected")).to_be_disabled()
-    profiles = public_profiles(app.state.store, app.state.credentials)["providers"]
-    assert len(profiles) == 5 and all(not p["enabled"] and p["has_key"] for p in profiles)
+    profiles = [
+        p
+        for p in public_profiles(app.state.store, app.state.credentials)["providers"]
+        if p["provider_type"] == "ucloud"
+    ]
+    assert len(profiles) == len(ucloud_models())
+    assert all(not p["enabled"] and p["has_key"] for p in profiles)
     original_ids = {p["id"] for p in profiles}
-    whisper_id = next(p["id"] for p in profiles if p["model"] == "whisper-1")
+    whisper_id = next(p["id"] for p in profiles if p["model"] == "large-v3")
     page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator("#api-key")).to_have_value("")
-    expect(page.locator("#key-status")).to_have_text("Key available")
+    expect(page.locator("#key-status")).to_have_text("Connection checked")
     expect(page.locator("#provider-model-options [data-enabled-model]:checked")).to_have_count(0)
-    page.get_by_role("checkbox", name="OpenAI whisper-1 (Word timing)", exact=True).check()
+    page.get_by_role("checkbox", name="UCloud whisper/large-v3 (Transcriber)", exact=True).check()
     page.get_by_role("button", name="Save settings", exact=True).click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
-    expect(page.locator("#bulk-provider-kind")).to_have_value("openai")
+    expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
     expect(page.locator("#bulk-provider option")).to_have_count(1)
     expect(page.locator("#bulk-provider")).to_have_value(whisper_id)
-    profiles = public_profiles(app.state.store, app.state.credentials)["providers"]
+    profiles = [
+        p
+        for p in public_profiles(app.state.store, app.state.credentials)["providers"]
+        if p["provider_type"] == "ucloud"
+    ]
     assert {p["id"] for p in profiles} == original_ids
-    assert [p["model"] for p in profiles if p["enabled"]] == ["whisper-1"]
-    assert app.state.credentials.get("https://api.openai.com/v1") == "retained-connection-key"
+    assert [p["model"] for p in profiles if p["enabled"]] == ["large-v3"]
+    assert native["id"] == whisper_id
+    assert (
+        app.state.credentials.get("ucloud-control:https://cloud.sdu.dk") == "synthetic-control-key"
+    )
     assert not app.state.store.all("SELECT id FROM jobs")

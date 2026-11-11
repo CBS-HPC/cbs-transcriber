@@ -28,6 +28,9 @@ def _response(client, method, path, **kwargs):
 
 
 def _client(settings, key, project=""):
+    from .providers import require_service_available
+
+    require_service_available(settings)
     # Do not use from_env(): this workflow must never inspect another project's .env.
     return UCloudClient(CloudSettings(server=settings.base_url, token=key, project=project))
 

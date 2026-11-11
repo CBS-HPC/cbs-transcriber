@@ -12,8 +12,11 @@ import sqlite3
 import threading
 import time
 from contextlib import closing, contextmanager, nullcontext
+from pathlib import PurePosixPath
 from types import SimpleNamespace
 from urllib.parse import quote
+
+import httpx
 
 from . import enhancement_api as api
 from . import providers, runtime_compute, runtime_store
@@ -22,6 +25,10 @@ from .enhancement import local_settings
 from .store import new_id, now
 
 POLICY = "cbs-runtime-preparation-v1"
+MODEL_PLAN = "cbs-runtime-model-plan-v1"
+MODEL_RECEIPT = "cbs-runtime-model-plan-receipt-v1"
+MODEL_CHECK_SECONDS = 30
+_ABSENT = object()
 PREFIX = "runtime-preparation:"
 RECENT_ACTIVITY = 200
 _CONTROL_LOCK = threading.Lock()
@@ -86,11 +93,11 @@ def migrate(store):
         db.execute("PRAGMA user_version=16")
 
 
-def fingerprint(chosen):
-    return runtime_store._digest(_identity(chosen))
+def fingerprint(chosen, *, model_plan=_ABSENT):
+    return runtime_store._digest(_identity(chosen, model_plan=model_plan))
 
 
-def _identity(chosen):
+def _identity(chosen, *, model_plan=_ABSENT):
     # Capture public recipe bytes outside queue/SQLite writer locks.
     identity = {
         "policy": POLICY,
@@ -102,7 +109,140 @@ def _identity(chosen):
         "id"
     ) == native.MIG_PRODUCT["id"]:
         identity["connection_policy"] = "native-connection-v1"
+    if model_plan is not _ABSENT:
+        _validate_model_plan(model_plan)
+        identity["model_plan"] = json.loads(runtime_store.canonical(model_plan))
     return identity
+
+
+def _validate_model_plan(plan):
+    if (
+        type(plan) is not dict
+        or set(plan) != {"policy", "profiles", "models", "model_revisions", "speaker_files"}
+        or plan["policy"] != MODEL_PLAN
+        or type(plan["profiles"]) is not list
+        or not 1 <= len(plan["profiles"]) <= 100
+        or type(plan["models"]) is not list
+        or not 4 <= len(plan["models"]) <= 32
+        or any(
+            type(key) is not str or re.fullmatch(r"[a-z0-9-]{1,60}", key) is None
+            for key in plan["models"]
+        )
+        or plan["models"] != sorted(set(plan["models"]))
+        or not {"coarse", "da", "en", "speakers"} <= set(plan["models"])
+        or type(plan["model_revisions"]) is not dict
+        or set(plan["model_revisions"]) != set(plan["models"])
+        or type(plan["speaker_files"]) is not dict
+        or not 1 <= len(plan["speaker_files"]) <= 32
+    ):
+        raise Conflict("The configured Runtime model plan is invalid.")
+    identifiers = set()
+    for profile in plan["profiles"]:
+        if (
+            type(profile) is not dict
+            or set(profile) != {"provider_id", "model", "cache_key"}
+            or type(profile["provider_id"]) is not str
+            or re.fullmatch(r"[a-f0-9]{32}", profile["provider_id"]) is None
+            or profile["provider_id"] in identifiers
+            or type(profile["model"]) is not str
+            or not 1 <= len(profile["model"]) <= 200
+            or profile["cache_key"] not in plan["models"]
+        ):
+            raise Conflict("The configured Runtime model plan is invalid.")
+        identifiers.add(profile["provider_id"])
+    for pin in plan["model_revisions"].values():
+        if (
+            type(pin) is not list
+            or len(pin) != 2
+            or type(pin[0]) is not str
+            or re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", pin[0]) is None
+            or type(pin[1]) is not str
+            or re.fullmatch(r"[a-f0-9]{40}", pin[1]) is None
+        ):
+            raise Conflict("The configured Runtime model pins are invalid.")
+    for name, witness in plan["speaker_files"].items():
+        if (
+            type(name) is not str
+            or re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", name) is None
+            or any(part in {".", ".."} for part in name.split("/"))
+            or type(witness) is not list
+            or len(witness) != 2
+            or type(witness[0]) is not int
+            or not 0 < witness[0] < 2**40
+            or type(witness[1]) is not str
+            or re.fullmatch(r"[a-f0-9]{64}", witness[1]) is None
+        ):
+            raise Conflict("The configured Runtime speaker pins are invalid.")
+    if len(runtime_store.canonical(plan).encode()) > 16 * 1024:
+        raise Conflict("The configured Runtime model plan exceeds its bound.")
+
+
+def huggingface_plan(store, credentials):
+    """Offline configuration only: never inspects caches, calls providers or starts work."""
+    from . import provider_connection
+
+    try:
+        if not local_settings(store).prepare_ucloud_models:
+            return {"status": "disabled"}
+        rows = store.all("SELECT id FROM providers ORDER BY rowid LIMIT 1001")
+        if len(rows) > 1000:
+            return {"status": "unavailable"}
+        try:
+            chosen = api.connection(store, credentials, [])
+        except ValueError:
+            return {"status": "needs_setup"}
+        settings = providers.Settings.model_validate(chosen["settings"])
+        key = credentials.get(providers.credential_scope(settings))
+        with store.connection() as db:
+            state = provider_connection.state(db, settings, key)
+        if state != "ready":
+            return {"status": "unavailable" if state == "unavailable" else "needs_setup"}
+        profiles = []
+        for row in rows:
+            profile = providers.profile(store, row["id"])
+            candidate = providers.Settings.model_validate(profile["settings"])
+            if (
+                candidate.enabled
+                and provider_connection.identity(candidate)
+                == provider_connection.identity(settings)
+                and (choice := providers.whisperx_model(candidate)) in api.WHISPER_MODELS
+            ):
+                profiles.append(
+                    {
+                        "provider_id": profile["id"],
+                        "model": candidate.model,
+                        "cache_key": api.WHISPER_MODELS[choice],
+                    }
+                )
+        if not profiles:
+            return {"status": "needs_setup", "reason": "no_runtime_models"}
+        models = sorted({"coarse", "da", "en", "speakers", *(p["cache_key"] for p in profiles)})
+        plan = {
+            "policy": MODEL_PLAN,
+            "profiles": sorted(profiles, key=lambda p: p["provider_id"]),
+            "models": models,
+            "model_revisions": {name: list(api.MODELS[name]) for name in models},
+            "speaker_files": {
+                name: list(value) for name, value in sorted(api.SPEAKER_FILES.items())
+            },
+        }
+        _validate_model_plan(plan)
+        return {
+            "status": "ready",
+            "chosen": chosen,
+            "model_plan": plan,
+            "connection_fingerprint": fingerprint(chosen, model_plan=plan),
+        }
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        OSError,
+        RecursionError,
+        sqlite3.Error,
+    ):
+        return {"status": "unavailable"}
 
 
 def recipe_hash():
@@ -161,6 +301,8 @@ def _decode(raw):
         ):
             raise ValueError()
         settings = providers.Settings.model_validate(frozen["settings"])
+        if "model_plan" in frozen:
+            _validate_model_plan(frozen["model_plan"])
         if settings.provider_type != "ucloud" or settings.ucloud_transcriber is None:
             raise ValueError()
         if "connection_policy" in frozen:
@@ -185,10 +327,20 @@ def _decode(raw):
                     "runtime_id",
                     "recipe_sha256",
                     *(["connection_policy"] if "connection_policy" in frozen else []),
+                    *(["model_plan"] if "model_plan" in frozen else []),
                 )
             }
         ):
             raise ValueError()
+        if "model_plan_receipt" in journal:
+            _validate_model_receipt(journal["model_plan_receipt"], frozen)
+            if (
+                journal.get("prepared") is not True
+                or journal.get("doctor_verified") is not True
+                or journal.get("remote_state") != "SUCCESS"
+                or not journal.get("job_id")
+            ):
+                raise ValueError()
     except (ValueError, TypeError, KeyError, RecursionError):
         raise Conflict(
             "This preparation's frozen connection evidence is invalid. Preserve it."
@@ -252,7 +404,18 @@ def _quarantine(db, row):
     )
 
 
-def _current(store, credentials, expected):
+def _current(store, credentials, expected, *, model_plan=_ABSENT):
+    if model_plan is not _ABSENT:
+        current = huggingface_plan(store, credentials)
+        if (
+            current.get("status") != "ready"
+            or current["model_plan"] != model_plan
+            or current["connection_fingerprint"] != expected
+        ):
+            raise Conflict(
+                "The configured Runtime model plan changed. Save Hugging Face settings again."
+            )
+        return current["chosen"]
     if not local_settings(store).prepare_ucloud_models:
         raise Conflict("Save automatic UCloud preparation as enabled before preparing the runtime.")
     chosen = api.connection(store, credentials, [])
@@ -301,6 +464,12 @@ def request(store, credentials, expected):
         }
     _current(store, credentials, expected)
     identity = _identity(chosen)
+    return _admit(store, identity, expected)
+
+
+def _admit(store, identity, expected, *, guard=None, insert=True):
+    if guard is not None:
+        guard()
     target, value, latest = _target(identity), None, None
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -319,12 +488,26 @@ def request(store, credentials, expected):
                 candidate["state"] in {"queued", "running"}
                 or runtime_store._reserved(candidate["journal"])
             ):
+                if "model_plan" in identity and (
+                    candidate["frozen"].get("model_plan") != identity["model_plan"]
+                    or candidate["frozen"].get("recipe_sha256") != identity["recipe_sha256"]
+                ):
+                    raise Conflict(
+                        "Another preparation has an insufficient or unresolved model plan. "
+                        "Resolve it in Activity first."
+                    )
                 value = candidate
                 break
             if latest is None and candidate["connection_fingerprint"] == expected:
                 latest = candidate
+        if guard is not None and (value is not None or insert):
+            # BEGIN may have waited for another writer. Validate the parent again at
+            # the acceptance point; never do so after committing and lose its owner link.
+            guard()
         deduplicated = value is not None
         if value is None:
+            if not insert:
+                return None
             # A fresh explicit click may replace a settled owner when the runtime is
             # missing again. Preserve all prior evidence and create a visible successor.
             value = _insert(db, identity, expected, retry_of=latest["id"] if latest else None)
@@ -334,6 +517,327 @@ def request(store, credentials, expected):
         "operation": card(value),
         "deduplicated": deduplicated,
     }
+
+
+def request_huggingface(store, credentials, plan, guard):
+    """Trusted HF-manager adapter after its fenced valid/allowed access stage.
+
+    Acceptance freezes public files, never a token. Once a durable owner is accepted its
+    exact link must return even if the parent is stopped or superseded during commit.
+    """
+    guard()
+    if (
+        type(plan) is not dict
+        or plan != huggingface_plan(store, credentials)
+        or plan.get("status") != "ready"
+    ):
+        raise Conflict(
+            "The configured Runtime model plan changed. Save Hugging Face settings again."
+        )
+    model_plan, expected = plan["model_plan"], plan["connection_fingerprint"]
+    api.local_speaker_files()  # Read-only hash validation; never fetch in this adapter.
+    guard()
+    chosen = _current(store, credentials, expected, model_plan=model_plan)
+    identity = _identity(chosen, model_plan=model_plan)
+    existing = _admit(store, identity, expected, guard=guard, insert=False)
+    if existing is not None:
+        return existing
+    settings = providers.Settings.model_validate(chosen["settings"])
+    key = credentials.get(providers.credential_scope(settings))
+    with native.client_for(settings, key) as client:
+        prepared = _model_prepared(store, client, settings, model_plan, identity)
+    guard()
+    _current(store, credentials, expected, model_plan=model_plan)
+    if prepared:
+        return {
+            "prepared": True,
+            "runtime_id": api.runtime_id(),
+            "operation": None,
+            "deduplicated": False,
+        }
+    return _admit(store, identity, expected, guard=guard)
+
+
+def _model_bytes(client, settings, path, deadline):
+    """Small public receipt only, using the reviewed bounded control/transfer transport."""
+    item = api.runtime_metadata(client, path, deadline=deadline)
+    if item is None or api._runtime_kind(item) != "FILE":
+        return None
+    try:
+        ticket = api._runtime_request(
+            client, "POST", "/api/files/download", deadline, json={"items": [{"id": path}]}
+        )
+        endpoint = native.transfer_url(settings.base_url, native.one_response(ticket)["endpoint"])
+        data = bytearray()
+        with httpx.Client(
+            timeout=api._runtime_remaining(deadline), follow_redirects=False
+        ) as transport:
+            with transport.stream(
+                "GET", endpoint, headers={"Accept-Encoding": "identity"}
+            ) as reply:
+                if (
+                    not reply.is_success
+                    or reply.headers.get("Content-Encoding", "identity") != "identity"
+                ):
+                    raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+                api._runtime_remaining(deadline)
+                for block in reply.iter_raw():
+                    api._runtime_remaining(deadline)
+                    if len(data) + len(block) > api.RUNTIME_METADATA_BYTES:
+                        return None
+                    data.extend(block)
+                api._runtime_remaining(deadline)
+        return bytes(data)
+    except (
+        native.UCloudAPIError,
+        httpx.HTTPError,
+        httpx.StreamError,
+        ValueError,
+        TypeError,
+        KeyError,
+    ):
+        raise api.RuntimePreflightBlocked("runtime-readiness-unknown") from None
+
+
+def _model_inventory(client, path, deadline):
+    folder = api.runtime_metadata(client, path, deadline=deadline)
+    if folder is None or api._runtime_kind(folder) != "DIRECTORY":
+        return None
+    try:
+        page = api._runtime_request(
+            client, "GET", "/api/files/browse", deadline, params={"path": path, "itemsPerPage": 64}
+        )
+    except native.UCloudAPIError:
+        raise api.RuntimePreflightBlocked("runtime-readiness-unknown") from None
+    items = page.get("items") if type(page) is dict else None
+    if type(items) is not list or len(items) > 64 or page.get("next"):
+        raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+    inventory, seen = [], set()
+    for item in items:
+        identifier = item.get("id") if type(item) is dict else None
+        if (
+            type(identifier) is not str
+            or str(PurePosixPath(identifier)) != identifier
+            or str(PurePosixPath(identifier).parent) != path
+            or PurePosixPath(identifier).name in {".", ".."}
+            or len(PurePosixPath(identifier).name) > 256
+            or identifier in seen
+        ):
+            raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+        seen.add(identifier)
+        kind = api._runtime_kind(item)
+        size = item.get("status", {}).get("sizeInBytes", item.get("sizeInBytes"))
+        if kind == "DIRECTORY":
+            size = None
+        elif type(size) is not int or not 0 <= size < 2**50:
+            raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+        inventory.append({"name": PurePosixPath(identifier).name, "kind": kind, "bytes": size})
+    return sorted(inventory, key=lambda item: item["name"]) if inventory else None
+
+
+def _model_evidence(client, settings, model_plan):
+    """Fresh API metadata, not remote weight hashes or physical no-follow proof.
+
+    HF snapshots ordinarily contain symlinks; their reported names/kinds/sizes are only
+    inventory witnesses. A prior successful pinned prefetch is separately required.
+    """
+    deadline = time.monotonic() + MODEL_CHECK_SECONDS
+    evidence = {
+        "snapshots": {},
+        "speakers": [],
+        "speaker_marker": True,
+        "punkt": {},
+        "conversions": {},
+    }
+    for name in model_plan["models"]:
+        folder = api.model_folder(settings, name)
+        if name == "speakers":
+            for relative, (size, _) in model_plan["speaker_files"].items():
+                item = api.runtime_metadata(client, folder + "/" + relative, deadline=deadline)
+                if item is None:
+                    return None
+                kind = api._runtime_kind(item)
+                actual = item.get("status", {}).get("sizeInBytes", item.get("sizeInBytes"))
+                if kind not in {"FILE", "SOFT_LINK"}:
+                    return None
+                if type(actual) is not int or actual < 0:
+                    raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+                if actual != size:
+                    return None
+                evidence["speakers"].append({"name": relative, "kind": kind, "bytes": size})
+            repo, revision = model_plan["model_revisions"]["speakers"]
+            if (
+                _model_bytes(client, settings, folder + "/" + api.SPEAKERS_COMPLETE, deadline)
+                != f"{repo}@{revision}\n".encode()
+            ):
+                return None
+            continue
+        inventory = _model_inventory(client, folder, deadline)
+        if not inventory or not any(
+            item["kind"] != "DIRECTORY" and item["bytes"] > 0 for item in inventory
+        ):
+            return None
+        evidence["snapshots"][name] = inventory
+        if name in api.DANISH_CHOICES:
+            helper = api.danish_module()
+            raw = _model_bytes(client, settings, folder + "/" + helper.MARKER, deadline)
+            try:
+                receipt = helper.validate_receipt(
+                    json.loads(raw), choice=name, model=tuple(model_plan["model_revisions"][name])
+                )
+                manifest = runtime_store.canonical(
+                    sorted(helper.models()[name]["source_files"], key=lambda item: item["name"])
+                ).encode()
+                if (
+                    receipt["source"]["manifest_sha256"] != hashlib.sha256(manifest).hexdigest()
+                    or receipt["recipe"]["contract_sha256"] != helper.RECIPE_CONTRACT_SHA256
+                ):
+                    return None
+                expected = {item["name"]: item["bytes"] for item in receipt["files"]}
+                if {item["name"] for item in inventory} != set(expected) | {helper.MARKER} or any(
+                    item["bytes"] != expected[item["name"]]
+                    for item in inventory
+                    if item["name"] in expected
+                ):
+                    return None
+                evidence["conversions"][name] = hashlib.sha256(raw).hexdigest()
+            except (ValueError, TypeError, KeyError, RecursionError):
+                return None
+    for language in ("danish", "english"):
+        inventory = _model_inventory(
+            client,
+            api.runtime_folder(settings) + "/nltk/tokenizers/punkt_tab/" + language,
+            deadline,
+        )
+        if not inventory or not {
+            "collocations.tab",
+            "sent_starters.txt",
+            "abbrev_types.txt",
+            "ortho_context.tab",
+        } <= {item["name"] for item in inventory if item["kind"] != "DIRECTORY"}:
+            return None
+        evidence["punkt"][language] = inventory
+    if len(runtime_store.canonical(evidence).encode()) > 48 * 1024:
+        raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+    return evidence
+
+
+def _model_prepared(store, client, settings, model_plan, identity):
+    if not api.stamped(client, settings):
+        return False
+    receipt = None
+    with store.connection() as db:
+        rows = db.execute(
+            "SELECT id FROM runtime_preparations WHERE archived=0 AND state='completed' "
+            "ORDER BY updated DESC,id DESC LIMIT 201"
+        ).fetchall()
+        for row in rows:
+            value = _get(db, row[0])
+            frozen, journal = value["frozen"], value["journal"]
+            if (
+                frozen.get("model_plan") == model_plan
+                and frozen.get("runtime_id") == identity["runtime_id"]
+                and frozen.get("recipe_sha256") == identity["recipe_sha256"]
+                and _target(frozen) == _target(identity)
+                and journal.get("prepared") is True
+                and journal.get("doctor_verified") is True
+                and journal.get("model_plan_receipt")
+            ):
+                receipt = journal["model_plan_receipt"]
+                _validate_model_receipt(receipt, frozen)
+                break
+        if receipt is None and len(rows) > 200:
+            raise api.RuntimePreflightBlocked("runtime-readiness-unknown")
+    return (
+        receipt is not None and _model_evidence(client, settings, model_plan) == receipt["evidence"]
+    )
+
+
+def _validate_model_receipt(receipt, frozen):
+    if (
+        "model_plan" not in frozen
+        or type(receipt) is not dict
+        or set(receipt)
+        != {"format", "model_plan_sha256", "runtime_id", "recipe_sha256", "evidence"}
+        or receipt["format"] != MODEL_RECEIPT
+        or receipt["model_plan_sha256"] != runtime_store._digest(frozen["model_plan"])
+        or receipt["runtime_id"] != frozen["runtime_id"]
+        or receipt["recipe_sha256"] != frozen["recipe_sha256"]
+        or type(receipt["evidence"]) is not dict
+        or set(receipt["evidence"])
+        != {"snapshots", "speakers", "speaker_marker", "punkt", "conversions"}
+        or len(runtime_store.canonical(receipt).encode()) > 48 * 1024
+    ):
+        raise Conflict("The Runtime model preparation receipt is invalid. Preserve its evidence.")
+    evidence, plan = receipt["evidence"], frozen["model_plan"]
+    if (
+        type(evidence["snapshots"]) is not dict
+        or set(evidence["snapshots"]) != set(plan["models"]) - {"speakers"}
+        or any(not _valid_inventory(items) for items in evidence["snapshots"].values())
+        or evidence["speaker_marker"] is not True
+        or type(evidence["speakers"]) is not list
+        or len(evidence["speakers"]) != len(plan["speaker_files"])
+        or type(evidence["punkt"]) is not dict
+        or set(evidence["punkt"]) != {"danish", "english"}
+        or any(not _valid_inventory(items) for items in evidence["punkt"].values())
+        or type(evidence["conversions"]) is not dict
+        or set(evidence["conversions"]) != set(plan["models"]) & api.DANISH_CHOICES
+        or any(
+            type(value) is not str or re.fullmatch(r"[a-f0-9]{64}", value) is None
+            for value in evidence["conversions"].values()
+        )
+    ):
+        raise Conflict("The Runtime model inventory receipt is invalid. Preserve its evidence.")
+    names = set()
+    for item in evidence["speakers"]:
+        if (
+            type(item) is not dict
+            or set(item) != {"name", "kind", "bytes"}
+            or type(item["name"]) is not str
+            or item["name"] not in plan["speaker_files"]
+            or item["name"] in names
+            or item["kind"] not in ("FILE", "SOFT_LINK")
+            or type(item["bytes"]) is not int
+            or item["bytes"] != plan["speaker_files"][item["name"]][0]
+        ):
+            raise Conflict("The Runtime speaker receipt is invalid. Preserve its evidence.")
+        names.add(item["name"])
+    for items in evidence["punkt"].values():
+        if not {
+            "collocations.tab",
+            "sent_starters.txt",
+            "abbrev_types.txt",
+            "ortho_context.tab",
+        } <= {item["name"] for item in items if item["kind"] != "DIRECTORY"}:
+            raise Conflict("The Runtime tokenizer receipt is invalid. Preserve its evidence.")
+
+
+def _valid_inventory(items):
+    if type(items) is not list or not 1 <= len(items) <= 64:
+        return False
+    names = set()
+    for item in items:
+        if (
+            type(item) is not dict
+            or set(item) != {"name", "kind", "bytes"}
+            or type(item["name"]) is not str
+            or not 1 <= len(item["name"]) <= 256
+            or "/" in item["name"]
+            or "\\" in item["name"]
+            or item["name"] in {".", ".."}
+            or item["name"] in names
+            or item["kind"] not in ("FILE", "SOFT_LINK", "DIRECTORY")
+            or (
+                item["bytes"] is not None
+                if item["kind"] == "DIRECTORY"
+                else type(item["bytes"]) is not int or not 0 <= item["bytes"] < 2**50
+            )
+        ):
+            return False
+        names.add(item["name"])
+    return items == sorted(items, key=lambda item: item["name"]) and any(
+        item["kind"] != "DIRECTORY" and item["bytes"] > 0 for item in items
+    )
 
 
 def _update(db, value, *, journal=None, **fields):
@@ -732,7 +1236,12 @@ def retry(store, credentials, identifier):
                     message="Reconnecting to the same preparation allocation…",
                 )
             )
-        _current(store, credentials, value["connection_fingerprint"])
+        _current(
+            store,
+            credentials,
+            value["connection_fingerprint"],
+            model_plan=value["frozen"].get("model_plan", _ABSENT),
+        )
         with store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             fresh = _get(db, identifier)
@@ -893,7 +1402,12 @@ class Run:
         if fresh["journal"].get("stop_intent"):
             raise Interrupted()
         if submitting:
-            _current(self.store, self.worker.credentials, fresh["connection_fingerprint"])
+            _current(
+                self.store,
+                self.worker.credentials,
+                fresh["connection_fingerprint"],
+                model_plan=fresh["frozen"].get("model_plan", _ABSENT),
+            )
 
     def execute(self):
         try:
@@ -921,6 +1435,12 @@ class Run:
                 journal=_release(fresh["journal"]),
                 message="Preparation stopped locally; recorded remote obligations are retained.",
             )
+        except api.RuntimePreflightBlocked as exc:
+            fresh = get(self.store, self.identifier)
+            if fresh["state"] not in {"completed", "cancelled"}:
+                self.checkpoint(
+                    state="failed", message=str(exc), journal={"preflight_failure": exc.code}
+                )
         except Exception:
             fresh = get(self.store, self.identifier)
             if fresh["state"] in {"completed", "cancelled"}:
@@ -937,13 +1457,36 @@ class Run:
         self.guard(submitting=True)
         if runtime_store._uncertain(self.value["journal"]):
             raise Conflict("Submission outcome is uncertain; reconcile it before retrying.")
-        if api.stamped(self.client, self.settings):
+        plan = self.value["frozen"].get("model_plan", _ABSENT)
+        ready = (
+            api.stamped(self.client, self.settings)
+            if plan is _ABSENT
+            else _model_prepared(self.store, self.client, self.settings, plan, self.value["frozen"])
+        )
+        if ready:
             self.checkpoint(
                 state="completed",
                 progress=1,
-                message="The base UCloud runtime is already prepared.",
+                message="The base UCloud runtime is already prepared."
+                if plan is _ABSENT
+                else "The configured UCloud models are already prepared.",
             )
             return
+        from . import runtime_batches
+
+        runtime_batches.require_preparation_idle(self.store, self.settings, self.client)
+        files_to_seed = None
+        if plan is not _ABSENT:
+            # Accepted task authority is the public manifest, never the parent's token.
+            # Missing/drifted files fail; dispatch cannot fetch using another credential.
+            files_to_seed = api.local_speaker_files()
+            if {relative for _, relative in files_to_seed} != set(plan["speaker_files"]) or any(
+                not api.verified_file(path, *plan["speaker_files"][relative])
+                for path, relative in files_to_seed
+            ):
+                raise Conflict(
+                    "The accepted speaker files changed. Save Hugging Face settings again."
+                )
         compute = runtime_compute.freeze(self.settings, self.worker.credentials)
         product = runtime_compute.frozen_product(compute)
         if product != runtime_compute.MIG_PRODUCT:
@@ -962,9 +1505,6 @@ class Run:
         )
         specification["name"] = self.value["journal"]["run_name"]
         self.checkpoint(journal={"specification": specification, **compute})
-        from . import runtime_batches
-
-        runtime_batches.require_preparation_idle(self.store, self.settings, self.client)
         self.guard(submitting=True)
         api.ensure_folder(
             self.client, self.settings.ucloud_transcriber.storage_path + "/cbs-runtime"
@@ -983,10 +1523,26 @@ class Run:
         self.guard(submitting=True)
         self.client.create_folder(remote)  # conflicts never establish ownership
         self.checkpoint(journal={"owned_folder": remote, "cleanup_state": "pending"})
+        if files_to_seed is not None:
+            self.guard(submitting=True)
+            api.seed_speakers(
+                self.client,
+                self.settings.base_url,
+                self.settings,
+                files_to_seed,
+                lambda: self.guard(submitting=True),
+                folder / "speakers-complete.txt",
+            )
         files = [(path, path.name) for path in api.WORKER_FILES]
         supervisor = folder / "supervisor.sh"
         supervisor.write_text(
-            api.supervisor_script(self.settings, self.identifier, True, prepare_only=True),
+            api.supervisor_script(
+                self.settings,
+                self.identifier,
+                True,
+                () if plan is _ABSENT else [name for name in plan["models"] if name != "speakers"],
+                prepare_only=True,
+            ),
             encoding="utf-8",
             newline="\n",
         )
@@ -1093,12 +1649,43 @@ class Run:
                 runtime_compute.require_gpu_memory(doctor)
                 if not api.stamped(self.client, self.settings):
                     raise Conflict("The prepared runtime stamp is unavailable.")
+                verified = {"prepared": True, "doctor_verified": True}
+                if "model_plan" in self.value["frozen"]:
+                    plan = self.value["frozen"]["model_plan"]
+                    cache = (
+                        api.read_json(self.client, self.settings.base_url, remote + "/cache.json")
+                        or {}
+                    )
+                    models = cache.get("models", {})
+                    if (
+                        type(models) is not dict
+                        or any(models.get(key) is not True for key in plan["models"])
+                        or cache.get("punkt_tab") is not True
+                    ):
+                        raise Conflict(
+                            "The allocation did not verify every configured Runtime cache."
+                        )
+                    evidence = _model_evidence(self.client, self.settings, plan)
+                    if evidence is None:
+                        raise Conflict("The configured Runtime cache inventory is incomplete.")
+                    verified["model_plan_receipt"] = {
+                        "format": MODEL_RECEIPT,
+                        "model_plan_sha256": runtime_store._digest(plan),
+                        "runtime_id": self.value["frozen"]["runtime_id"],
+                        "recipe_sha256": self.value["frozen"]["recipe_sha256"],
+                        "evidence": evidence,
+                    }
+                    _validate_model_receipt(verified["model_plan_receipt"], self.value["frozen"])
                 self.checkpoint(
                     state="completed",
                     progress=1,
-                    journal={"prepared": True, "doctor_verified": True},
-                    message="Base UCloud runtime prepared and CUDA checked; "
-                    "public run files await cleanup.",
+                    journal=verified,
+                    message=(
+                        "Base UCloud runtime prepared and CUDA checked; "
+                        if "model_plan" not in self.value["frozen"]
+                        else "Configured UCloud models prepared and caches checked; "
+                    )
+                    + "public run files await cleanup.",
                 )
                 return
             self.checkpoint(

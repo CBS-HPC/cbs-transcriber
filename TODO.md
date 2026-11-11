@@ -12,11 +12,14 @@ Supporting references: [application audit plan](docs/audits/application-audit-pl
 [SPEC](SPEC.md), and [architecture decisions](docs/decisions/README.md).
 The [post-MVP audit and proposed sequence](docs/work-plans/post-mvp-2026-11-10.md) separates
 missing implementation, pending acceptance, workflow decisions and explicitly parked work.
+The [11 November implementation plan](docs/work-plans/post-mvp-2026-11-11.md) tracks the
+verified local morning changes on `codex/post-mvp-morning`; activation remains separate.
 
 ## Current post-MVP branch
 
 The user authorized selected follow-up work on local `codex/post-mvp-work`, descended from
-clean public main `708a27b`. **Do not merge/push it to main, update Desktop main, publish or
+clean public main `708a27b`. The current morning checkpoint is `codex/post-mvp-morning`,
+including the reviewed isolated timing-policy work. **Do not merge/push it to main, update Desktop main, publish or
 reload the installed MVP.** Frontend changes stay within explicit requests; broader choices
 await the colleague's feedback. The installed/published baseline remains MVP 0.1.0.
 
@@ -173,7 +176,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Reliability and existing workflows
 
-- [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — offline investigation resumed.**
+- [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — stability before PII integration.**
+  User priority, 11 November. The morning branch implements verified exact host/shell stamp
+  validation and PREPARE=1 legacy-reader/retained-lock refusal before new job submission
+  (ADR 0172), plus the separately reviewed configured-model preparation plan (ADR 0173).
+  These fixes do not reclaim the historical lock or establish live Runtime acceptance.
   Live preparation/jobs and generation activation remain held. The branch adds exact acquired
   lock-release guards without reclaim (ADR 0168), with synthetic ownership-change regressions.
   [Investigation and disabled-generation review](docs/proposals/post-mvp-runtime-preparation-2026-11-10.md).
@@ -453,7 +460,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
   explicit provider policy and review behavior; assess privacy, costs and recovery before rollout.
-- [ ] **Anonymisation — UCloud LLM planned; implementation open.** User direction on
+- [ ] **Anonymisation — parked pending CBS Runtime stability and a later user decision.**
+  The app should eventually start the model on demand using the UCloud API key; review,
+  redaction/pseudonym and mapping-custody decisions remain open. No adapter/workflow
+  implementation is authorized while parked. User direction on
   11 November: use the UCloud hosting project's anonymisation model. Its catalogue identifies
   **PII-Tracer** (`perplexity-ai/PII-Tracer-vLLM`), a PII token classifier with a `/v1/pii`
   adapter; evaluate it on Danish/English transcripts and design the Transcriber integration.
@@ -563,14 +573,36 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   that protocol. Do not delete saved results/history, credentials or configuration evidence.
   Define existing queued/running work and Retry behavior before activating this change;
   hiding the UI alone is insufficient. Keep native UCloud Transcriber unchanged and do not
-  activate the separately deferred Custom/UCloud vLLM UI. Planned, not implemented.
+  activate the separately deferred Custom/UCloud vLLM UI. Morning implementation has component
+  review Go under ADR 0170 and complete assembled synthetic coverage. Activation is still
+  pending. Local raw/chunk finalization and accepted-request drain
+  remain available, while missing-part requests refuse without new direct service calls.
 
 - [ ] **First-launch front-page connection setup — requested 11 November.** Let a first-time
   user enter the UCloud API key and an optional Hugging Face access token directly on the
   front page. Reuse the existing Settings validation and secure credential-storage flow;
   keep credentials editable later in Settings. This is first-use onboarding, not a prompt
-  on every empty project/library. Saving credentials must not implicitly start preparation,
-  downloads or processing. Layout remains to be reviewed; planned, not implemented.
+  on every empty project/library. UCloud-only setup starts no preparation. The later explicit
+  HF choice queues access/configured-model preparation in Activity (ADR 0173), without an
+  inline download-capable Check call. Implementation/source review are complete on the
+  isolated morning branch; complete backend coverage and 67 relevant browser cases pass,
+  with no installed update. Activation and real-user acceptance remain open.
+
+- [ ] **HF access and configured-model preparation in Activity.** Explicit nonempty primary
+  HF Save should check access and model terms, then prepare configured local/UCloud assets
+  with cache reuse, Stop, token/plan fences and truthful partial states. Use the existing
+  durable remote owner and a versioned model plan beyond base readiness; do not claim all
+  models ready from a base stamp. Parent task is server-lifetime; remote recovery stays
+  durable. Implemented/source-reviewed under ADR 0173; complete synthetic regression is
+  verified on the branch, with no live preparation/download acceptance. At least
+  one enabled CBS Runtime profile is required for cloud preparation; native flags do not
+  select those weights. No live downloads/jobs are part of development checks.
+
+- [ ] **Stable install-latest entry point.** Morning branch adds a dependency-free bootstrap
+  resolving one approved stable GitHub release's versioned wheel, matching constraints and
+  digests, retaining uv copy mode and project isolation. Mocked installer and complete branch
+  regression pass. Current MVP commands stay available;
+  the stable script URL is not active until separately authorized release publication.
 
 - [ ] **Optional post-MVP idea: branded shortcut icons.** Consider automatically assigning a
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
@@ -585,7 +617,18 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   successful setup and later connection changes with mocked checks; no test transcription.
   Implemented on the separate branch under ADR 0167; focused backend/browser/restore checks
   and independent review pass. The full backend inventory is verified; the additional
-  provider browser regression gate remains in progress.
+  provider browser regression has 25 verified parent cases; the morning changes now have
+  67 distinct qualified browser passes. Real-provider/device acceptance is separate.
+
+- [ ] **Language-focused transcription model catalogue — longer term, added 11 November.**
+  Expand the existing catalogue rather than introduce a parallel list. Cover the languages
+  relevant to CBS users, keeping Danish/English prominent; agree the wider priority list.
+  Record pinned model/runtime, supported task/backend, language evidence, licence/access
+  terms, word timing/speaker capabilities, measured quality, memory, throughput and cost on
+  the app's 1g MIG setup. Separate candidate/sized/tested models and preserve limits for long
+  recordings and batches; parameter count or multilingual branding alone does not prove fit.
+  Keep ordinary model choices simple. Representative quality/MIG tests need separate scope;
+  no model downloads or provider runs are authorized by this roadmap item.
 
 - [ ] **AI-assisted analysis and NVivo roadmap (T38/T88b/T88c).** The manual codebook/evidence
   prototype exists; shared UCloud/OpenAI analysis, researcher-reviewed coding/summaries,

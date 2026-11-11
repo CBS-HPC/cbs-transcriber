@@ -169,6 +169,54 @@
             />
             <h1>Transcriber</h1>
           </div>
+          <form
+            id="first-use-setup"
+            class="first-use-setup"
+            aria-labelledby="first-use-title"
+            hidden
+          >
+            <h2 id="first-use-title">Connect UCloud</h2>
+            <p>
+              Save your UCloud connection to transcribe recordings. You can also
+              do this later in Settings.
+            </p>
+            <label
+              >UCloud API key
+              <input
+                id="first-use-ucloud-key"
+                type="password"
+                autocomplete="off"
+                maxlength="4096"
+                required
+              />
+            </label>
+            <label
+              >Hugging Face token (optional)
+              <input
+                id="first-use-hf-token"
+                type="password"
+                autocomplete="off"
+                maxlength="4096"
+              />
+            </label>
+            <p class="field-note">
+              Saving the optional token checks access and prepares configured
+              models when allowed in Settings. Follow progress in Activity.
+            </p>
+            <label class="checkbox-label"
+              ><input id="first-use-remember" type="checkbox" checked />Remember
+              credentials in the OS credential store</label
+            >
+            <p id="first-use-status" role="status"></p>
+            <div class="dialog-actions">
+              <button id="first-use-skip" type="button" class="button">
+                Skip for now
+              </button>
+              <button id="first-use-save" type="submit" class="button primary">
+                Connect and save
+              </button>
+            </div>
+          </form>
           <div id="project-content" hidden>
             <div class="library-toolbar">
               <div>
@@ -2383,7 +2431,10 @@
             id="tab-openai"
             data-provider-tab="openai"
             aria-controls="provider-fields"
-            aria-selected="true"
+            aria-selected="false"
+            tabindex="-1"
+            hidden
+            disabled
           >
             OpenAI API
           </button>
@@ -2393,8 +2444,7 @@
             id="tab-ucloud"
             data-provider-tab="ucloud"
             aria-controls="provider-fields"
-            aria-selected="false"
-            tabindex="-1"
+            aria-selected="true"
           >
             UCloud
           </button>
@@ -2432,7 +2482,9 @@
             WhisperX word timing uses public alignment models and needs no
             token. Speaker labels use the gated pyannote model: a read token and
             accepted model terms are needed only to download it. Cached models
-            run offline. The token is never sent with recordings.
+            run offline. Saving checks access and prepares configured models
+            when allowed in Settings; follow progress in Activity. The token is
+            never sent with recordings.
           </p>
           <label
             >Hugging Face read token<span
@@ -2462,7 +2514,14 @@
           <p id="hf-settings-result" class="settings-note" role="status"></p>
           <div class="dialog-actions">
             <button type="button" id="hf-settings-check" class="button">
-              Check token</button
+              Check saved token</button
+            ><button
+              type="button"
+              id="hf-settings-activity"
+              class="button"
+              hidden
+            >
+              View Activity</button
             ><button type="button" class="button" data-close="settings-dialog">
               Close</button
             ><button type="button" id="hf-settings-save" class="button primary">

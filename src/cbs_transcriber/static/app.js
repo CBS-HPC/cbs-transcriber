@@ -101,12 +101,235 @@ const state = {
   providers: [],
   defaultProvider: null,
   settingsProvider: null,
-  settingsTab: "openai",
+  settingsTab: "ucloud",
   protectedDefaults: {},
   catalog: null,
   comparison: null,
   transcriptionFeatures: {},
 };
+const FIRST_USE_MARKER = "cbs-first-use-completed-v1";
+const firstUse = {
+  version: 0,
+  done: false,
+  busy: false,
+  saving: false,
+  savedNative: false,
+  issue: false,
+  uncertain: false,
+  handoff: false,
+  ready: false,
+};
+function completedNativeSetup(provider) {
+  return (
+    provider.provider_type === "ucloud" &&
+    provider.service_available !== false &&
+    provider.has_key &&
+    nativeReady(provider.ucloud_transcriber || {})
+  );
+}
+function firstUseCompleted() {
+  try {
+    firstUse.done ||= localStorage.getItem(FIRST_USE_MARKER) === "1";
+  } catch {
+    // Browser storage can be disabled; completion still lasts for this page.
+  }
+  return firstUse.done;
+}
+function renderFirstUse() {
+  const home = ["", "#", "#/", "#main"].includes(location.hash);
+  const visible =
+    firstUse.ready &&
+    home &&
+    !firstUseCompleted() &&
+    !firstUse.handoff &&
+    !$("#settings-dialog").open &&
+    (!state.providers.some(completedNativeSetup) ||
+      firstUse.savedNative ||
+      firstUse.issue ||
+      firstUse.busy);
+  $("#first-use-setup").hidden = !visible;
+  $("#library-view").classList.toggle("first-use-active", visible);
+  $("#first-use-ucloud-key").required = !firstUse.savedNative;
+  $("#first-use-ucloud-key").disabled = firstUse.busy || firstUse.savedNative;
+  $("#first-use-hf-token").disabled = firstUse.busy;
+  $("#first-use-remember").disabled = firstUse.busy;
+  $("#first-use-save").disabled = firstUse.busy || firstUse.uncertain;
+  $("#first-use-save").textContent = firstUse.savedNative
+    ? "Finish setup"
+    : "Connect and save";
+  $("#first-use-skip").disabled = firstUse.saving;
+  $("#settings-open").disabled = firstUse.saving;
+}
+function cancelFirstUse() {
+  firstUse.version++;
+  firstUse.busy = false;
+  $("#first-use-ucloud-key").value = "";
+  $("#first-use-hf-token").value = "";
+  renderFirstUse();
+}
+function completeFirstUse() {
+  firstUse.done = true;
+  firstUse.issue = false;
+  firstUse.uncertain = false;
+  firstUse.savedNative = false;
+  try {
+    localStorage.setItem(FIRST_USE_MARKER, "1");
+  } catch {
+    // No credentials or admission proof are stored in browser storage.
+  }
+  cancelFirstUse();
+}
+function firstUseSettingsHandoff(profile, key, remember) {
+  firstUse.handoff = true;
+  cancelFirstUse();
+  fillProvider(profile);
+  $("#api-key").value = key;
+  $("#remember-key").checked = remember;
+  $("#settings-dialog").showModal();
+}
+$("#first-use-skip").addEventListener("click", completeFirstUse);
+window.addEventListener("storage", (event) => {
+  if (event.key === FIRST_USE_MARKER && event.newValue === "1") {
+    firstUse.done = true;
+    cancelFirstUse();
+  }
+});
+$("#first-use-setup").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (firstUse.busy || firstUse.uncertain) return;
+  const version = ++firstUse.version,
+    epoch = viewEpoch;
+  const current = () => version === firstUse.version && epoch === viewEpoch;
+  const key = $("#first-use-ucloud-key").value;
+  const hfToken = $("#first-use-hf-token").value.trim();
+  const remember = $("#first-use-remember").checked;
+  const status = $("#first-use-status");
+  status.classList.remove("settings-error");
+  let stage = "discovery";
+  firstUse.busy = true;
+  firstUse.issue = false;
+  renderFirstUse();
+  async function saveHf() {
+    if (!hfToken) return true;
+    if (!current()) return false;
+    stage = "hf";
+    firstUse.saving = version;
+    renderFirstUse();
+    await api("/huggingface-settings", {
+      method: "PUT",
+      body: { hf_token: hfToken, remember },
+    });
+    if (!current()) return false;
+    $("#first-use-hf-token").value = "";
+    firstUse.saving = false;
+    renderFirstUse();
+    return true;
+  }
+  try {
+    if (!firstUse.savedNative) {
+      const existing =
+        state.providers.find(
+          (provider) =>
+            provider.id === state.settingsProvider && visibleProvider(provider),
+        ) ||
+        state.providers.find(
+          (provider) =>
+            provider.id === state.defaultProvider && visibleProvider(provider),
+        ) ||
+        state.providers.find(visibleProvider);
+      if (existing) {
+        firstUseSettingsHandoff(existing, key, remember);
+        $("#provider-advanced").open = true;
+        toast(
+          hfToken
+            ? "Review the existing UCloud connection in Settings. The optional Hugging Face token has not been saved; add it in the Hugging Face tab."
+            : "Review the existing UCloud connection in Settings before saving.",
+        );
+        return;
+      }
+      const draft = newProviderSettings("ucloud");
+      draft.ucloud_transcriber = { cleanup_after_success: true };
+      status.textContent = "Checking the UCloud connection…";
+      const result = await api("/providers/discover-ucloud", {
+        method: "POST",
+        body: { ...draft, api_key: key, native_allocation_choice: "mig1g" },
+      });
+      if (!current()) return;
+      if (!result.ready) {
+        if (!(await saveHf()) || !current()) return;
+        firstUseSettingsHandoff(
+          { ...draft, ucloud_transcriber: result.setup },
+          key,
+          remember,
+        );
+        renderNativeDiscovery(result);
+        toast(
+          hfToken
+            ? "Token saved; checks/preparation appear in Activity. Finish UCloud setup in Settings."
+            : "Choose the UCloud account details in Settings.",
+        );
+        return;
+      }
+      stage = "native";
+      firstUse.saving = version;
+      status.textContent = "Saving the UCloud connection…";
+      renderFirstUse();
+      await api("/providers", {
+        method: "POST",
+        body: {
+          ...draft,
+          ucloud_transcriber: result.setup,
+          api_key: key,
+          remember,
+          native_allocation_choice: "mig1g",
+          connection_check: result.connection_check,
+        },
+      });
+      if (!current()) {
+        toast(
+          "The UCloud save finished. Check Settings; any optional token still needs saving.",
+        );
+        return;
+      }
+      firstUse.savedNative = true;
+      $("#first-use-ucloud-key").value = "";
+      firstUse.saving = false;
+    }
+    status.textContent = "UCloud connection saved. Saving the optional token…";
+    if (!(await saveHf()) || !current()) return;
+    stage = "refresh";
+    await loadProviders();
+    if (!current()) return;
+    completeFirstUse();
+    toast(
+      hfToken
+        ? "UCloud connected. Token saved; checks/preparation appear in Activity."
+        : "UCloud connected.",
+    );
+  } catch (error) {
+    if (!current()) {
+      if (firstUse.saving)
+        toast(
+          "A credential save was already sent. Check Settings for its outcome.",
+          true,
+        );
+      return;
+    }
+    firstUse.issue = true;
+    const uncertain = !error.status || error.status >= 500;
+    firstUse.uncertain = stage === "native" && uncertain;
+    status.textContent = firstUse.savedNative
+      ? `UCloud connection saved. ${stage === "hf" ? "Hugging Face token save was not confirmed." : "The saved provider list could not be refreshed."} ${error.message}`
+      : stage === "native"
+        ? `Connection save was not confirmed. Check Settings before trying again. ${error.message}`
+        : error.message;
+    status.classList.add("settings-error");
+  } finally {
+    if (current()) firstUse.busy = false;
+    if (firstUse.saving === version) firstUse.saving = false;
+    renderFirstUse();
+  }
+});
 let viewEpoch = 0,
   editVersion = 0,
   mediaHandoffGeneration = 0,
@@ -214,6 +437,7 @@ async function loadProviders() {
   state.providers = data.providers;
   state.defaultProvider = data.default_provider_id;
   renderProviderSelects();
+  renderFirstUse();
 }
 async function refreshProviderConnections() {
   const data = await api("/providers");
@@ -224,7 +448,9 @@ async function refreshProviderConnections() {
   else renderRecordings();
 }
 function visibleProvider(provider) {
-  return ["openai", "ucloud"].includes(providerTab(provider));
+  return (
+    providerTab(provider) === "ucloud" && provider.service_available !== false
+  );
 }
 // Hidden CBS Runtime models stay saved, but are never offered for new work.
 function offeredProvider(provider) {
@@ -373,7 +599,9 @@ function renderProviderSelects() {
     '<option value="">New configuration</option>' +
     providerOptions(
       state.settingsProvider,
-      state.providers.filter((p) => providerTab(p) === state.settingsTab),
+      state.providers.filter(
+        (p) => providerTab(p) === state.settingsTab && visibleProvider(p),
+      ),
       true,
     );
 }
@@ -927,6 +1155,10 @@ function media() {
   return state.media === "video" ? $("#video") : $("#audio");
 }
 function canLeave() {
+  if (firstUse.saving) {
+    toast("Wait for the credential save to finish.", true);
+    return false;
+  }
   if (timedWordSaving || passageTextSaving) {
     toast("Wait for the current change to finish saving.", true);
     return false;
@@ -2010,10 +2242,13 @@ async function route() {
       "",
       state.recording
         ? `#/recordings/${state.recording.id}`
-        : `#/projects/${state.project.id}`,
+        : state.project
+          ? `#/projects/${state.project.id}`
+          : "#/",
     );
     return;
   }
+  cancelFirstUse();
   if ($("#language-picker-dialog").open) $("#language-picker-dialog").close();
   $("#bulk-language-status").textContent = "";
   $("#export-dialog").close();
@@ -2092,6 +2327,7 @@ async function route() {
   renderProjects();
   if (state.project) await refreshRecordings();
   renderProviderSelects();
+  renderFirstUse();
 }
 window.addEventListener("hashchange", handle(route));
 async function refreshRecordings() {
@@ -8388,6 +8624,24 @@ function connectionAllocation() {
       : "mig1g"
     : "mig1g";
 }
+function renderNativeDiscovery(result) {
+  applyNativeSetup(result.setup);
+  renderEnabledModels(true);
+  state.nativeChoices = result.choices || {};
+  $("#native-discovery-choices").innerHTML = Object.entries(state.nativeChoices)
+    .filter(([field, choices]) => field !== "product" && choices.length)
+    .map(
+      ([
+        field,
+        choices,
+      ]) => `<label>${h({ project_id: "Project", storage_path: "Storage", application: "Transcriber application/version" }[field] || field)}
+        <select data-native-choice="${h(field)}"><option value="">Choose…</option>
+        ${choices.map((choice, i) => `<option value="${i}">${h(choice.name)}</option>`).join("")}</select></label>`,
+    )
+    .join("");
+  $("#ucloud-check-results").textContent = result.note;
+  providerConnectionCheck = result.connection_check || null;
+}
 async function connectNative() {
   if (!$("#native-model-choice").reportValidity()) return false;
   const token = ++modelCheckToken;
@@ -8412,24 +8666,7 @@ async function connectNative() {
       },
     });
     if (token !== modelCheckToken || !sameProvider(context)) return false;
-    applyNativeSetup(result.setup);
-    renderEnabledModels(true);
-    state.nativeChoices = result.choices || {};
-    $("#native-discovery-choices").innerHTML = Object.entries(
-      state.nativeChoices,
-    )
-      .filter(([field, choices]) => field !== "product" && choices.length)
-      .map(
-        ([
-          field,
-          choices,
-        ]) => `<label>${h({ project_id: "Project", storage_path: "Storage", application: "Transcriber application/version" }[field] || field)}
-        <select data-native-choice="${h(field)}"><option value="">Choose…</option>
-        ${choices.map((c, i) => `<option value="${i}">${h(c.name)}</option>`).join("")}</select></label>`,
-      )
-      .join("");
-    $("#ucloud-check-results").textContent = result.note;
-    providerConnectionCheck = result.connection_check || null;
+    renderNativeDiscovery(result);
     return result.ready;
   } catch (error) {
     if (token === modelCheckToken && sameProvider(context))
@@ -8608,6 +8845,7 @@ function clearModelCheck() {
   $("#ucloud-check-results").replaceChildren();
 }
 function showProviderTab(tab) {
+  if (tab === "openai") tab = "ucloud";
   providerFormVersion++;
   $("#provider-error").hidden = true;
   state.settingsTab = tab;
@@ -8671,9 +8909,11 @@ function showProviderTab(tab) {
       : "Model";
   $("#base-url").required = tab !== "ucloud-vllm";
   $("#base-url").placeholder =
-    tab === "ucloud-vllm"
-      ? "https://YOUR-UCLOUD-HOST/v1 (once deployed)"
-      : "https://api.openai.com/v1";
+    tab === "ucloud"
+      ? "https://cloud.sdu.dk"
+      : tab === "ucloud-vllm"
+        ? "https://YOUR-UCLOUD-HOST/v1 (once deployed)"
+        : "https://api.openai.com/v1";
   $("#serving-key-label").textContent =
     tab === "ucloud"
       ? "UCloud API token"
@@ -8764,14 +9004,27 @@ function providerSummary() {
     `Protected projects: ${$('[name="approved-for"]').checked ? "Allowed" : "Not allowed"}. Change in Advanced settings.`;
 }
 $('[name="approved-for"]').addEventListener("change", providerSummary);
-let hfVersion = 0;
-// Check token covers the whole speaker-label preparation (ADR 0057): the token, the gated
-// model's terms, and a verified copy of the model on this computer.
+let hfVersion = 0,
+  hfSavedToken = false,
+  hfPending = null;
+function updateHfCheck() {
+  const draft = $("#hf-settings-token").value.trim();
+  $("#hf-settings-check").disabled =
+    !hfSavedToken || !!draft || hfPending !== null;
+  $("#hf-settings-check").title = draft
+    ? "Save this token before checking it."
+    : "Check the saved token and follow preparation in Activity.";
+}
+$("#hf-settings-token").addEventListener("input", () => {
+  hfVersion++;
+  updateHfCheck();
+});
+// Token checks and configured preparation belong to the Activity owner (ADR 0173).
 function hfStatusLines(status) {
   const local = {
     verified: "Speaker model: downloaded and verified on this computer.",
     missing:
-      "Speaker model: not on this computer yet. Check token downloads it.",
+      "Speaker model: not on this computer yet; preparation progress is in Activity.",
     failed: `Speaker model: ${status.speaker_model_error || "download failed."}`,
   }[status.speaker_model_local];
   if (!status.has_token)
@@ -8781,7 +9034,7 @@ function hfStatusLines(status) {
     ];
   const token = {
     unchecked:
-      "Token saved (not checked). Check token also prepares speaker labels.",
+      "Token saved (not checked). Follow access checks and preparation in Activity.",
     valid: "Token valid.",
     invalid: "Hugging Face rejected this token.",
     unavailable: "Hugging Face could not be reached; token not verified.",
@@ -8801,6 +9054,9 @@ function hfStatusLines(status) {
   return [token, access, showLocal ? local : null].filter(Boolean);
 }
 function renderHfStatus(status) {
+  hfSavedToken = status.has_token === true;
+  updateHfCheck();
+  $("#hf-settings-activity").hidden = !status.preparation_task;
   $("#hf-settings-status").textContent = status.has_token
     ? "Token saved"
     : "No token saved";
@@ -8821,6 +9077,10 @@ function renderHfStatus(status) {
     link.rel = "noopener";
     link.textContent = "Open the model page ↗";
     result.append(" ", link);
+  }
+  if (status.preparation_task) {
+    result.append(document.createElement("br"));
+    result.append("Checks and preparation are shown in Activity.");
   }
 }
 async function showHuggingFaceTab() {
@@ -8853,12 +9113,16 @@ async function showHuggingFaceTab() {
   $("#hf-panel").disabled = false;
 }
 async function hfRequest(button, path, method) {
-  const version = ++hfVersion;
   const token = $("#hf-settings-token").value.trim();
+  if (method === "POST" && token)
+    throw new Error("Save this token before checking it.");
+  const version = ++hfVersion;
+  hfPending = version;
   button.disabled = true;
+  updateHfCheck();
   $("#hf-settings-result").textContent =
     method === "POST"
-      ? "Checking the token and speaker model terms; downloading the speaker model if needed (about 33 MB)…"
+      ? "Queuing access checks and preparation in Activity…"
       : "Saving…";
   try {
     const status = await api(path, {
@@ -8871,13 +9135,20 @@ async function hfRequest(button, path, method) {
     if (version !== hfVersion || state.settingsTab !== "huggingface") return;
     if (method === "PUT") $("#hf-settings-token").value = "";
     renderHfStatus(status);
+    if (status.preparation_task) await pollJobs().catch(() => {});
   } catch (error) {
     if (version === hfVersion) $("#hf-settings-result").textContent = "";
     throw error;
   } finally {
+    if (hfPending === version) hfPending = null;
     button.disabled = false;
+    updateHfCheck();
   }
 }
+$("#hf-settings-activity").addEventListener("click", () => {
+  $("#settings-dialog").close();
+  $("#activity-open").click();
+});
 $("#hf-settings-save").addEventListener(
   "click",
   handle((event) =>
@@ -9302,9 +9573,11 @@ $("#runtime-max-allocations").addEventListener("keydown", (event) => {
 function switchProviderTab(tab) {
   if (tab === "huggingface") return showHuggingFaceTab();
   if (tab === "processing") return showProcessingTab();
-  if (!["openai", "ucloud"].includes(tab)) tab = "openai";
+  if (tab !== "ucloud") tab = "ucloud";
   showProviderTab(tab);
-  const existing = state.providers.find((p) => providerTab(p) === tab);
+  const existing = state.providers.find(
+    (p) => providerTab(p) === tab && visibleProvider(p),
+  );
   if (existing) fillProvider(existing);
   else newProvider();
 }
@@ -9314,7 +9587,9 @@ document.querySelectorAll("[data-provider-tab]").forEach((button) => {
     handle(() => switchProviderTab(button.dataset.providerTab)),
   );
   button.addEventListener("keydown", (event) => {
-    const tabs = [...document.querySelectorAll("[data-provider-tab]")];
+    const tabs = [...document.querySelectorAll("[data-provider-tab]")].filter(
+      (tab) => !tab.hidden && !tab.disabled,
+    );
     const index = tabs.indexOf(button);
     const next = {
       ArrowRight: (index + 1) % tabs.length,
@@ -9330,7 +9605,7 @@ document.querySelectorAll("[data-provider-tab]").forEach((button) => {
 });
 function fillProvider(settings) {
   if (!visibleProvider(settings)) {
-    switchProviderTab("openai");
+    switchProviderTab("ucloud");
     return;
   }
   showProviderTab(providerTab(settings));
@@ -9400,18 +9675,18 @@ function fillProvider(settings) {
   $("#delete-provider").disabled = !settings.id;
   renderEnabledModels();
 }
-function newProvider() {
-  const openai = state.settingsTab === "openai";
-  const vllm = state.settingsTab === "ucloud-vllm";
-  const native = state.settingsTab === "ucloud";
+function newProviderSettings(tab = state.settingsTab) {
+  const openai = tab === "openai";
+  const vllm = tab === "ucloud-vllm";
+  const native = tab === "ucloud";
   const openaiDefault = state.modelPresets.openai.models.find(
     (m) => m.model === state.modelPresets.openai.default,
   );
   const nativeDefault = state.modelPresets.ucloud_transcriber.models.find(
     (m) => m.model === state.modelPresets.ucloud_transcriber.default,
   );
-  fillProvider({
-    provider_type: state.settingsTab,
+  return {
+    provider_type: tab,
     base_url: native
       ? "https://cloud.sdu.dk"
       : openai
@@ -9443,9 +9718,7 @@ function newProvider() {
           : "json",
     max_upload_mb: vllm ? 14 : 20,
     concurrent_chunks: openai ? 2 : 1,
-    approved_for: state.protectedDefaults[state.settingsTab]
-      ? ["protected"]
-      : [],
+    approved_for: state.protectedDefaults[tab] ? ["protected"] : [],
     ucloud: vllm
       ? {
           hf_model: "openai/whisper-large-v3-turbo",
@@ -9454,20 +9727,42 @@ function newProvider() {
           ).revision,
         }
       : null,
-  });
-  (vllm ? $("#ucloud-token") : $("#api-key")).focus();
+  };
+}
+function newProvider() {
+  fillProvider(newProviderSettings());
+  (state.settingsTab === "ucloud-vllm"
+    ? $("#ucloud-token")
+    : $("#api-key")
+  ).focus();
 }
 async function openSettings(identifier = state.defaultProvider) {
+  if (firstUse.saving) return false;
+  firstUse.handoff = true;
+  cancelFirstUse();
   const version = ++providerFormVersion;
-  await loadProviders();
+  try {
+    await loadProviders();
+  } catch (error) {
+    if (version === providerFormVersion) {
+      firstUse.handoff = false;
+      renderFirstUse();
+    }
+    throw error;
+  }
   if (version !== providerFormVersion) return;
   const selected =
     state.providers.find((p) => p.id === identifier && visibleProvider(p)) ||
     state.providers.find(visibleProvider);
   if (selected) fillProvider(selected);
-  else switchProviderTab("openai");
+  else switchProviderTab("ucloud");
   $("#settings-dialog").showModal();
+  return true;
 }
+$("#settings-dialog").addEventListener("close", () => {
+  firstUse.handoff = false;
+  renderFirstUse();
+});
 $("#settings-open").addEventListener(
   "click",
   handle(() => openSettings()),
@@ -9809,7 +10104,7 @@ $("#settings-form").addEventListener(
         if (!(await connectNative())) return;
       }
       if (!sameProvider(context)) return;
-      await api(
+      const savedProvider = await api(
         state.settingsProvider
           ? `/providers/${state.settingsProvider}`
           : "/providers",
@@ -9867,7 +10162,12 @@ $("#settings-form").addEventListener(
         },
       );
       await loadProviders();
-      if (sameProvider(context)) $("#settings-dialog").close();
+      if (context.tab === "ucloud" && completedNativeSetup(savedProvider))
+        completeFirstUse();
+      if (sameProvider(context)) {
+        $("#api-key").value = "";
+        $("#settings-dialog").close();
+      }
       if (state.recording) renderEditorDetails();
       else renderRecordings();
       toast("Settings saved");
@@ -11276,6 +11576,60 @@ const pendingJobCancels = new Set(),
   pendingInputGroupCancels = new Set();
 const pendingLocalCleanup = new Set();
 const pendingRuntimePreparations = new Set();
+const pendingHfTasks = new Set();
+function hfSetupId(job) {
+  return job.kind === "hf_setup" &&
+    typeof job.id === "string" &&
+    /^hf-setup:[a-f0-9]{32}$/.test(job.id)
+    ? job.id.slice("hf-setup:".length)
+    : null;
+}
+function hfSetupActions(job) {
+  const identifier = hfSetupId(job);
+  if (!identifier) return "";
+  const button = (action, label) =>
+    `<button class="button" data-hf-task-action="${action}" data-hf-task-id="${identifier}" ${pendingHfTasks.has(identifier) ? "disabled" : ""}>${label}</button>`;
+  return [
+    job.cancellable ? button("cancel", "Stop setup") : "",
+    job.retryable ? button("retry", "Retry setup") : "",
+  ].join("");
+}
+function hfSetupCard(job) {
+  const identifier = hfSetupId(job),
+    progress = Number.isFinite(job.progress)
+      ? Math.max(0, Math.min(1, job.progress))
+      : null,
+    stages = (job.stage_outcomes || [])
+      .map(
+        (stage) =>
+          `<li><strong>${h(stage.label)}</strong> · ${h(stage.outcome)}${stage.message ? `<p>${h(stage.message)}</p>` : ""}</li>`,
+      )
+      .join(""),
+    child = job.remote_child;
+  return `<article class="job" data-hf-setup="${h(identifier || job.id)}">${activityCardHead(job, "Model access and preparation")}<h3>Hugging Face setup</h3><p>${h(job.message)}</p>${stages ? `<ul class="hf-setup-stages">${stages}</ul>` : ""}${child ? `<p class="field-note">${child.created_by_task ? "This setup started UCloud preparation." : "Using an existing UCloud preparation with independent controls."} UCloud progress remains in its Activity card.</p>` : ""}<progress ${progress === null ? "" : `value="${progress}"`} max="1" aria-label="Model preparation progress"></progress><div class="job-footer"><span class="badge ${["queued", "running"].includes(job.state) ? "working" : ["failed", "interrupted"].includes(job.state) ? "failed" : ""}">${h(job.state)}</span>${hfSetupActions(job)}</div></article>`;
+}
+async function runHfSetupAction(button) {
+  const identifier = button.dataset.hfTaskId,
+    action = button.dataset.hfTaskAction;
+  if (
+    !/^[a-f0-9]{32}$/.test(identifier) ||
+    !["cancel", "retry"].includes(action) ||
+    pendingHfTasks.has(identifier)
+  )
+    return;
+  pendingHfTasks.add(identifier);
+  document
+    .querySelectorAll(`[data-hf-task-id="${identifier}"]`)
+    .forEach((control) => {
+      control.disabled = true;
+    });
+  try {
+    await api(`/huggingface-tasks/${identifier}/${action}`, { method: "POST" });
+  } finally {
+    pendingHfTasks.delete(identifier);
+    await pollJobs();
+  }
+}
 function runtimePreparationId(job) {
   const identifier = job.runtime_preparation_id;
   return typeof identifier === "string" &&
@@ -11384,6 +11738,7 @@ async function runJobCancel(button) {
   }
 }
 function jobActions(job) {
+  if (job.kind === "hf_setup") return hfSetupActions(job);
   if (job.runtime_preparation_id) return runtimePreparationActions(job);
   if (job.local_deletion) {
     const item = job.local_deletion;
@@ -11672,6 +12027,13 @@ function activityJobs(jobs) {
   });
 }
 function needsActivityAttention(job) {
+  if (job.kind === "hf_setup")
+    return (
+      ["failed", "interrupted"].includes(job.state) ||
+      (job.stage_outcomes || []).some((stage) =>
+        ["failed", "unavailable"].includes(stage.outcome),
+      )
+    );
   if (job.kind === "export") return !["queued", "running"].includes(job.state);
   if (job.runtime_preparation_id)
     return !runtimePreparationId(job) || job.needs_attention === true;
@@ -11738,6 +12100,7 @@ function runtimeBatchProgress(job) {
     )}</dl><p class="runtime-saved">${h(counts.completed)} of ${h(counts.total)} results saved locally</p><progress value="${counts.completed}" max="${Math.max(1, counts.total)}" aria-label="Results saved locally"></progress>${active.length ? `<ul class="runtime-active-files">${active.map((file) => `<li class="runtime-active-file"><strong>${h(file.recording_name)}</strong><span>${h(file.stage_label)}</span></li>`).join("")}</ul><p class="field-note">Speech-recognition percentage is not reported.</p>` : ""}</div>`;
 }
 function activityCard(job, expanded) {
+  if (job.kind === "hf_setup") return hfSetupCard(job);
   if (job.kind === "export") return CBSBackgroundExports.card(job);
   if (job.runtime_preparation_id) {
     const identifier = runtimePreparationId(job),
@@ -11854,7 +12217,7 @@ function mergeActivityHidden(value) {
     if (typeof updated === "string") activityHidden.set(id, updated);
 }
 function activityRemovable(job) {
-  if (job.kind === "export") return false;
+  if (["export", "hf_setup"].includes(job.kind)) return false;
   if (job.runtime_preparation_id)
     return !!runtimePreparationId(job) && job.can_remove === true;
   if (job.local_deletion) return false;
@@ -11925,7 +12288,7 @@ function activityStopButton(job) {
           .join("")
     : jobActions(job);
   const controls = template.content.querySelectorAll(
-    '[data-cancel], [data-upload-cancel], [data-input-action="cancel"], [data-runtime-action="cancel"], [data-runtime-preparation-action="cancel"]',
+    '[data-cancel], [data-upload-cancel], [data-input-action="cancel"], [data-runtime-action="cancel"], [data-runtime-preparation-action="cancel"], [data-hf-task-action="cancel"]',
   );
   if (!controls.length) return "";
   const button = controls[0],
@@ -12035,6 +12398,11 @@ $("#activity-clear").addEventListener(
 $("#jobs").addEventListener(
   "click",
   handle(async (event) => {
+    const hfTask = event.target.closest("[data-hf-task-action]");
+    if (hfTask) {
+      await runHfSetupAction(hfTask);
+      return;
+    }
     const preparation = event.target.closest(
       "[data-runtime-preparation-action]",
     );
@@ -12423,6 +12791,8 @@ handle(async () => {
   await loadEditingSettings();
   await refreshProjects();
   await route();
+  firstUse.ready = true;
+  renderFirstUse();
   await pollJobs();
   setInterval(poll, 1600);
 })();

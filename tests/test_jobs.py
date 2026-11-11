@@ -1,10 +1,11 @@
 import threading
 
 import pytest
+from admission_support import COMPATIBLE_API_URL
 
 from cbs_transcriber.jobs import JobQueue
 from cbs_transcriber.media import chunk_boundaries
-from cbs_transcriber.providers import OPENAI_URL, Settings
+from cbs_transcriber.providers import Settings
 
 
 def test_v6_failed_second_chunk_resumes_without_resubmitting_first(
@@ -17,9 +18,11 @@ def test_v6_failed_second_chunk_resumes_without_resubmitting_first(
     store.execute(
         "UPDATE recordings SET status='ready',duration=1800 WHERE id=?", (recording["id"],)
     )
-    credentials.keys[OPENAI_URL] = "synthetic-key"
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-key"
     job = store.add_job(
-        recording["id"], "transcribe", {"settings": Settings().model_dump(), "revision": 0}
+        recording["id"],
+        "transcribe",
+        {"settings": Settings(base_url=COMPATIBLE_API_URL).model_dump(), "revision": 0},
     )
     folder = store.directory(recording["id"]) / "test-chunks"
     folder.mkdir()

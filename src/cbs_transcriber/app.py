@@ -36,7 +36,7 @@ from . import (
     deletions,
     enhancement_api,
     enhancement_cloud,
-    huggingface_access,
+    huggingface_tasks,
     input_admission,
     language_preferences,
     libraries,
@@ -117,6 +117,7 @@ from .providers import (
     require_approval,
     require_enabled,
     require_key,
+    require_service_available,
     save_native_allocation,
     save_native_language,
     save_profile,
@@ -871,6 +872,38 @@ def create_app(
     queue = JobQueue(store, credentials)
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
+
+    def hf_cloud_plan():
+        if not release.enabled("cbs_runtime"):
+            return {"status": "disabled"}
+        return runtime_preparation.huggingface_plan(store, credentials)
+
+    def hf_cloud_request(plan, guard):
+        release.require("cbs_runtime")
+        result = runtime_preparation.request_huggingface(store, credentials, plan, guard)
+        queue.notify()
+        return result
+
+    hf_manager = huggingface_tasks.HuggingFaceTasks(
+        store,
+        credentials,
+        start_worker=start_worker,
+        acquire_file_lease=not start_worker,
+        freeze_cloud_plan=hf_cloud_plan,
+        request_cloud=hf_cloud_request,
+        cloud_status=lambda identifier: runtime_preparation.card(
+            runtime_preparation.get(store, identifier)
+        ),
+        cancel_cloud=lambda identifier: runtime_preparation.cancel(store, credentials, identifier),
+    )
+
+    @contextmanager
+    def background_exclusive():
+        # Short admission inhibitors are acquired before queue/snapshot ownership; their
+        # worker drains never run while those locks are held.
+        with hf_manager.exclusive(), export_manager.exclusive():
+            yield
+
     processing_started = False
     profiles_initialized = False
     initialization_lock = threading.Lock()
@@ -915,9 +948,14 @@ def create_app(
             finally:
                 cleanup_error = None
                 try:
-                    export_manager.close()
+                    hf_manager.close()
                 except BaseException as cleanup:
                     cleanup_error = cleanup
+                try:
+                    export_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
                 try:
                     if processing_started:
                         queue.stop()
@@ -937,6 +975,7 @@ def create_app(
     passage_restore_routes.install(app, store)
     app.state.deletions = deletion_requests
     app.state.export_tasks = export_manager
+    app.state.huggingface_tasks = hf_manager
     app.state.profile = release
     # The launcher sets this to restart the server on another library (ADR 0051).
     app.state.switch_library = None
@@ -956,12 +995,12 @@ def create_app(
         queue,
         credentials,
         mutation_allowed=local_mutation_allowed,
-        capture_guard=export_manager.exclusive,
+        capture_guard=background_exclusive,
     )
 
     @contextmanager
     def export_safe_staging():
-        with export_manager.exclusive(), app.state.portable_capture_gate.promote_mutation():
+        with background_exclusive(), app.state.portable_capture_gate.promote_mutation():
             yield
 
     deletion_requests.staging = export_safe_staging
@@ -1005,6 +1044,7 @@ def create_app(
     def require_runtime_idle(*, project_id=None, recording_ids=None):
         deletion_requests.require_files_idle()
         export_manager.require_idle(project_id=project_id, recording_ids=recording_ids)
+        hf_manager.require_idle()
         try:
             if (
                 project_id is None
@@ -1033,6 +1073,10 @@ def create_app(
 
     @app.exception_handler(ExportConflict)
     async def export_conflict(request, exc):
+        return JSONResponse({"detail": str(exc)}, 409)
+
+    @app.exception_handler(huggingface_tasks.Conflict)
+    async def hf_setup_conflict(request, exc):
         return JSONResponse({"detail": str(exc)}, 409)
 
     @app.exception_handler(input_admission.AdmissionConflict)
@@ -1168,7 +1212,7 @@ def create_app(
         target = libraries.select(body.path, create=body.create, schema=SCHEMA_VERSION)
         if target.path == store.root:
             raise ValueError("This library is already open.")
-        with export_manager.exclusive(), queue.lock:
+        with background_exclusive(), queue.lock:
             # Restarting stops local workers; never interrupt queued or running work silently.
             require_runtime_idle()
             if operational_rows(
@@ -1179,6 +1223,7 @@ def create_app(
                 )
             app.state.switch_library(target)
             export_manager.stop_admission()
+            hf_manager.stop_admission()
         return {"library": str(target.path)}
 
     # Verified local backups (ADR 0061); step 1 towards keeping copies on UCloud.
@@ -1279,7 +1324,7 @@ def create_app(
     def move_project_storage(identifier: str, body: ProjectStorage):
         from .storage import relocate_project
 
-        with export_manager.exclusive(), queue.lock, store.snapshot_lock:
+        with background_exclusive(), queue.lock, store.snapshot_lock:
             store.one("SELECT id FROM projects WHERE id=?", (identifier,))
             if body.expected_storage_path is not None and (
                 str(store.project_folder(identifier)) != body.expected_storage_path
@@ -2657,6 +2702,7 @@ def create_app(
     @app.post("/api/providers/check-models")
     def available_models(body: ProviderEdit):
         settings = Settings.model_validate(body.model_dump())
+        require_service_available(settings)
         key = body.api_key if body.api_key is not None else credentials.get(settings.base_url)
         attempt = connection_checks.begin(settings)
         observed = provider_connection.observation(store, settings)
@@ -2685,6 +2731,7 @@ def create_app(
         from .ucloud_native import check_setup
 
         settings = Settings.model_validate(body.model_dump())
+        require_service_available(settings)
         if settings.provider_type != "ucloud":
             raise ValueError("Choose the UCloud Transcriber provider.")
         key = (
@@ -2736,6 +2783,7 @@ def create_app(
         settings = fresh_native_settings(
             Settings.model_validate(body.model_dump(exclude_unset=True))
         )
+        require_service_available(settings)
         if settings.provider_type != "ucloud":
             raise ValueError("Choose the UCloud Transcriber provider.")
         key = (
@@ -2813,6 +2861,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/providers/default")
     def choose_default_provider(body: ProviderChoice):
@@ -2845,10 +2895,15 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.delete("/api/providers/{identifier}")
     def remove_provider(identifier: str):
-        delete_profile(store, identifier)
+        try:
+            delete_profile(store, identifier)
+        finally:
+            hf_manager.invalidate()
         return public_profiles(store, credentials)
 
     @app.put("/api/providers/{identifier}/runtime-language")
@@ -2859,6 +2914,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/providers/{identifier}/native-allocation")
     def native_allocation(identifier: str, body: NativeAllocationChoice):
@@ -2868,6 +2925,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/providers/{identifier}/native-language")
     def native_language(identifier: str, body: NativeLanguageChoice):
@@ -2877,6 +2936,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/settings")
     def update_settings(body: ProviderEdit):
@@ -2896,6 +2957,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     def conflicting_job(recording_id, provider_id, settings, *, original=False):
         active = store.all(
@@ -3024,44 +3087,36 @@ def create_app(
             for current, plan, decision in zip(items, plans, decisions, strict=True)
         ]
 
-    hf_receipts = {}
-
     @app.get("/api/huggingface-settings")
     def huggingface_settings():
-        token = credentials.get(HF_SCOPE)
-        receipt = hf_receipts.get(
-            huggingface_access.token_fingerprint(token), huggingface_access.token_state(token)
-        )
-        # Offline: whether verified speaker files are on this computer right now. A failed
-        # check keeps its reason until the files are there.
-        local = enhancement_api.local_speaker_status()
-        if local["speaker_model_local"] == "verified" or "speaker_model_local" not in receipt:
-            return receipt | local
-        return receipt
+        # Read the current in-memory receipt; polling never scans/downloads model caches.
+        return hf_manager.status()
 
     @app.put("/api/huggingface-settings")
     def update_huggingface_settings(body: HuggingFaceToken):
-        if body.hf_token is not None:
-            token = body.hf_token.strip()
-            if any(c.isspace() or ord(c) < 32 for c in token):
-                raise ValueError("Use a Hugging Face access token without spaces or line breaks.")
-            credentials.set(HF_SCOPE, token, body.remember)
-        return huggingface_settings()
+        result = hf_manager.save(body.hf_token, body.remember)
+        return JSONResponse(
+            result, status_code=202 if body.hf_token and body.hf_token.strip() else 200
+        )
 
-    @app.post("/api/huggingface-settings/check")
+    @app.post("/api/huggingface-settings/check", status_code=202)
     def check_huggingface_settings(body: HuggingFaceToken):
-        token = body.hf_token.strip() if body.hf_token else credentials.get(HF_SCOPE)
-        result = huggingface_access.check_token(token)
-        # The check also prepares the speaker model here (ADR 0057): with access granted it is
-        # downloaded once, retried on transient errors and verified file by file.
-        allowed = result["token_status"] == "valid" and result["speaker_model_access"] == "allowed"
-        result |= enhancement_api.local_speaker_status(token if allowed else None)
-        # This is only a last-check receipt, not lasting authorization for inference.
-        # Credential changes cannot reuse a previous token's successful check.
-        hf_receipts[huggingface_access.token_fingerprint(token)] = result
-        while len(hf_receipts) > 8:
-            hf_receipts.pop(next(iter(hf_receipts)))
-        return result
+        return hf_manager.check(body.hf_token)
+
+    @app.post("/api/huggingface-tasks/{identifier}/cancel")
+    def cancel_huggingface_setup(
+        identifier: Annotated[str, PathParameter(pattern=r"^[a-f0-9]{32}$")],
+    ):
+        result = hf_manager.cancel(identifier)
+        return JSONResponse(
+            result, status_code=202 if result["state"] in {"queued", "running"} else 200
+        )
+
+    @app.post("/api/huggingface-tasks/{identifier}/retry", status_code=202)
+    def retry_huggingface_setup(
+        identifier: Annotated[str, PathParameter(pattern=r"^[a-f0-9]{32}$")],
+    ):
+        return hf_manager.retry(identifier)
 
     @app.get("/api/enhancement-settings")
     def enhancement_settings():
@@ -3071,10 +3126,15 @@ def create_app(
 
     @app.put("/api/enhancement-settings")
     def update_enhancement_settings(body: LocalSettingsEdit):
-        if body.hf_token is not None:
-            credentials.set(HF_SCOPE, body.hf_token, body.remember)
-        preserve = set(ProcessingSettings.model_fields) - body.model_fields_set
-        save_local_settings(store, body, preserve_fields=preserve)
+        try:
+            if body.hf_token is not None:
+                credentials.set(HF_SCOPE, body.hf_token, body.remember)
+            preserve = set(ProcessingSettings.model_fields) - body.model_fields_set
+            save_local_settings(store, body, preserve_fields=preserve)
+        finally:
+            # Legacy aliases never start setup; partial credential writes must still
+            # invalidate superseded work. Plan guards also run at every worker boundary.
+            hf_manager.invalidate()
         return enhancement_settings()
 
     @app.post("/api/enhancement-runtime/check")
@@ -3706,6 +3766,7 @@ def create_app(
             + retained
             + deletion_requests.file_activity()
             + export_manager.activity()
+            + hf_manager.activity()
         )
 
     @app.post("/api/local-deletions/{identifier}/retry")

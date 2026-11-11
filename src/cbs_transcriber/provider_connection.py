@@ -87,9 +87,11 @@ def _valid_receipt(receipt):
 
 
 def state(db, settings, key):
-    from .providers import require_key
+    from .providers import direct_openai, require_key
     from .ucloud_native import require_connection
 
+    if direct_openai(settings):
+        return "service_disabled"
     if not key and settings.provider_type in {"openai", "ucloud", "ucloud-vllm"}:
         return "missing_credentials"
     try:
@@ -117,10 +119,17 @@ def state(db, settings, key):
 def public_state(store, settings, key):
     with store.connection() as db:
         current = state(db, settings, key)
-    return {"connection_ready": current == "ready", "connection_state": current}
+    return {
+        "service_available": current != "service_disabled",
+        "connection_ready": current == "ready",
+        "connection_state": current,
+    }
 
 
 def require_ready(db, settings, key):
+    from .providers import require_service_available
+
+    require_service_available(settings)
     current = state(db, settings, key)
     if current != "ready":
         message = {

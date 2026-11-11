@@ -34,7 +34,9 @@ def held_settings_load(page, local_app, tab, endpoint, *, local_response=None):
     held = []
 
     def load(route):
-        if not held:
+        # The default UCloud tab also reads Processing settings for its cloud policy.
+        # Hold only the requested tab's load, never that earlier background read.
+        if not held and page.evaluate("state.settingsTab") == tab:
             held.append(route)
             page.evaluate("window.settingsTabHeld = true")
         else:
@@ -85,7 +87,8 @@ def newer_settings_context(page, outcome):
     else:
         page.keyboard.press("Escape")
         page.locator("#settings-open").click()
-    expect(page.locator("#tab-openai")).to_have_attribute("aria-selected", "true")
+        expect(page.locator("#settings-dialog")).to_be_visible()
+    expect(page.locator("#tab-ucloud")).to_have_attribute("aria-selected", "true")
     page.locator("#api-key").fill("synthetic-newer-draft")
 
 

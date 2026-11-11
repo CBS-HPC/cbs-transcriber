@@ -254,10 +254,16 @@ class FakeUCloud:
             )
         if path == "/api/files/retrieve":
             target = url.params["id"]
+            if target in self.folders:
+                return httpx.Response(200, json={"id": target, "status": {"type": "DIRECTORY"}})
             if target not in self.files:
                 return httpx.Response(400, text="Could not find file")
             return httpx.Response(
-                200, json={"status": {"type": "FILE", "sizeInBytes": len(self.files[target])}}
+                200,
+                json={
+                    "id": target,
+                    "status": {"type": "FILE", "sizeInBytes": len(self.files[target])},
+                },
             )
         if path == "/api/files/browse":
             if url.params["path"] not in self.folders:
@@ -314,10 +320,19 @@ def cloud(monkeypatch, current_transcriber_application):
     # separate controller/coordinator tests and must not weaken legacy recovery coverage.
     monkeypatch.setattr("cbs_transcriber.runtime_batches.freeze_plan", lambda *_: None)
     fake = FakeUCloud(current_transcriber_application)
+
+    def streamed(request):
+        response = fake.handle(request)
+        return httpx.Response(
+            response.status_code,
+            headers=response.headers,
+            stream=httpx.ByteStream(response.content),
+        )
+
     monkeypatch.setattr(
         httpx,
         "Client",
-        lambda *a, **kw: REAL_CLIENT(*a, **kw, transport=httpx.MockTransport(fake.handle)),
+        lambda *a, **kw: REAL_CLIENT(*a, **kw, transport=httpx.MockTransport(streamed)),
     )
     monkeypatch.setattr(api, "POLL_SECONDS", 0)
     monkeypatch.setattr("cbs_transcriber.ucloud_native.TRASH_CONFIRM_DELAYS", (0,))
@@ -403,9 +418,7 @@ def synthetic_speakers(monkeypatch, files=None):
 def runtime_ready(cloud):
     folder = SETUP["storage_path"] + "/cbs-runtime/" + api.runtime_id()
     cloud.folders |= {SETUP["storage_path"] + "/cbs-runtime", folder}
-    cloud.files[folder + "/stamp.json"] = json.dumps(
-        {"requirements_sha256": api.requirements_hash()}
-    ).encode()
+    cloud.files[folder + "/stamp.json"] = api.runtime_stamp_bytes()
     return folder
 
 
@@ -1069,8 +1082,11 @@ def test_v85_transient_reads_are_tolerated_without_stopping(client, cloud, conne
 
         def flaky(request):
             if request.url.path == "/api/files/download" and failures["left"]:
-                failures["left"] -= 1
-                return httpx.Response(503)
+                body = json.loads(request.content)
+                identifier = (body.get("items") or [{}])[0].get("id", "")
+                if "/cbs-enhancement-" in identifier:
+                    failures["left"] -= 1
+                    return httpx.Response(503)
             return original(request)
 
         cloud.handle = flaky
@@ -1531,9 +1547,9 @@ def test_refused_download_stops_before_any_gpu_job(
 
 
 def test_locked_file_during_speaker_download_is_retried_then_verified(
-    client, monkeypatch, credentials, isolated_speaker_model
+    monkeypatch, isolated_speaker_model
 ):
-    """Check token prepares the speaker model; a briefly locked file is retried (ADR 0057)."""
+    """The preparation helper retries a briefly locked model file (ADR 0057)."""
     import huggingface_hub
 
     from cbs_transcriber import huggingface_access
@@ -1560,12 +1576,11 @@ def test_locked_file_during_speaker_download_is_retried_then_verified(
             | {"token_status": "valid", "speaker_model_access": "allowed"}
         ),
     )
-    assert client.get("/api/huggingface-settings").json()["speaker_model_local"] == "missing"
-    credentials.set(api.HF_SCOPE, "hf_SYNTHETIC", False)
-    checked = client.post("/api/huggingface-settings/check", json={}).json()
+    assert api.local_speaker_status()["speaker_model_local"] == "missing"
+    checked = api.local_speaker_status("hf_SYNTHETIC")
     assert len(calls) == 2
     assert checked["speaker_model_local"] == "verified" and not checked["speaker_model_error"]
-    assert client.get("/api/huggingface-settings").json()["speaker_model_local"] == "verified"
+    assert api.local_speaker_status()["speaker_model_local"] == "verified"
     assert "hf_SYNTHETIC" not in json.dumps(checked)
     # A damaged file is never used or copied: it is removed and fetched again (the Hub alone
     # would keep the damaged copy).
@@ -1588,7 +1603,7 @@ def test_locked_file_during_speaker_download_is_retried_then_verified(
     ],
 )
 def test_speaker_download_failures_are_named_and_only_transient_ones_retried(
-    client, monkeypatch, credentials, error, attempts, reason
+    monkeypatch, error, attempts, reason
 ):
     import huggingface_hub
     import requests
@@ -1626,8 +1641,7 @@ def test_speaker_download_failures_are_named_and_only_transient_ones_retried(
             | {"token_status": "valid", "speaker_model_access": "allowed"}
         ),
     )
-    credentials.set(api.HF_SCOPE, "hf_SYNTHETIC", False)
-    checked = client.post("/api/huggingface-settings/check", json={}).json()
+    checked = api.local_speaker_status("hf_SYNTHETIC")
     assert len(calls) == attempts
     assert checked["speaker_model_local"] == "failed" and reason in checked["speaker_model_error"]
 

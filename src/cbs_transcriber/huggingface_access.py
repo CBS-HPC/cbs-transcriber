@@ -34,28 +34,33 @@ def check_token(token, *, client=None):
     try:
         result["checked_at"] = datetime.now(UTC).isoformat()
         headers = {"Authorization": "Bearer " + token}
-        response = client.get(
-            "https://huggingface.co/api/whoami-v2", headers=headers, follow_redirects=False
-        )
-        if response.status_code in {401, 403}:
+        # Only response status is authority here. Close without reading account/model
+        # bodies, so an access check cannot buffer arbitrary private or unbounded JSON.
+        with client.stream(
+            "GET", "https://huggingface.co/api/whoami-v2", headers=headers, follow_redirects=False
+        ) as response:
+            identity_status = response.status_code
+        if identity_status in {401, 403}:
             result["token_status"] = "invalid"
             return result
-        if response.status_code != 200:
+        if identity_status != 200:
             result["token_status"] = "unavailable"
             return result
         # A successful identity request establishes authentication. Deliberately do not
         # return its body, which contains personal account and token permission details.
         result["token_status"] = "valid"
-        response = client.get(
+        with client.stream(
+            "GET",
             "https://huggingface.co/api/models/" + SPEAKER_MODEL + "/auth-check",
             headers=headers,
             follow_redirects=False,
-        )
+        ) as response:
+            access_status = response.status_code
         result["speaker_model_access"] = (
             "allowed"
-            if response.status_code == 200
+            if access_status == 200
             else "denied"
-            if response.status_code in {401, 403, 404}
+            if access_status in {401, 403, 404}
             else "unavailable"
         )
         return result
