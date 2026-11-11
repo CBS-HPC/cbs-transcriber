@@ -6,6 +6,12 @@ on `codex/post-mvp-work`. Read against current `SPEC.md`, `TODO.md`, the decisio
 not application behavior. An unchecked umbrella task is not evidence that its implementation
 is missing. Historical branch names and dated line numbers are not activation instructions.
 
+Status update, 11 November: item 9 was subsequently implemented and independently verified
+on the isolated post-MVP timing-hints branch. Its dated original finding is retained below;
+the [later receipt](../verification-2026-11-10-timing-hints.md) is authoritative for that fix.
+The other engineering/acceptance gaps below remain open. Reviewing these seventeen areas
+does not mean seventeen new product flows were implemented, or that the installed MVP changed.
+
 The important distinction is between delivered behavior, remaining engineering, performance
 evidence, actual device/provider acceptance, and decisions belonging to CBS or researchers.
 None of the seventeen subjects should simply disappear, but several requests to implement
@@ -140,14 +146,20 @@ No cross-tab editing or automatic multi-device synchronization is implied.
 
 ## 9. Old alignment-fit hints
 
-**A real, narrowly scoped correctness/design gap remains, including fresh work.**
+**Fixed on the isolated branch; not installed. Original 10 November finding follows.**
+
+The fresh-only, host-sealed versioned remedy is complete under ADR 0169. Its full child gate
+has 5,574 passes and 26 explicit skips, with independent review. It invalidates all old
+alignment-fit word hints after actual timing replacement/adoption, including omitted words,
+while preserving exact legacy history and lost-reply behavior. No historical backfill or
+automatic alignment was added; cloud historical transformation remains `not_checked`.
 `review_hints.current_hints()` binds cached hints to unchanged passage text.
 `_current_alignment_hints()` suppresses word spans marked `manual_timing` or
 `alignment_hints_stale`, but an unmarked legacy realignment can leave text unchanged and
 therefore keep older source alignment-fit hints. The existing suppression is useful and
 should not be removed. Text identity alone cannot prove a hint describes current timing.
 
-**Next:** review and implement the fresh versioned Apply policy and whole-passage
+**Original audit's next step, now completed locally:** review and implement the fresh versioned Apply policy and whole-passage
 invalidation described in the proposal below. Test old frozen jobs, exact lost-reply
 successors and partially suppressed spans before changing writers or captured validators.
 A historical backfill would invent authority; a silent marker rewrite is not a quick fix.
@@ -290,8 +302,8 @@ separately scoped institutional review.
   experiment. Keep a lighter source policy and playback remux as separate decisions.
 - Keep existing package capture/restore separate from the missing Activity capture lifecycle.
 - Good small implementation candidates are deterministic overlap regressions and bounded
-  synthetic report/media benchmark tools. Legacy hint provenance needs a versioned design
-  before writers change. None of the open quality/platform/institutional gates justifies
+  synthetic report/media benchmark tools. The later versioned hint remedy is complete on its
+  isolated branch; preserve its legacy and unchecked-history boundaries. None of the open quality/platform/institutional gates justifies
   silently starting provider jobs, processing real libraries or synchronizing environments.
 
 ## Focused verification

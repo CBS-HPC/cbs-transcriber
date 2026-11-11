@@ -47,8 +47,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   does not implicitly prepare models or start processing. This frontend addition is not yet
   implemented; the ordinary empty-page layout remains the current delivered behavior.
 - Planned anonymisation uses an anonymisation LLM running on UCloud (user direction,
-  11 November 2026). Exact model, hosting interface, identifier scope and mapping custody
-  remain undecided. The local synthetic demo is review/evaluation scaffolding, not the
+  11 November 2026). The hosting catalogue identifies PII-Tracer as the candidate: a PII
+  token classifier served through `/v1/pii`, not a chat-completions model. Integration,
+  transcript-quality acceptance, identifier scope and mapping custody remain open.
+  The local synthetic demo is review/evaluation scaffolding, not the
   intended inference backend. This direction does not activate jobs, upload data or claim
   an implemented anonymisation workflow; real execution/integration remains separately scoped.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space

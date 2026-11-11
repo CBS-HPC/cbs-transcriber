@@ -12,10 +12,20 @@ claims or select a detector. It refines the local, transcript-only demonstration
 
 The user wants an **anonymisation LLM running on UCloud**. The local literal/regex
 demonstration is review/evaluation scaffolding, not the intended inference backend.
-The exact model and its UCloud hosting/connection are still to be selected; this decision
-does not enable deployment, model downloads, paid jobs or transcript uploads.
+The requested hosting-project catalogue identifies **PII-Tracer**
+(`perplexity-ai/PII-Tracer-vLLM`) as the anonymisation candidate. It is a token classifier
+for PII spans and masking, not an autoregressive chat model. Integration must use the hosting
+agent's reviewed `/v1/pii` adapter rather than assume a chat-completions API.
 
-Next planning steps are model evaluation for Danish/English, the UCloud execution interface,
+The catalogue was inspected read-only on 11 November at hosting-project commit `1056938`:
+`src/ucloud_vllm_agent/data/model_catalog.json`, `docs/model-catalog.md` and
+`docs/pii-tracer.md`. It pins model revision
+`9f34cd1f5010a1de5a7b464eaf3c3a39db01b15a`, records a B200 MIG 1g.23gb test allocation,
+4096-token context and concurrency two. Its validation is historical synthetic hosting/API
+evidence; it does not prove current uptime or Danish interview detection quality.
+Candidate identification does not enable deployment, downloads, paid jobs or transcript uploads.
+
+Next planning steps are candidate evaluation for Danish/English, the Transcriber-to-agent interface,
 and a reviewed transcript-version-to-suggestions workflow. Keep the existing human span
 review, separate derived result and export-leak gates. Identifier coverage, pseudonym rules
 and mapping custody/retention remain open: the user's hosting preference does not answer

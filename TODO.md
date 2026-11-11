@@ -454,9 +454,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
   explicit provider policy and review behavior; assess privacy, costs and recovery before rollout.
 - [ ] **Anonymisation — UCloud LLM planned; implementation open.** User direction on
-  11 November: use an anonymisation LLM running on UCloud. Select and evaluate the exact
-  model for Danish/English and design its hosting/connection separately from transcription;
-  no particular model or hosting interface is selected yet. The earlier direct-identifiers-only
+  11 November: use the UCloud hosting project's anonymisation model. Its catalogue identifies
+  **PII-Tracer** (`perplexity-ai/PII-Tracer-vLLM`), a PII token classifier with a `/v1/pii`
+  adapter; evaluate it on Danish/English transcripts and design the Transcriber integration.
+  Historical synthetic hosting checks do not establish interview accuracy. The direct-identifiers-only
   scope question remains unanswered. No production in-app detector, model or review workflow
   exists. Local synthetic examples remain review/evaluation scaffolding. The branch expands explicit
   entity-label linking and export-canary tests; a six-case DA/EN fixture exposes detection gaps,
