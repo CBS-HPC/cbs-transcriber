@@ -1,4 +1,4 @@
-# Local anonymisation review — design and synthetic acceptance plan
+# Anonymisation review — UCloud LLM direction and synthetic acceptance plan
 
 Status: proposed design, 30 October 2026; offline design/prototyping resumed 10 November 2026.
 No production feature, schema, job, provider or
@@ -7,6 +7,19 @@ key store is introduced. The [original proposal](anonymisation-2026-10-30.md), d
 [weekend scope](../work-plans/weekend-2026-10-31.md#anonymisation-options-to-resolve)
 remain inputs; their open decisions remain open. This document does not revalidate model
 claims or select a detector. It refines the local, transcript-only demonstration.
+
+## Updated direction — 11 November 2026
+
+The user wants an **anonymisation LLM running on UCloud**. The local literal/regex
+demonstration is review/evaluation scaffolding, not the intended inference backend.
+The exact model and its UCloud hosting/connection are still to be selected; this decision
+does not enable deployment, model downloads, paid jobs or transcript uploads.
+
+Next planning steps are model evaluation for Danish/English, the UCloud execution interface,
+and a reviewed transcript-version-to-suggestions workflow. Keep the existing human span
+review, separate derived result and export-leak gates. Identifier coverage, pseudonym rules
+and mapping custody/retention remain open: the user's hosting preference does not answer
+the earlier direct-identifiers-only scope question. No app integration is implemented.
 
 ## Smallest useful experiment
 

@@ -34,6 +34,11 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   or release. Limit frontend decisions to explicit requests; broader choices await colleague
   feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
   project creation remains accessible through existing navigation at narrow widths too.
+- Planned anonymisation uses an anonymisation LLM running on UCloud (user direction,
+  11 November 2026). Exact model, hosting interface, identifier scope and mapping custody
+  remain undecided. The local synthetic demo is review/evaluation scaffolding, not the
+  intended inference backend. This direction does not activate jobs, upload data or claim
+  an implemented anonymisation workflow; real execution/integration remains separately scoped.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space
   permits, wrapping on narrow screens. Uncertainty controls follow Next to review.
 - UI: Text / Word and timing editor dropdown defaults to Text; audio/video switch retains position.

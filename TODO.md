@@ -453,8 +453,12 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
   explicit provider policy and review behavior; assess privacy, costs and recovery before rollout.
-- [ ] **Anonymisation — offline design/prototyping resumed; production decisions open.** No
-  production in-app detector, model or review workflow exists. The branch expands explicit
+- [ ] **Anonymisation — UCloud LLM planned; implementation open.** User direction on
+  11 November: use an anonymisation LLM running on UCloud. Select and evaluate the exact
+  model for Danish/English and design its hosting/connection separately from transcription;
+  no particular model or hosting interface is selected yet. The earlier direct-identifiers-only
+  scope question remains unanswered. No production in-app detector, model or review workflow
+  exists. Local synthetic examples remain review/evaluation scaffolding. The branch expands explicit
   entity-label linking and export-canary tests; a six-case DA/EN fixture exposes detection gaps,
   not real accuracy. [Offline evaluation](docs/evaluations/anonymisation-offline-2026-11-10.md).
   Turn the reviewed design and synthetic demo into a workflow with evaluated detectors, researcher
