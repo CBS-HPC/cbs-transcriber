@@ -1,9 +1,15 @@
-"""Designate a proven untouched sole existing result as Working (ADR 0141).
+"""Designate a proven untouched sole existing result as Working (ADR 0141, ADR 0179).
 
 ADR 0133 designates a new first result when it is created. Results saved earlier, or by legacy
 unmarked jobs, stay unassigned. At startup this pass proves each candidate inside one SQLite
 writer transaction and appends the same system `working_auto_first` event through
 `result_roles.move_automatic`. It never writes versions, projections, jobs or authorities.
+
+Only the reviewed runtime/database schema pairs 18/18 and 19/19 are supported. Schema-19
+passage review marks are neither Working consent nor a veto: this pass never reads or writes
+them. Native startup reconnection (ADR 0174) runs after this pass and may resume failed native
+work, so a negative-only bounded fence over native jobs and batch owners skips every recording
+such recovery could still change; unprovable owner inventories refuse the remaining pages.
 
 Project snapshots then follow through the ordinary `Store.snapshot_project` path, only for a
 verified ID-owned, link-free project folder. Staleness is derived from the snapshot's actual
@@ -31,6 +37,18 @@ DISCOVERY_SECONDS = 2  # bound for finding projects with automatic designations
 SNAPSHOT_CHECK_BYTES = MAX_TRANSCRIPT_BYTES  # larger snapshots require an ordinary explicit save
 BUSY_MILLISECONDS = 1000  # never wait the ordinary 15 s for another writer at startup
 CREATIONS = ("provider_result", "imported_result")
+SCHEMAS = (18, 19)  # reviewed runtime/database pairs (ADR 0141, ADR 0179)
+# ADR 0179 native-recovery fence. Exceeding an inventory bound is not a complete scan, so it
+# refuses the remaining pass instead of guessing that unread owners are settled.
+NATIVE_OWNERS = 4096  # native batch owner rows
+NATIVE_OWNER_MEMBERS = 1000  # members in one owner manifest (native_startup.MAX_MEMBERS)
+NATIVE_MEMBERS = 65536  # manifest members of all owners together
+NATIVE_LINKS = 65536  # jobs that name a native batch owner
+NATIVE_MANIFEST_BYTES = 1024 * 1024  # one owner manifest
+NATIVE_INVENTORY_BYTES = 16 * 1024 * 1024  # all owner manifests together
+NATIVE_PARAMS_BYTES = 8 * 1024 * 1024  # failed transcription parameters proved non-native
+NONNATIVE = ("openai", "custom", "ucloud-vllm")  # every providers.Settings type except "ucloud"
+SETTLED = ("completed", "cancelled")  # owner states native startup admission never resumes
 UNVERIFIED = (
     "Working versions were set in the library database, but the project folder or existing "
     "snapshot could not be verified within the supported checks, so project.json and exports "
@@ -70,6 +88,37 @@ _BLOCKING = (
     "UNION SELECT a.recording_id FROM working_job_authorities a "
     "LEFT JOIN jobs j ON j.id=a.job_id WHERE j.state IS NOT 'completed'"
 )
+# ADR 0179: failed transcription rows whose non-native identity must be proved in Python, as
+# native admission parses it, and every job that names a native batch owner (any state).
+# A text kind other than transcribe is never native; a non-text kind proves nothing.
+_NATIVE_JOBS = (
+    "WITH j AS (SELECT id,recording_id,state,params,"
+    "CASE WHEN typeof(kind)='text' THEN kind END AS kind,"
+    "CASE WHEN typeof(params)='text' AND json_valid(params) THEN params END AS p FROM jobs) "
+    "SELECT id,recording_id,"
+    "state='failed' AND (kind IS NULL OR kind='transcribe') AS failed,"
+    "CASE WHEN state='failed' AND kind='transcribe' AND typeof(params)='text' "
+    "AND length(CAST(params AS BLOB))<=? THEN params END AS params,"
+    "json_type(p,'$.native_batch_id') IS NOT NULL AS linked,"
+    "CASE WHEN json_type(p,'$.native_batch_id')='text' "
+    "THEN json_extract(p,'$.native_batch_id') END AS link FROM j "
+    "WHERE (state='failed' AND (kind IS NULL OR kind='transcribe')) "
+    "OR json_type(p,'$.native_batch_id') IS NOT NULL"
+)
+# Every native batch owner, its state and a bounded manifest. Larger manifests read as NULL.
+_NATIVE_OWNERS = (
+    "SELECT id,typeof(id) AS id_type,state,length(CAST(members AS BLOB)) AS members_size,"
+    "CASE WHEN typeof(members)='text' AND length(CAST(members AS BLOB))<=? THEN members END "
+    "AS members FROM native_batch_runs LIMIT ?"
+)
+
+
+class NativeScopeRefused(Exception):
+    """The native recovery scope cannot be proved; the remaining pass is refused."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
 
 
 def _unassigned():
@@ -90,8 +139,18 @@ def library_refusal(store, db):
         return "restored_library"
     from .store import SCHEMA_VERSION
 
-    if SCHEMA_VERSION != 18 or db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+    if (
+        SCHEMA_VERSION not in SCHEMAS
+        or db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION
+    ):
         return "unsupported_schema"
+    if (
+        SCHEMA_VERSION >= 19
+        and not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='passage_reviews'"
+        ).fetchone()
+    ):
+        return "unsupported_schema"  # Not a genuine schema-19 library.
     if not db.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='restored_owners'"
     ).fetchone():
@@ -106,6 +165,107 @@ def _bounded(db, deadline):
     db.execute(f"PRAGMA busy_timeout={BUSY_MILLISECONDS}")
     if deadline is not None:
         db.set_progress_handler(lambda: int(time.monotonic() >= deadline), 2000)
+
+
+def _within(deadline):
+    """Python work between statements stops at the same deadline as an interrupted statement."""
+    if deadline is not None and time.monotonic() >= deadline:
+        raise sqlite3.OperationalError("interrupted")
+
+
+def _nonnative(params):
+    """Prove a failed transcription non-native as native admission would parse its settings.
+
+    Missing, malformed, oversized or duplicate-key settings prove nothing.
+    """
+    if not isinstance(params, str):
+        return False
+    try:
+        value = json.loads(params, object_pairs_hook=_unique_object)
+    except (ValueError, RecursionError):
+        return False
+    settings = value.get("settings") if isinstance(value, dict) else None
+    if not isinstance(settings, dict):
+        return False
+    provider_type = settings.get("provider_type")
+    # An absent or null type is inferred as openai/custom, never as native UCloud.
+    return provider_type is None or (type(provider_type) is str and provider_type in NONNATIVE)
+
+
+def _identifier(value):
+    return type(value) is str and 0 < len(value) <= 200
+
+
+def _manifest(row):
+    """Return an owner's claimed (job, recording) pairs, or refuse an opaque inventory."""
+    refused = NativeScopeRefused("native_evidence_unverifiable")
+    if row["id_type"] != "text" or not isinstance(row["members"], str):
+        raise refused
+    try:
+        members = json.loads(row["members"], object_pairs_hook=_unique_object)
+    except (ValueError, RecursionError):
+        raise refused from None
+    # Native batches are created with at least two members and never change their manifest.
+    if not isinstance(members, list) or not 2 <= len(members) <= NATIVE_OWNER_MEMBERS:
+        raise refused
+    pairs = set()
+    for member in members:
+        if not isinstance(member, dict):
+            raise refused
+        job_id, recording_id = member.get("job_id"), member.get("recording_id")
+        if not (_identifier(job_id) and _identifier(recording_id)):
+            raise refused
+        pairs.add((job_id, recording_id))
+    return pairs
+
+
+def _native_scope(db, deadline):
+    """Recordings that native startup recovery (ADR 0174) could still change; negative only.
+
+    Never calls native admission or reads remote/file state. A failed transcription that does
+    not prove non-native settings, every member and member job of an unsettled owner (including
+    completed members and claimed recordings whose job is missing) and every missing,
+    unsettled or conflicting job/owner link is skipped. Opaque or unbounded inventories raise.
+    """
+    blocked, links = set(), {}
+    for row in db.execute(_NATIVE_JOBS, (NATIVE_PARAMS_BYTES,)):
+        _within(deadline)
+        if row["failed"] and not _nonnative(row["params"]):
+            blocked.add(row["recording_id"])
+        if row["linked"]:
+            if len(links) >= NATIVE_LINKS:
+                raise NativeScopeRefused("native_evidence_incomplete")
+            links[row["id"]] = (row["recording_id"], row["link"])
+    owners, members, size = {}, 0, 0
+    for row in db.execute(_NATIVE_OWNERS, (NATIVE_MANIFEST_BYTES, NATIVE_OWNERS + 1)):
+        _within(deadline)
+        if len(owners) >= NATIVE_OWNERS:
+            raise NativeScopeRefused("native_evidence_incomplete")
+        pairs = _manifest(row)
+        members += len(pairs)
+        size += row["members_size"]
+        if members > NATIVE_MEMBERS or size > NATIVE_INVENTORY_BYTES:
+            raise NativeScopeRefused("native_evidence_incomplete")
+        owners[row["id"]] = (row["state"] in SETTLED, pairs)
+    # Job to owner: a missing, unsettled or unlisted owner never means settled.
+    for job_id, (recording_id, owner_id) in links.items():
+        owner = owners.get(owner_id)
+        if owner is None or not owner[0] or (job_id, recording_id) not in owner[1]:
+            blocked.add(recording_id)
+    # Owner manifest to job: unsettled owners claim every member; settled ones need exact
+    # reciprocal links, otherwise both the claimed and the actual recording are skipped.
+    for owner_id, (settled, pairs) in owners.items():
+        for job_id, recording_id in pairs:
+            link = links.get(job_id)
+            if settled and link == (recording_id, owner_id):
+                continue
+            blocked.add(recording_id)
+            if link is None:
+                _within(deadline)
+                link = db.execute("SELECT recording_id FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if link is not None:
+                blocked.add(link[0])
+    return blocked
 
 
 def _structure(db, recording_id):
@@ -234,7 +394,7 @@ def _evidence(db, recording_id, result_id, version_id):
     return used, None
 
 
-def _designate(db, store, recording_id, blocked, summary):
+def _designate(db, store, recording_id, blocked, native, summary):
     """Prove and write one recording under a savepoint of the caller's writer transaction."""
     used = 0
     db.execute("SAVEPOINT existing_working")
@@ -244,6 +404,8 @@ def _designate(db, store, recording_id, blocked, summary):
             reason = found
         elif recording_id in blocked:
             reason = "pending_processing"
+        elif recording_id in native:
+            reason = "native_recovery"
         elif result_roles.read(db, store, recording_id, verify_tail=True) != _unassigned():
             reason = "role"
         else:
@@ -286,15 +448,17 @@ def designate_existing(store, *, page=PAGE, page_bytes=PAGE_BYTES, seconds=None)
     """Database pass only; idempotent and safe beside concurrent writers. Returns a summary.
 
     Each page is one BEGIN IMMEDIATE transaction that rechecks every fence it relies on and
-    commits atomically. Unsettled processing is collected by one job-table scan, repeated
-    only when another connection committed since the previous page (PRAGMA data_version,
-    read at the start of each writer transaction). With a time budget, lock waits are short
-    and every SQLite statement, including that scan, is interrupted at the deadline; an
-    interrupted page rolls back and the remaining candidates continue at the next pass.
+    commits atomically. Unsettled processing and the native recovery scope are collected by
+    one bounded refresh, repeated only when another connection committed since the previous
+    page (PRAGMA data_version, read at the start of each writer transaction). With a time
+    budget, lock waits are short and every SQLite statement, including those scans, is
+    interrupted at the deadline; an interrupted page rolls back and the remaining candidates
+    continue at the next pass. An unprovable native scope refuses the remaining pages; pages
+    committed earlier stay committed and are reported as partial progress.
     """
     summary = _summary()
     deadline = None if seconds is None else time.monotonic() + seconds
-    after, blocked, seen = "", None, None
+    after, blocked, native, seen = "", None, None, None
     try:
         with store.connection() as db:
             _bounded(db, deadline)
@@ -320,12 +484,21 @@ def designate_existing(store, *, page=PAGE, page_bytes=PAGE_BYTES, seconds=None)
                         return summary
                     version = db.execute("PRAGMA data_version").fetchone()[0]
                     if blocked is None or version != seen:
-                        blocked, seen = {row[0] for row in db.execute(_BLOCKING)}, version
+                        pending = {row[0] for row in db.execute(_BLOCKING)}
+                        try:
+                            scope = _native_scope(db, deadline)
+                        except NativeScopeRefused as refusal:
+                            # Nothing of this page was written. Earlier pages stay committed.
+                            db.rollback()
+                            summary["refused"] = refusal.reason
+                            summary["incomplete"] = summary["pages"] > 0
+                            return summary
+                        blocked, native, seen = pending, scope, version
                         summary["job_scans"] += 1
                     summary["pages"] += 1
                     used = 0
                     for row in rows:
-                        used += _designate(db, store, row["id"], blocked, summary)
+                        used += _designate(db, store, row["id"], blocked, native, summary)
                         after = row["id"]
                         if used >= page_bytes or (
                             deadline is not None and time.monotonic() >= deadline
