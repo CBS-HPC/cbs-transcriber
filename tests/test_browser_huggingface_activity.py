@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import test_browser
 from playwright.sync_api import expect
-from test_browser import LocalApp
+from test_browser import LocalApp, skip_first_use
 from test_browser import local_app as local_app
 from test_browser import page as page
 from test_browser_first_use import native_account as native_account
@@ -96,6 +96,7 @@ def test_hf_activity_progress_stop_and_retry_use_the_setup_owner(page, local_app
 
     page.route("**/api/huggingface-tasks/*/*", action)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#activity-open").click()
     card = page.locator(f'[data-hf-setup="{TASK_ID}"]')
     expect(card).to_contain_text("Model access and preparation")
@@ -133,6 +134,7 @@ def test_hf_unavailable_stage_stays_accessible_after_clear_finished(page, local_
     ]
     page.route("**/api/jobs", lambda route: route.fulfill(json=[task]))
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#activity-open").click()
     expect(page.locator(f'[data-hf-setup="{TASK_ID}"]')).to_contain_text(
         "Synthetic service unavailable"
@@ -178,13 +180,17 @@ def test_hf_settings_save_and_saved_token_recheck_queue_activity_without_inline_
         ),
     )
     page.goto(inert_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     page.get_by_role("tab", name="Hugging Face", exact=True).click()
     expect(page.locator("#hf-settings-check")).to_be_disabled()
+    expect(page.locator("#hf-settings-token")).to_have_class("credential-missing")
     page.locator("#hf-settings-token").fill("hf_synthetic-settings-token")
+    expect(page.locator("#hf-settings-token")).not_to_have_class("credential-missing")
     expect(page.locator("#hf-settings-check")).to_be_disabled()
     page.locator("#hf-settings-save").click()
     expect(page.locator("#hf-settings-token")).to_have_value("")
+    expect(page.locator("#hf-settings-token")).not_to_have_class("credential-missing")
     expect(page.locator("#hf-settings-activity")).to_be_visible()
     expect(page.locator("#hf-settings-check")).to_be_enabled()
     page.set_viewport_size({"width": 390, "height": 1000})
@@ -211,6 +217,143 @@ def test_hf_settings_save_and_saved_token_recheck_queue_activity_without_inline_
     storage = page.evaluate("() => JSON.stringify({...localStorage})")
     assert "hf_synthetic-settings-token" not in storage
     assert not inert_app.server.config.app.state.store.all("SELECT id FROM jobs")
+
+
+@pytest.mark.parametrize("phase", ["native", "native-lost", "hf-failed", "hf-failed-navigation"])
+def test_other_tab_skip_preserves_accepted_setup_outcomes(page, inert_app, native_account, phase):
+    app = inert_app.server.config.app
+    if phase.endswith("navigation"):
+        app.state.store.create_project("Existing synthetic project")
+    held, writes = [], []
+    retry = False
+
+    def intercept(route):
+        if route.request.method not in {"POST", "PUT"}:
+            route.continue_()
+            return
+        writes.append(route.request.url)
+        native = route.request.url.endswith("/api/providers")
+        should_hold = (phase.startswith("native") and native) or (
+            phase.startswith("hf-") and not native and not retry
+        )
+        if should_hold:
+            response = route.fetch() if native else None
+            held.append((route, response))
+            page.evaluate("window.setupWriteHeld = true")
+        else:
+            route.continue_()
+
+    page.goto(inert_app.url)
+    other = page.context.new_page()
+    other.goto(inert_app.url)
+    expect(other.locator("#first-use-dialog")).to_have_js_property("open", True)
+    page.route("**/api/providers", intercept)
+    page.route("**/api/huggingface-settings", intercept)
+    page.locator("#first-use-ucloud-key").fill("synthetic-ucloud-key")
+    page.locator("#first-use-hf-token").fill("hf_synthetic-accepted")
+    page.locator("#first-use-save").click()
+    page.wait_for_function("() => window.setupWriteHeld === true")
+    version = page.evaluate("firstUse.version")
+    drafts = [
+        page.locator(selector).input_value()
+        for selector in ("#first-use-ucloud-key", "#first-use-hf-token")
+    ]
+    page.evaluate("""() => {
+      window.setupMarkerSeen = false;
+      addEventListener('storage', event => {
+        if(event.key === FIRST_USE_MARKER) window.setupMarkerSeen = true;
+      });
+    }""")
+    other.locator("#first-use-skip").click()
+    page.wait_for_function("() => window.setupMarkerSeen")
+    page.bring_to_front()
+    expect(page.locator("#first-use-dialog")).to_have_js_property("open", True)
+    expect(page.locator("#first-use-close")).to_be_disabled()
+    expect(page.locator("#first-use-skip")).to_be_disabled()
+    page.keyboard.press("Escape")
+    assert page.evaluate("firstUse.version") == version
+    assert [
+        page.locator(selector).input_value()
+        for selector in ("#first-use-ucloud-key", "#first-use-hf-token")
+    ] == drafts
+    if phase.endswith("navigation"):
+        page.evaluate("location.hash = '/projects/' + '0'.repeat(32)")
+        expect(page.locator("#toast")).to_contain_text("Wait for the credential save")
+    route, response = held.pop()
+    if phase == "native-lost":
+        route.abort("failed")
+        expect(page.locator("#first-use-status")).to_contain_text("save was not confirmed")
+        expect(page.locator("#first-use-save")).to_be_disabled()
+        expect(page.locator("#first-use-dialog")).to_have_js_property("open", True)
+        page.locator("#first-use-close").click()
+    elif phase.startswith("hf-"):
+        route.fulfill(status=400, json={"detail": "Synthetic token save rejected."})
+        expect(page.locator("#first-use-dialog")).to_have_js_property("open", True)
+        expect(page.locator("#first-use-status")).to_contain_text("UCloud connection saved")
+        expect(page.locator("#first-use-status")).to_contain_text(
+            "Hugging Face token save was not confirmed"
+        )
+        retry = True
+        page.locator("#first-use-hf-token").fill("hf_synthetic-retry")
+        page.locator("#first-use-save").click()
+    else:
+        route.fulfill(response=response)
+    expect(page.locator("#first-use-dialog")).to_be_hidden()
+    assert (
+        app.state.credentials.get("ucloud-control:https://cloud.sdu.dk") == "synthetic-ucloud-key"
+    )
+    assert sum(url.endswith("/api/providers") for url in writes) == 1
+    expected_hf = (
+        ""
+        if phase == "native-lost"
+        else "hf_synthetic-retry"
+        if phase.startswith("hf-")
+        else "hf_synthetic-accepted"
+    )
+    assert app.state.credentials.get(HF_SCOPE) == expected_hf
+    assert sum(url.endswith("/api/huggingface-settings") for url in writes) == (
+        0 if phase == "native-lost" else 2 if phase.startswith("hf-") else 1
+    )
+    assert not app.state.store.all("SELECT id FROM jobs")
+    other.close()
+
+
+def test_hf_missing_highlight_waits_for_presence_and_updates_after_forget(page, inert_app):
+    app = inert_app.server.config.app
+    app.state.credentials.set(HF_SCOPE, "hf_stored-synthetic", False)
+    held = []
+
+    def hold(route):
+        held.append(route)
+        page.evaluate("window.hfPresenceHeld = true")
+
+    page.route("**/api/huggingface-settings", hold)
+    page.goto(inert_app.url)
+    skip_first_use(page)
+    page.locator("#settings-open").click()
+    tab = page.get_by_role("tab", name="Hugging Face", exact=True)
+    tab.click()
+    token = page.locator("#hf-settings-token")
+    expect(token).to_be_disabled()
+    expect(token).not_to_have_class("credential-missing")
+    page.wait_for_function("() => window.hfPresenceHeld")
+    assert held
+    held.pop().fulfill(status=503, json={"detail": "Synthetic metadata unavailable."})
+    expect(page.locator("#provider-error")).to_contain_text("Synthetic metadata unavailable")
+    expect(token).not_to_have_class("credential-missing")
+    page.unroute("**/api/huggingface-settings")
+    tab.click()
+    expect(token).to_be_enabled()
+    expect(token).to_have_value("")
+    expect(token).not_to_have_class("credential-missing")
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#hf-settings-forget").click()
+    expect(token).to_have_class("credential-missing")
+    assert not app.state.credentials.get(HF_SCOPE)
+    token.fill("hf_unsaved-synthetic")
+    expect(token).not_to_have_class("credential-missing")
+    token.fill("")
+    expect(token).to_have_class("credential-missing")
 
 
 def test_first_use_native_and_hf_save_create_one_inert_activity_owner(

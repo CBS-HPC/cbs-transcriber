@@ -169,54 +169,6 @@
             />
             <h1>Transcriber</h1>
           </div>
-          <form
-            id="first-use-setup"
-            class="first-use-setup"
-            aria-labelledby="first-use-title"
-            hidden
-          >
-            <h2 id="first-use-title">Connect UCloud</h2>
-            <p>
-              Save your UCloud connection to transcribe recordings. You can also
-              do this later in Settings.
-            </p>
-            <label
-              >UCloud API key
-              <input
-                id="first-use-ucloud-key"
-                type="password"
-                autocomplete="off"
-                maxlength="4096"
-                required
-              />
-            </label>
-            <label
-              >Hugging Face token (optional)
-              <input
-                id="first-use-hf-token"
-                type="password"
-                autocomplete="off"
-                maxlength="4096"
-              />
-            </label>
-            <p class="field-note">
-              Saving the optional token checks access and prepares configured
-              models when allowed in Settings. Follow progress in Activity.
-            </p>
-            <label class="checkbox-label"
-              ><input id="first-use-remember" type="checkbox" checked />Remember
-              credentials in the OS credential store</label
-            >
-            <p id="first-use-status" role="status"></p>
-            <div class="dialog-actions">
-              <button id="first-use-skip" type="button" class="button">
-                Skip for now
-              </button>
-              <button id="first-use-save" type="submit" class="button primary">
-                Connect and save
-              </button>
-            </div>
-          </form>
           <div id="project-content" hidden>
             <div class="library-toolbar">
               <div>
@@ -2390,6 +2342,67 @@
           <button type="button" class="button" data-close="word-dialog">
             Cancel</button
           ><button class="button primary" type="submit">Save correction</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="first-use-dialog"
+      class="settings-dialog first-use-dialog"
+      aria-labelledby="first-use-title"
+      aria-describedby="first-use-description"
+    >
+      <form id="first-use-setup" class="first-use-setup">
+        <div class="dialog-heading">
+          <h2 id="first-use-title">Connect UCloud</h2>
+          <button
+            id="first-use-close"
+            type="button"
+            class="icon-button"
+            aria-label="Close setup"
+          >
+            ×
+          </button>
+        </div>
+        <p id="first-use-description">
+          Save your UCloud connection to transcribe recordings. You can also do
+          this later in Settings.
+        </p>
+        <label
+          >UCloud API key
+          <input
+            id="first-use-ucloud-key"
+            type="password"
+            autocomplete="off"
+            maxlength="4096"
+            required
+            autofocus
+          />
+        </label>
+        <label
+          >Hugging Face token (optional)
+          <input
+            id="first-use-hf-token"
+            type="password"
+            autocomplete="off"
+            maxlength="4096"
+          />
+        </label>
+        <p class="field-note">
+          Saving the optional token checks access and prepares configured models
+          when allowed in Settings. Follow progress in Activity.
+        </p>
+        <label class="checkbox-label"
+          ><input id="first-use-remember" type="checkbox" checked />Remember
+          credentials in the OS credential store</label
+        >
+        <p id="first-use-status" role="status"></p>
+        <div class="dialog-actions">
+          <button id="first-use-skip" type="button" class="button">
+            Skip for now
+          </button>
+          <button id="first-use-save" type="submit" class="button primary">
+            Connect and save
+          </button>
         </div>
       </form>
     </dialog>

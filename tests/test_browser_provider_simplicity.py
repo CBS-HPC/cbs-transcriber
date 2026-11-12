@@ -6,7 +6,7 @@ from browser_provider_support import mock_native_check
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
-from test_browser import provider_advanced
+from test_browser import provider_advanced, skip_first_use
 from test_native_model_profiles import raw_profile
 
 from cbs_transcriber.catalog import provider_catalog, ucloud_models
@@ -53,6 +53,7 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
             )
         before = app.state.store.all("SELECT * FROM providers ORDER BY id")
         page.goto(local_app.url)
+        skip_first_use(page)
         page.locator("#settings-open").click()
         expect(page.locator("#settings-dialog")).to_be_visible()
         expect(page.get_by_role("tab", name=tab, exact=True)).to_have_count(0)
@@ -120,6 +121,12 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
     recording = app.state.store.create_recording(project["id"], "Models.wav")
     expected_models = {p["model"] for p in catalog_models}
     page.goto(local_app.url + f"/#/projects/{project['id']}")
+    runtime_offered = page.evaluate("featureOn('cbs_runtime')")
+    offered_models = {
+        model["model"]
+        for model in catalog_models
+        if kind != "ucloud" or runtime_offered or model.get("engine") != "whisperx"
+    }
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name=tab, exact=True).click()
@@ -132,7 +139,7 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
     expect(page.locator("#provider-advanced")).not_to_have_attribute("open", "")
     page.locator("#api-key").fill("shared-connection-draft-key")
     options = page.locator("#provider-model-options [data-enabled-model]")
-    expect(options).to_have_count(len(expected_models))
+    expect(options).to_have_count(len(offered_models))
     for option in options.all():
         expect(option).to_be_checked()
     page.locator(f'[data-enabled-model="{excluded}"]').uncheck()
@@ -161,7 +168,7 @@ def test_builtin_connections_preserve_profiles_and_control_available_models(
             assert current[field] == prior[field]
     disabled = next(p for p in profiles if p["model"] == excluded)
     page.locator("#bulk-provider-kind").select_option(kind)
-    expect(page.locator("#bulk-provider option")).to_have_count(len(expected_models) - 1)
+    expect(page.locator("#bulk-provider option")).to_have_count(len(offered_models) - 1)
     expect(page.locator(f'#bulk-provider option[value="{disabled["id"]}"]')).to_have_count(0)
     card = page.locator(f'[data-recording="{recording["id"]}"]')
     expect(
@@ -201,6 +208,7 @@ def test_provider_basic_setup_and_reopen_preserve_keys(page, local_app, monkeypa
     app = local_app.server.config.app
     mock_native_check(monkeypatch, key="synthetic-basic-key")
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator(".provider-manager")).to_be_hidden()
@@ -278,6 +286,7 @@ def test_deferred_families_preserve_advanced_policy_and_credentials(
     )
     before = app.state.store.one("SELECT * FROM providers WHERE id=?", (saved["id"],))
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
@@ -335,6 +344,7 @@ def test_late_provider_mutation_preserves_newer_configuration_drafts(page, local
 
     page.route(f"**/api/providers/{first['id']}", hold)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     provider_advanced(page)
@@ -373,6 +383,7 @@ def test_late_provider_refresh_retains_new_connection_and_available_model_drafts
     held = []
     page.route(f"**/api/providers/{first['id']}", lambda route: held.append(route))
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     provider_advanced(page)
@@ -417,6 +428,7 @@ def test_unknown_openai_models_keep_settings_and_available_model_controls(page, 
         for identifier in identifiers
     }
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.get_by_role("tab", name="OpenAI API", exact=True)).to_have_count(0)
@@ -439,7 +451,17 @@ def test_all_builtin_models_can_be_disabled_and_reenabled_without_losing_connect
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     options = page.locator("#provider-model-options [data-enabled-model]")
-    expect(options).to_have_count(len(ucloud_models()))
+    runtime_offered = page.evaluate("featureOn('cbs_runtime')")
+    offered_models = [
+        model for model in ucloud_models() if runtime_offered or model.get("engine") != "whisperx"
+    ]
+    expect(options).to_have_count(len(offered_models))
+    offered_names = {model["model"] for model in offered_models}
+    hidden_rows = {
+        profile["id"]: app.state.store.one("SELECT * FROM providers WHERE id=?", (profile["id"],))
+        for profile in public_profiles(app.state.store, app.state.credentials)["providers"]
+        if profile["provider_type"] == "ucloud" and profile["model"] not in offered_names
+    }
     for option in options.all():
         option.uncheck()
     page.get_by_role("button", name="Save settings", exact=True).click()
@@ -454,7 +476,12 @@ def test_all_builtin_models_can_be_disabled_and_reenabled_without_losing_connect
         if p["provider_type"] == "ucloud"
     ]
     assert len(profiles) == len(ucloud_models())
-    assert all(not p["enabled"] and p["has_key"] for p in profiles)
+    assert all(p["has_key"] for p in profiles)
+    assert all(not p["enabled"] for p in profiles if p["model"] in offered_names)
+    assert {
+        identifier: app.state.store.one("SELECT * FROM providers WHERE id=?", (identifier,))
+        for identifier in hidden_rows
+    } == hidden_rows
     original_ids = {p["id"] for p in profiles}
     whisper_id = next(p["id"] for p in profiles if p["model"] == "large-v3")
     page.locator("#settings-open").click()
@@ -474,7 +501,13 @@ def test_all_builtin_models_can_be_disabled_and_reenabled_without_losing_connect
         if p["provider_type"] == "ucloud"
     ]
     assert {p["id"] for p in profiles} == original_ids
-    assert [p["model"] for p in profiles if p["enabled"]] == ["large-v3"]
+    assert [p["model"] for p in profiles if p["enabled"] and p["model"] in offered_names] == [
+        "large-v3"
+    ]
+    assert {
+        identifier: app.state.store.one("SELECT * FROM providers WHERE id=?", (identifier,))
+        for identifier in hidden_rows
+    } == hidden_rows
     assert native["id"] == whisper_id
     assert (
         app.state.credentials.get("ucloud-control:https://cloud.sdu.dk") == "synthetic-control-key"

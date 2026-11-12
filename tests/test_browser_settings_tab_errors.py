@@ -6,6 +6,7 @@ import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
+from test_browser import skip_first_use
 
 pytestmark = pytest.mark.browser
 TABS = [
@@ -72,6 +73,7 @@ def held_settings_load(page, local_app, tab, endpoint, *, local_response=None):
         ),
     )
     page.goto(local_app.url)
+    skip_first_use(page)
     page.wait_for_function("() => state.providers.length > 0")
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()

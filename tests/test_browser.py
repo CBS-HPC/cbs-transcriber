@@ -88,7 +88,17 @@ def page():
         browser.close()
 
 
+def skip_first_use(page):
+    """Dismiss the visible setup dialog as a user, before unrelated home-page actions."""
+    page.wait_for_function("() => firstUse.ready")
+    dialog = page.locator("#first-use-dialog")
+    if dialog.evaluate("node => node.open"):
+        page.locator("#first-use-skip").click()
+        expect(dialog).to_be_hidden()
+
+
 def create_project(page, name):
+    skip_first_use(page)
     expect(page.locator(".nav-heading button")).to_have_count(0)
     page.locator("#sidebar-create").click()
     page.locator("#name-input").fill(name)

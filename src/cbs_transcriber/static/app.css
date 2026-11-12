@@ -767,18 +767,11 @@ html.busy * {
   margin: 0;
   font-size: clamp(30px, 5vw, 44px);
 }
-.first-use-active .empty-library-brand {
-  min-height: 0;
-  padding: 20px 16px;
-  gap: 12px;
+.first-use-dialog {
+  width: min(560px, calc(100vw - 30px));
 }
 .first-use-setup {
-  max-width: 520px;
-  margin: 0 auto 28px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: white;
+  margin: 0;
 }
 .first-use-setup h2 {
   margin: 0 0 10px;
@@ -2475,6 +2468,9 @@ dialog select {
   padding: 10px 12px;
   background: white;
   font-size: 12px;
+}
+dialog input.credential-missing {
+  background: #fffcc8;
 }
 dialog .checkbox-label {
   display: flex;

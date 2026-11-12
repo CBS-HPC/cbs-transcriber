@@ -47,8 +47,13 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   or release. Limit frontend decisions to explicit requests; broader choices await colleague
   feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
   project creation remains accessible through existing navigation at narrow widths too.
-- Post-MVP first-launch onboarding (11 November): offer UCloud API key entry and optional
-  Hugging Face token entry on the front page, reusing Settings checks and credential storage.
+- Post-MVP first-launch onboarding (11 November; presentation amended 12 November): offer
+  UCloud API key entry and optional Hugging Face token entry in an independent setup dialog,
+  reusing Settings checks and credential storage. Keep front/project pages clear of an inline
+  setup card. Skip, close and Escape retain the guarded save/late-reply semantics.
+  Missing credentials use a pale-yellow field only when no key/token is saved and its draft
+  is blank; an empty field retaining an existing credential stays normal. This is presence,
+  not validation or operational readiness.
   Keep later Settings access; empty libraries alone do not imply first use. UCloud-only setup
   starts no preparation. The user's later HF decision explicitly queues access/configured-model
   preparation in Activity under ADR 0173. Implementation is on the isolated morning branch;
@@ -350,6 +355,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   complete local raw/chunk finalization; accepted requests drain. Never infer cache completeness
   from the fresh-only audio-plan helper alone. ADR 0170; mocked no-outbound checks.
 - V213: First-use home setup reuses exact UCloud discovery/save proofs and credential storage;
+  presentation is a separate accessible dialog; accepted saves cannot be dismissed while
+  pending, and leaving/Skip cannot allow late checks to write. Keep the existing completion
+  marker and existing-profile Settings handoff. Missing-key decoration uses only presence
+  metadata and blank-draft state, never secrets or a claim that the connection is checked.
   optional HF uses Save and V215's explicitly chosen background workflow, never the old inline
   download-capable Check route. UCloud-only setup starts no preparation/processing. A nonsecret
   browser completion marker follows explicit Save/Skip,
@@ -1887,6 +1896,8 @@ T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
+T141|~|Automatic native singleton/batch startup reconnect authorized; ADR0174 reviewed, implementation frozen in separate child and final445-case gate running; not loaded|V6,V9,I.native-batch,ADR0174
+T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1989,3 +2000,6 @@ B440|2026-11-12|A long Windows verification fixture produced a 277-character own
 B441|2026-11-12|An undo-merge browser fixture selected both visible Text and hidden Timing-pane Cancel controls|T140; scope the locator to the Text pane and retain draft/history/revision assertions; mechanical fixture correction needs no new product invariant
 B442|2026-11-12|Larger passage fonts exposed comparison alignment finishing after playback's resize reveal, stranding the current word below a short video viewport|V41,T140; schedule the existing guarded Follow pass after alignment writes; baseline/candidate differential, nine private geometry observations and formal resize/focus/draft checks
 B443|2026-11-12|An older layout test expected a quiet generic save status after rewriting an untimed passage, contradicting the accepted partial-timing notice|V208,T140; assert the actual nonblocking warning and persisted wording while retaining geometry/history checks; shared helper bodies unchanged
+B444|2026-11-12|Cross-tab first-use completion could invalidate an accepted credential-save reply or hide its partial/uncertain outcome|V213,T142; retain the accepted Save owner until success or explicit dismissal, preserve optional-HF continuation and inline recovery, and test held Native/HF replies with another-tab completion
+B445|2026-11-12|A rejected hash navigation could rewind home eligibility and hide an accepted Save's later partial-HF error|V213,T142; keep the owned setup outcome visible across the rejected navigation until success or explicit dismissal; retain the failing diagnostic and recheck the exact browser adversary
+B449|2026-11-12|MVP Settings grouping hid a saved Runtime profile option despite retaining its form identity, leaving the hidden manager projection empty during credential recovery|V213,V212,T142; include only supplied saved held profiles in Settings grouping, preserve new-work/catalog hiding, and retain exact no-widening and generic-save oracles

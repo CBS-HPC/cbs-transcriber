@@ -118,6 +118,7 @@ const firstUse = {
   uncertain: false,
   handoff: false,
   ready: false,
+  retainSaveOutcome: false,
 };
 function completedNativeSetup(provider) {
   return (
@@ -128,6 +129,7 @@ function completedNativeSetup(provider) {
   );
 }
 function firstUseCompleted() {
+  if (firstUse.retainSaveOutcome) return firstUse.done;
   try {
     firstUse.done ||= localStorage.getItem(FIRST_USE_MARKER) === "1";
   } catch {
@@ -135,39 +137,74 @@ function firstUseCompleted() {
   }
   return firstUse.done;
 }
+function credentialMissing(input, saved) {
+  input.classList.toggle(
+    "credential-missing",
+    saved === false && !input.value.trim(),
+  );
+}
+function firstUseProvider() {
+  return (
+    state.providers.find(
+      (provider) =>
+        provider.id === state.settingsProvider && visibleProvider(provider),
+    ) ||
+    state.providers.find(
+      (provider) =>
+        provider.id === state.defaultProvider && visibleProvider(provider),
+    ) ||
+    state.providers.find(visibleProvider)
+  );
+}
 function renderFirstUse() {
   const home = ["", "#", "#/", "#main"].includes(location.hash);
+  const saving = !!firstUse.saving;
+  const busy = firstUse.busy || saving;
   const visible =
-    firstUse.ready &&
-    home &&
-    !firstUseCompleted() &&
-    !firstUse.handoff &&
-    !$("#settings-dialog").open &&
-    (!state.providers.some(completedNativeSetup) ||
-      firstUse.savedNative ||
-      firstUse.issue ||
-      firstUse.busy);
-  $("#first-use-setup").hidden = !visible;
-  $("#library-view").classList.toggle("first-use-active", visible);
+    saving ||
+    (firstUse.ready &&
+      (home || firstUse.retainSaveOutcome) &&
+      !firstUseCompleted() &&
+      !firstUse.handoff &&
+      !$("#settings-dialog").open &&
+      (!state.providers.some(completedNativeSetup) ||
+        firstUse.savedNative ||
+        firstUse.issue ||
+        firstUse.busy));
+  const dialog = $("#first-use-dialog");
+  if (visible && !dialog.open) dialog.showModal();
+  else if (!visible && dialog.open) dialog.close();
   $("#first-use-ucloud-key").required = !firstUse.savedNative;
-  $("#first-use-ucloud-key").disabled = firstUse.busy || firstUse.savedNative;
-  $("#first-use-hf-token").disabled = firstUse.busy;
-  $("#first-use-remember").disabled = firstUse.busy;
-  $("#first-use-save").disabled = firstUse.busy || firstUse.uncertain;
+  $("#first-use-ucloud-key").disabled = busy || firstUse.savedNative;
+  $("#first-use-hf-token").disabled = busy;
+  $("#first-use-remember").disabled = busy;
+  $("#first-use-save").disabled = busy || firstUse.uncertain;
   $("#first-use-save").textContent = firstUse.savedNative
     ? "Finish setup"
     : "Connect and save";
-  $("#first-use-skip").disabled = firstUse.saving;
-  $("#settings-open").disabled = firstUse.saving;
+  $("#first-use-skip").disabled = saving;
+  $("#first-use-close").disabled = saving;
+  $("#settings-open").disabled = saving;
+  credentialMissing(
+    $("#first-use-ucloud-key"),
+    firstUse.ready
+      ? firstUse.savedNative || !!firstUseProvider()?.has_key
+      : null,
+  );
+  credentialMissing($("#first-use-hf-token"), hfSavedToken);
 }
 function cancelFirstUse() {
+  if (firstUse.saving) return;
   firstUse.version++;
   firstUse.busy = false;
+  firstUse.retainSaveOutcome = false;
   $("#first-use-ucloud-key").value = "";
   $("#first-use-hf-token").value = "";
   renderFirstUse();
 }
 function completeFirstUse() {
+  if (firstUse.saving) return;
+  const wasOpen = $("#first-use-dialog").open;
   firstUse.done = true;
   firstUse.issue = false;
   firstUse.uncertain = false;
@@ -178,25 +215,35 @@ function completeFirstUse() {
     // No credentials or admission proof are stored in browser storage.
   }
   cancelFirstUse();
+  if (wasOpen && !$("#settings-dialog").open) $("#settings-open").focus();
 }
 function firstUseSettingsHandoff(profile, key, remember) {
   firstUse.handoff = true;
   cancelFirstUse();
   fillProvider(profile);
   $("#api-key").value = key;
+  updateProviderCredential();
   $("#remember-key").checked = remember;
   $("#settings-dialog").showModal();
 }
 $("#first-use-skip").addEventListener("click", completeFirstUse);
+$("#first-use-close").addEventListener("click", completeFirstUse);
+$("#first-use-dialog").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  completeFirstUse();
+});
+for (const id of ["#first-use-ucloud-key", "#first-use-hf-token"])
+  $(id).addEventListener("input", renderFirstUse);
 window.addEventListener("storage", (event) => {
   if (event.key === FIRST_USE_MARKER && event.newValue === "1") {
+    if (firstUse.retainSaveOutcome) return;
     firstUse.done = true;
     cancelFirstUse();
   }
 });
 $("#first-use-setup").addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (firstUse.busy || firstUse.uncertain) return;
+  if (firstUse.busy || firstUse.saving || firstUse.uncertain) return;
   const version = ++firstUse.version,
     epoch = viewEpoch;
   const current = () => version === firstUse.version && epoch === viewEpoch;
@@ -213,13 +260,17 @@ $("#first-use-setup").addEventListener("submit", async (event) => {
     if (!hfToken) return true;
     if (!current()) return false;
     stage = "hf";
+    firstUse.retainSaveOutcome = true;
     firstUse.saving = version;
     renderFirstUse();
-    await api("/huggingface-settings", {
+    const saved = await api("/huggingface-settings", {
       method: "PUT",
       body: { hf_token: hfToken, remember },
     });
     if (!current()) return false;
+    hfSavedToken =
+      typeof saved.has_token === "boolean" ? saved.has_token : null;
+    updateHfCheck();
     $("#first-use-hf-token").value = "";
     firstUse.saving = false;
     renderFirstUse();
@@ -227,16 +278,7 @@ $("#first-use-setup").addEventListener("submit", async (event) => {
   }
   try {
     if (!firstUse.savedNative) {
-      const existing =
-        state.providers.find(
-          (provider) =>
-            provider.id === state.settingsProvider && visibleProvider(provider),
-        ) ||
-        state.providers.find(
-          (provider) =>
-            provider.id === state.defaultProvider && visibleProvider(provider),
-        ) ||
-        state.providers.find(visibleProvider);
+      const existing = firstUseProvider();
       if (existing) {
         firstUseSettingsHandoff(existing, key, remember);
         $("#provider-advanced").open = true;
@@ -271,6 +313,7 @@ $("#first-use-setup").addEventListener("submit", async (event) => {
         return;
       }
       stage = "native";
+      firstUse.retainSaveOutcome = true;
       firstUse.saving = version;
       status.textContent = "Saving the UCloud connection…";
       renderFirstUse();
@@ -437,6 +480,7 @@ async function loadProviders() {
   state.providers = data.providers;
   state.defaultProvider = data.default_provider_id;
   renderProviderSelects();
+  updateProviderCredential();
   renderFirstUse();
 }
 async function refreshProviderConnections() {
@@ -444,6 +488,7 @@ async function refreshProviderConnections() {
   state.providers = data.providers;
   state.defaultProvider = data.default_provider_id;
   renderProviderSelects();
+  updateProviderCredential();
   if (state.recording) renderEditorDetails();
   else renderRecordings();
 }
@@ -481,7 +526,7 @@ function providerOptions(
   const option = (p) =>
     `<option value="${p.id}" ${p.id === selected ? "selected" : ""} ${!forSettings && p.provider_type === "ucloud-vllm" && (!p.base_url || !p.has_key) ? "disabled" : ""}>${h(forSettings ? configurationLabel(p.name, p.model) : modelLabel(p))}${p.provider_type === "ucloud-vllm" && !p.base_url ? " · awaiting deployment" : ""}</option>`;
   return providers.every((p) => providerTab(p) === "ucloud")
-    ? ucloudModelGroups(providers, option)
+    ? ucloudModelGroups(providers, option, forSettings)
     : providers.map(option).join("");
 }
 function ucloudModelGroup(model) {
@@ -503,8 +548,11 @@ function ucloudGroupLabels() {
     ? ["UCloud Transcriber", "CBS Runtime / WhisperX"]
     : ["UCloud Transcriber"];
 }
-function ucloudModelGroups(models, render) {
-  return ucloudGroupLabels()
+function ucloudModelGroups(models, render, forSettings = false) {
+  const labels = forSettings
+    ? ["UCloud Transcriber", "CBS Runtime / WhisperX"]
+    : ucloudGroupLabels();
+  return labels
     .map((label) => {
       const entries = models.filter(
         (model) => ucloudModelGroup(model) === label,
@@ -8746,6 +8794,23 @@ let modelCheckToken = 0;
 let providerConnectionCheck = null;
 let providerFormVersion = 0;
 let providerFormProfile = null;
+function updateProviderCredential() {
+  const endpoint = $("#base-url").value.trim().replace(/\/+$/u, "");
+  const latest = providerFormProfile?.id
+    ? state.providers.find(
+        (provider) => provider.id === providerFormProfile.id,
+      ) || providerFormProfile
+    : providerFormProfile;
+  const saved = latest
+    ? [...state.providers, latest].some(
+        (provider) =>
+          provider.has_key === true &&
+          providerTab(provider) === state.settingsTab &&
+          provider.base_url?.replace(/\/+$/u, "") === endpoint,
+      )
+    : null;
+  credentialMissing($("#api-key"), saved);
+}
 function providerContext() {
   return {
     version: providerFormVersion,
@@ -8929,6 +8994,7 @@ function showProviderTab(tab) {
   $("#api-key").value = "";
   layoutProvider(tab);
   clearModelCheck();
+  updateProviderCredential();
 }
 function layoutProvider(tab) {
   const basic = $("#provider-basic"),
@@ -9006,7 +9072,7 @@ function providerSummary() {
 }
 $('[name="approved-for"]').addEventListener("change", providerSummary);
 let hfVersion = 0,
-  hfSavedToken = false,
+  hfSavedToken = null,
   hfPending = null;
 function updateHfCheck() {
   const draft = $("#hf-settings-token").value.trim();
@@ -9015,6 +9081,8 @@ function updateHfCheck() {
   $("#hf-settings-check").title = draft
     ? "Save this token before checking it."
     : "Check the saved token and follow preparation in Activity.";
+  credentialMissing($("#hf-settings-token"), hfSavedToken);
+  credentialMissing($("#first-use-hf-token"), hfSavedToken);
 }
 $("#hf-settings-token").addEventListener("input", () => {
   hfVersion++;
@@ -9675,6 +9743,7 @@ function fillProvider(settings) {
   providerSummary();
   $("#delete-provider").disabled = !settings.id;
   renderEnabledModels();
+  updateProviderCredential();
 }
 function newProviderSettings(tab = state.settingsTab) {
   const openai = tab === "openai";
@@ -9835,6 +9904,7 @@ $("#base-url").addEventListener("input", () => {
   clearModelCheck();
   providerSummary();
   renderEnabledModels(true);
+  updateProviderCredential();
 });
 function renderEnabledModels(preserveDraft = false) {
   const panel = $("#provider-model-options");
@@ -9974,6 +10044,7 @@ function choosePresetModel(preset) {
   else $("#native-model-choice").value = preset.model;
   clearModelCheck();
   capabilityHelp();
+  updateProviderCredential();
 }
 $("#provider-preset").addEventListener("change", (event) => {
   const existing = event.target.selectedOptions[0]?.dataset;
@@ -10000,7 +10071,10 @@ $("#native-model-choice").addEventListener("change", (event) => {
   $("#model-value-label").hidden = true;
 });
 $("#language").addEventListener("input", clearModelCheck);
-$("#api-key").addEventListener("input", clearModelCheck);
+$("#api-key").addEventListener("input", () => {
+  clearModelCheck();
+  updateProviderCredential();
+});
 $("#ucloud-server").addEventListener("input", () => {
   $("#ucloud-token-status").textContent =
     "Token is specific to this UCloud server";

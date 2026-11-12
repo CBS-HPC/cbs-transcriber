@@ -7,6 +7,7 @@ import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
+from test_browser import skip_first_use
 
 from cbs_transcriber.catalog import ucloud_models
 from cbs_transcriber.providers import Settings, save_profile
@@ -51,13 +52,18 @@ def test_browser_token_first_native_presets_and_cleanup(page, local_app, monkeyp
 
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator(".provider-manager")).to_be_hidden()
     expect(page.locator("#native-model-choice")).not_to_be_visible()
+    runtime_offered = page.evaluate("featureOn('cbs_runtime')")
+    offered_models = [
+        model for model in ucloud_models() if runtime_offered or model.get("engine") != "whisperx"
+    ]
     expect(page.locator("#provider-model-options [data-enabled-model]")).to_have_count(
-        len(ucloud_models())
+        len(offered_models)
     )
     expect(page.locator("#provider-model-options")).to_be_visible()
     expect(page.locator("#model-value-label")).not_to_be_visible()
@@ -139,6 +145,7 @@ def test_native_retired_model_is_preserved_without_an_editable_model_control(
 
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
@@ -175,6 +182,7 @@ def test_missing_native_application_shows_reason_without_empty_selector(
 
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
@@ -192,6 +200,7 @@ def test_v74_native_setup_failure_is_readable_inside_dialog(page, local_app, mon
 
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
@@ -213,6 +222,7 @@ def test_v74_late_native_failure_does_not_replace_another_provider_form(page, lo
     held = []
     page.route("**/api/providers/discover-ucloud", lambda route: held.append(route))
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()

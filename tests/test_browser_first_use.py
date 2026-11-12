@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from admission_support import checked_connection
 from playwright.sync_api import expect
-from test_browser import create_project
+from test_browser import create_project, provider_advanced
 from test_browser import local_app as local_app
 from test_browser import page as page
 
@@ -47,6 +47,10 @@ def test_first_use_skip_survives_reload_and_project_creation(page, local_app):
     page.goto(local_app.url)
     form = page.locator("#first-use-setup")
     expect(form).to_be_visible()
+    dialog = page.locator("#first-use-dialog")
+    expect(dialog).to_have_js_property("open", True)
+    assert form.evaluate("node => node.closest('#library-view') === null")
+    expect(page.locator("#first-use-ucloud-key")).to_be_focused()
     expect(page.locator("#welcome")).to_be_visible()
     screenshots = Path("test-results/morning-onboarding")
     screenshots.mkdir(parents=True, exist_ok=True)
@@ -83,6 +87,68 @@ def test_first_use_offer_is_not_defined_by_project_count(page, local_app):
     page.goto(local_app.url)
     expect(page.locator("#first-use-setup")).to_be_visible()
     expect(page.locator("#project-title")).to_have_text("Imported earlier")
+
+
+@pytest.mark.parametrize("action", ["close", "escape"])
+def test_setup_modal_dismisses_without_writes_and_restores_focus(page, local_app, action):
+    writes = []
+    page.on(
+        "request",
+        lambda request: writes.append(request.url) if request.method in {"POST", "PUT"} else None,
+    )
+    page.goto(local_app.url)
+    dialog = page.locator("#first-use-dialog")
+    expect(dialog).to_have_js_property("open", True)
+    key = page.locator("#first-use-ucloud-key")
+    expect(key).to_have_class("credential-missing")
+    assert key.evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(255, 252, 200)"
+    key.fill("synthetic-draft")
+    expect(key).not_to_have_class("credential-missing")
+    key.fill("")
+    expect(key).to_have_class("credential-missing")
+    page.locator("#first-use-hf-token").fill("hf_synthetic-draft")
+    if action == "close":
+        page.get_by_role("button", name="Close setup", exact=True).click()
+    else:
+        page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(key).to_have_value("")
+    expect(page.locator("#first-use-hf-token")).to_have_value("")
+    expect(page.locator("#settings-open")).to_be_focused()
+    assert page.evaluate("key => localStorage.getItem(key)", MARKER) == "1"
+    assert not writes
+    page.reload()
+    expect(dialog).to_be_hidden()
+
+
+def test_ucloud_key_highlight_distinguishes_saved_key_and_changed_endpoint(
+    page, local_app, native_account
+):
+    page.goto(local_app.url)
+    page.locator("#first-use-ucloud-key").fill("synthetic-ucloud-key")
+    page.locator("#first-use-save").click()
+    expect(page.locator("#first-use-dialog")).to_be_hidden()
+    page.locator("#settings-open").click()
+    key = page.locator("#api-key")
+    expect(key).to_have_value("")
+    expect(key).not_to_have_class("credential-missing")
+    provider_advanced(page)
+    endpoint = page.locator("#base-url")
+    original = endpoint.input_value()
+    endpoint.fill("https://different.invalid")
+    expect(key).to_have_class("credential-missing")
+    key.fill("unsaved-synthetic-key")
+    expect(key).not_to_have_class("credential-missing")
+    key.fill("")
+    expect(key).to_have_class("credential-missing")
+    endpoint.fill(original)
+    expect(key).not_to_have_class("credential-missing")
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#forget-key").click()
+    expect(key).to_have_class("credential-missing")
+    assert not local_app.server.config.app.state.credentials.get(
+        "ucloud-control:https://cloud.sdu.dk"
+    )
 
 
 def test_first_use_connect_saves_exact_checked_mig_without_hf(page, local_app, native_account):
@@ -123,7 +189,7 @@ def test_first_use_connect_saves_exact_checked_mig_without_hf(page, local_app, n
 @pytest.mark.parametrize("cancel", ["skip", "navigate", "another-tab"])
 def test_late_first_use_discovery_cannot_save_after_cancel(page, local_app, native_account, cancel):
     app = local_app.server.config.app
-    app.state.store.create_project("Another view")
+    project = app.state.store.create_project("Another view")
     held, writes = [], []
 
     def hold(route):
@@ -149,7 +215,8 @@ def test_late_first_use_discovery_cannot_save_after_cancel(page, local_app, nati
         expect(page.locator("#first-use-setup")).to_be_hidden()
         other.close()
     else:
-        page.get_by_role("link", name="Another view").click()
+        # Native modal backgrounds are inert; browser navigation still needs the fence.
+        page.evaluate("id => location.hash = '/projects/' + id", project["id"])
         expect(page.locator("#first-use-setup")).to_be_hidden()
     route, response = held.pop()
     route.fulfill(response=response)
@@ -176,6 +243,9 @@ def test_first_use_accepted_save_blocks_skip_until_reply(page, local_app, native
     expect(page.locator("#first-use-status")).to_contain_text("Saving")
     page.wait_for_function("() => window.firstUseSaveHeld === true")
     expect(page.locator("#first-use-skip")).to_be_disabled()
+    expect(page.locator("#first-use-close")).to_be_disabled()
+    page.keyboard.press("Escape")
+    expect(page.locator("#first-use-dialog")).to_have_js_property("open", True)
     expect(page.locator("#settings-open")).to_be_disabled()
     assert local_app.server.config.app.state.credentials.get("ucloud-control:https://cloud.sdu.dk")
     page.evaluate("location.hash = '/projects/' + '0'.repeat(32)")
@@ -416,6 +486,7 @@ def test_first_use_lost_save_reply_requires_settings_before_retry(page, local_ap
     expect(page.locator("#first-use-save")).to_be_disabled()
     expect(page.locator("#settings-open")).to_be_enabled()
     assert local_app.server.config.app.state.credentials.get("ucloud-control:https://cloud.sdu.dk")
+    page.locator("#first-use-close").click()
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator("#first-use-ucloud-key")).to_have_value("")
@@ -475,13 +546,14 @@ def test_failed_settings_read_does_not_consume_first_use_offer(page, local_app):
             status=500, json={"detail": "Synthetic provider-list failure."}
         ),
     )
-    page.locator("#settings-open").click()
+    # Exercise the programmatic handoff failure; the background button is now inert.
+    page.evaluate("() => handle(() => openSettings())()")
     expect(page.locator("#toast")).to_contain_text("Synthetic provider-list failure")
     expect(page.locator("#first-use-setup")).to_be_visible()
     expect(page.locator("#first-use-ucloud-key")).to_have_value("")
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) is None
     page.unroute("**/api/providers")
-    page.locator("#settings-open").click()
+    page.evaluate("() => handle(() => openSettings())()")
     expect(page.locator("#settings-dialog")).to_be_visible()
 
 
@@ -549,6 +621,9 @@ def test_key_lost_existing_connection_hands_off_without_widening_policy(
     page.locator("#first-use-save").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator("#settings-provider")).to_have_value(identifier)
+    if runtime_only and not page.evaluate("featureOn('cbs_runtime')"):
+        for selector in ("#bulk-provider", "#file-provider"):
+            expect(page.locator(f'{selector} option[value="{identifier}"]')).to_have_count(0)
     expect(page.locator("#base-url")).to_have_value(settings.base_url)
     expect(page.locator("#base-url")).to_be_visible()
     expect(page.locator("#native-project")).to_have_value("retained-project")

@@ -37,16 +37,21 @@ every application/model. Do not implement another generic downloader.
 
 ## 2. App-close and UCloud handoff
 
-**Implemented protocol; real handoff acceptance remains.**
+**Implemented protocol; one real Windows overnight batch accepted on 12 November.**
 `test_native_batch_polling.py::test_queue_shutdown_and_library_relaunch_explicitly_retrieve_the_same_allocation`
 uses the actual queue shutdown, a reopened synthetic library and explicit Retry. It asserts
 the original allocation is reused. The same file separates local shutdown from remote Stop
 and refuses replay of uncertain submission. `test_native_batch_incremental.py` additionally
 preserves early results through shutdown.
 
-**Next:** specify the controlled live acceptance checklist and expected saved remote ID/POST
-count, then perform it only in a separately authorized provider session. General automatic
-startup recovery of all old jobs is a distinct design, not a missing part of this test.
+The user confirmed Retry after the overnight close/reopen. Local evidence retains the same
+allocation and all 12 completed member results, alongside the 12 earlier saved results.
+This is a scoped served-Windows handoff acceptance, not a claim for every device, transfer
+failure or early-result phase. No agent submitted a new provider job for the test.
+
+**Next:** retain the synthetic regressions and separately scope remaining device/failure
+phases. General automatic startup recovery is a distinct user-proposed follow-up (T141),
+not part of the current explicit-Reconnect implementation.
 
 ## 3. Media preparation and original inspection speed
 

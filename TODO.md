@@ -210,6 +210,16 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Preserve already-frozen jobs and avoid duplicate transcription during retry/restart.
   Automatic splitting/sorting is not implemented; agree a measured strategy and separate
   architecture decision before implementation. This discussion stays outside MVP.
+  On 12 November the user asked to design parallel MIG splitting, CPU fallback and availability
+  together. Check 1/2/3/4-mig.1g products (counts of identical 1g devices) and verified scheduler
+  status semantics as lower-bound signals, not summed/reserved capacity. Compare same-model
+  total queue/startup/ASR/alignment/speaker/transfer time and cost before any fallback.
+  [Published CPU/GPU evidence and limits](docs/evaluations/whisperx-cpu-gpu-speed-2026-11-12.md).
+  The user then agreed the v2 fallback rule for **both native and CBS Runtime**: usable,
+  sufficient GPU hours means 1g MIG even if queued; known absent/insufficient GPU funding
+  permits exact `cpu-amd-zen5-8-vcpu` only with CPU funding and model compatibility. Unknown
+  funding is not zero. Affordability estimates/units and Runtime CPU preparation require
+  reviewed implementation; this rule is documented, not enabled in the preview.
 - [ ] **Old UCloud obligations (T80/T80b).** Inspect and safely recover or explicitly dispose
   remaining legacy single-job and batch cleanup obligations; retain unresolved journals and
   user-visible controls. Emptying UCloud Trash or discarding unpreserved output requires the
@@ -233,11 +243,22 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   malformed-diagnostic regressions. Same-allocation existing-output recovery and verified
   cleanup passed the user's real rc6 acceptance on 10 November; missing-output resubmission
   remains open.
-- [ ] **MVP UCloud handoff acceptance.** Verify that an accepted native job continues after app
-  shutdown and that relaunch plus explicit Reconnect/Retry retrieves results from the same saved
-  allocation, without another submission. Keep automatic status reconnection within a session;
-  do not add general automatic startup recovery until its separate design is accepted.
-  The synthetic actual-queue shutdown/reopen/Retry check passes; a real handoff remains unverified.
+- [x] **MVP UCloud handoff acceptance — one Windows overnight batch, 12 November.** The user
+  closed the app while a 12-file native job queued/processed overnight, reopened the preview
+  and confirmed explicit Retry succeeded. Read-only local evidence shows the
+  same recorded allocation, all 12 members completed, 12 newly saved results and the prior
+  12 retained (24 total); the observed remote state is SUCCESS. This qualifies that served
+  Windows batch, not early retrieval while running, every failure phase, or other devices.
+- [ ] **Automatic startup reconnect — authorized MVP v2 work (T141).** On reopening,
+  resume monitoring/retrieval for already-submitted native singleton/batch allocations with a
+  confirmed saved remote ID. Preserve saved siblings and frozen identities, back off bounded
+  transient reads and keep unmet authentication/ownership obligations visible. Explicit Stop/
+  Cancel stays authoritative. Do not create replacement jobs, replay uncertain submissions,
+  steal preparation locks or discard unresolved output. Historical failures and cleanup-only
+  actions are separate policies. ADR 0174 passed independent design review; implementation is
+  frozen in its separate child and the final 445-case gate is running. It is not loaded in the
+  preview yet. Historical generic failures and fresh singleton errors already curated to generic
+  errors remain manual; no error-text inference is used to grant automatic recovery.
 - [ ] **Activity and transcription audit (T104/T108/T109).** Complete the remaining deep audit
   and integrated verification of batch grouping, admission, per-file progress, Retry/Stop,
   uncertain submission, cancellation, cleanup and restart. The user has confirmed grouped
@@ -456,6 +477,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   dictionary updates and institutional licence review remain open. Preserve recording language,
   private vocabulary, draft/timing guards and saved opt-out. The
   [original design](docs/proposals/offline-spelling-2026-11-05.md) retains the wider future plan.
+  On 12 November the user proposed underlines directly in the Text editor with on-demand
+  alternatives instead of the separate spelling panel. Right-click/keyboard access is the
+  recommendation; the trigger remains undecided. Preserve double-click selection, caret,
+  native Undo, timing and local-only processing; no UI integration is authorized by this proposal.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
@@ -574,6 +599,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   it overlaps earlier coverage and is not added to its distinct total.
   [Verification and limits](docs/verification-2026-11-12-mvp-v2-preview.md).
   [Preview plan and UCloud scheduling findings](docs/work-plans/mvp-v2-preview-2026-11-12.md).
+
+- [x] **Preview feedback refinements — 12 November (T140/T142).** Balance passage text at
+  15 px, enlarge passage actions and Recording details/Speakers, move first-use connection
+  setup into a separate dialog and highlight genuinely missing UCloud/HF credentials. Keep
+  typing/focus/undo, responsive wrapping, existing-key retention, pending-save and late-reply
+  fences. Independent review passed: 39 fresh MVP/9 fresh full-profile cases, with explicit
+  unaffected-case qualification and original failures retained. Verified bytes are served on
+  preview ports 8765/8766 without restarting the app or refreshing a user tab.
 
 - [ ] **Post-MVP explanatory-text review.** Review feature-description and information boxes
   across the app; shorten long text, remove repetition and use plain, action-focused wording.

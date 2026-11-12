@@ -8,6 +8,19 @@ documentation is CC BY 4.0. No other project's `.env` is read.
 
 ## Configure
 
+For resource planning, see [Aarhus University's Transcriber guide](https://interactivehpc.au.dk/en/about-interactive-hpc/applications/translate-to-english-transcriber)
+and our [CPU/GPU measurements and limits](evaluations/whisperx-cpu-gpu-speed-2026-11-12.md).
+The AU measurement concerns native Transcriber; it does not establish every CBS Runtime
+model's CPU speed or memory needs.
+
+**Agreed MVP v2 compute rule — not implemented in the current preview:** use 1g MIG when
+the selected project has usable, sufficient GPU hours, including waiting in its queue.
+Fallback to `cpu-amd-zen5-8-vcpu` only for absent/exhausted or demonstrably insufficient GPU
+funding, with usable CPU funding and a compatible model. The user applies this rule to both
+native Transcriber and CBS Runtime. Busy/full hardware or an unknown quota check is not
+evidence of missing GPU resources. Freeze each accepted job's choice across retry/restart;
+full-run affordability estimates and Runtime CPU preparation still need implementation/proof.
+
 1. Open Settings → **UCloud**. Enter your API token and choose
    **Connect UCloud**, or simply Save. The server defaults to `https://cloud.sdu.dk`.
 2. The app discovers resource-enabled projects, Transcriber Batch, funded compatible GPUs

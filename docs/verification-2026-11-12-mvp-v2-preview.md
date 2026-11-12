@@ -47,6 +47,29 @@ Backend/native/installation checks were not repeated for CSS-only changes. Recei
 `font-balance-independent-audit.json` SHA-256:
 `4602132628ecab6b2ac4742c0919044980243abc1790e3dea149dc13ec5823ec`.
 
+## Setup-dialog refinement
+
+Connect UCloud is now an independent Settings-style modal, preserving first-use eligibility,
+optional HF, explicit Skip/Close/Escape and Settings handoff. Empty fields are pale yellow
+only when saved-presence metadata proves the relevant key is missing; blank retained keys
+and unknown HF presence stay neutral. Accepted Saves retain their outcome through another
+tab's completion or rejected navigation, including partial/uncertain inline recovery.
+Settings retains saved held Runtime profile IDs without offering them for new work.
+
+The original immutable MVP gate recorded 64 passes and ten failures. Two exposed the saved
+profile projection issue; two needed an actual visible Skip before background Activity; six
+used full-profile catalog assumptions under MVP. The reviewed remedies retain exact provider
+rows, hidden model flags, keys, denials, saved language and stale-response oracles. No Runtime
+feature or new-work catalog was enabled to make tests pass.
+
+Fresh immutable gates passed **39 MVP and nine full-profile cases**, without skips. With
+35 explicitly unaffected prior MVP outcomes and one unchanged full-rule outcome, qualification
+is 74 MVP plus ten full profile observations: 75 distinct test identities over 84 observations,
+not a fresh monolithic all-green 74-case run. All captured inputs matched before/after. Original
+failures remain private; independent source/fixture/coverage review is Go. Receipt
+`setup-dialog-independent-audit.json` SHA-256:
+`6e9b4b9550494e0625d6d87b4b0a2aba9a27d189b2ef2e34cdde55f64593cc06`.
+
 ## Installed-wheel check
 
 Released **0.1.0**, not this preview, was installed in a disposable local environment with
@@ -70,18 +93,31 @@ package version is still 0.1.0. Served assets exactly match the verified candida
 
 | Asset | SHA-256 |
 | --- | --- |
-| app.js | `b5ec372d935240165ee5417c613d8a677c82f64fe8d36c6fede3d4dcd5b2118f` |
-| app.css | `c1bcaef51a80988271bcb867271853763683b75cbab0eef4319c58738d04bb57` |
+| app.js | `7a31629b47e6e9b3726440b8e04d175f1541d895d6ae2610cf4defea40cc8f0f` |
+| app.css | `3275bcd38f6eab6c5508768ebe8fdc45f99a13297fecfafd1aeff6e667887b03` |
+| index.html before server-instance/profile injection | `72707bf263c0e3e14f6edcb7a2304796dc7ed7076f5fc3ab0527116c7e698dfe` |
 | release.json | `c9919f5cb11bd398f86a63ec1db86db89a9f2282112ac88817b838a3907a2d88` |
 
 The user confirmed the 12-member batch is a real overnight native job and requested keeping
 the same library. A private SQLite preservation snapshot and identity witnesses were taken;
 this is not a complete media backup. Opening schema 19 retained all 72 job identities, both
 native owners, exact frozen job/owner parameters and member lists, and all 12 saved results.
-The 12 formerly running local rows now show Interrupted as expected; explicit Retry
-reconnects their recorded allocation. No Retry, new submission or remote cleanup was invoked.
-The visible browser Activity card retains all 12 members and its recovery control; the tab
-is left open. Actual remote status/result retrieval remains for the user's acceptance test.
+At first launch the 12 formerly running rows became Interrupted as expected, retaining
+their explicit same-allocation Retry. The agent did not invoke Retry, submit a new job or
+request remote cleanup. The user subsequently reported that Retry worked perfectly.
+Read-only local observations then confirmed the same allocation **12456177**, all 12 member
+jobs completed with 12 saved member results, 24 total results (12 pre-existing plus 12 new),
+stored remote state SUCCESS and no cleanup error. This is one accepted Windows overnight
+queue/process → app close/reopen → explicit Retry case. It does not prove early retrieval
+while RUNNING, every failure phase/device, automatic startup reconnect or an independent
+inspection of UCloud Trash.
+
+The separate first-use demonstration uses port 8766 and a synthetic Library/Projects/Home,
+null keyring and disabled startup remote checks. Actual credentials and the real library are
+unchanged; deleting them is unnecessary. Its browser completion marker is separate by origin.
+Frontend refinements are served without restarting the app or forcing a user-tab refresh;
+finish an open edit before refreshing. The verified modal/highlight bytes match on both ports;
+no server restart, user-tab refresh or real credential/library mutation was performed.
 
 Runtime live preparation, spelling, PII-Tracer, multi-job scheduling and CPU fallback are
 not introduced by this preview. [Plan and capacity research](work-plans/mvp-v2-preview-2026-11-12.md).

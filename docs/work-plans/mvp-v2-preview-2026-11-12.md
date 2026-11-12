@@ -49,3 +49,20 @@ and a CPU fallback. No scheduler or compute-selection behavior is changed here.
 
 Only public documentation/source and CLI help were checked; no authenticated availability
 query, allocation, preparation, remote cleanup or provider benchmark was performed.
+
+## User checks for the local preview
+
+Finish any open edit before refreshing. The local preview is not a new published wheel.
+
+| Check | Expected result |
+| --- | --- |
+| Readability | Passage text is slightly smaller than the first preview; Replay/Edit/Merge/Delete and the Recording details/Speakers sidebar are larger. Long names wrap without covering controls. |
+| Text editing | Double-click selects that word in Text; Save enables only for a change. Cancel preserves playback/search/review state. Unchanged/replaced words retain their intervals and inserted words remain untimed. |
+| Passage structure | Split is unavailable at the ends or inside a word; split/merge can be undone and an individually deleted passage restored. |
+| Review and Working | Checked/Needs review persist; Next to review reaches unchecked/review-needed passages. The current Working action is disabled; choosing an earlier version is possible. |
+| Export | Selected recordings and several formats, with optional originals, appear in named recording folders. Preparation continues in Activity after closing Export Settings. |
+| First-use setup | Use the separate synthetic demo on port 8766; no need to delete real data or keys. The independent dialog and missing-key colour passed their focused gate and are served on both preview ports. Skip/Close/Escape leave setup available through Settings. |
+| Overnight UCloud recovery | Already confirmed by the user on 12 November: explicit Retry recovered all 12 members from allocation 12456177 after app close/reopen. Another paid run is not needed for this acceptance point. |
+
+Automatic startup reconnect, parallel MIG jobs, CPU fallback, live Runtime preparation,
+spelling and PII-Tracer are not added by these preview refinements.

@@ -7,7 +7,7 @@ from admission_support import checked_connection
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
-from test_browser import provider_advanced
+from test_browser import provider_advanced, skip_first_use
 from test_browser_huggingface_activity import inert_app as inert_app
 from test_native_model_profiles import native_settings, raw_profile
 
@@ -126,6 +126,7 @@ def test_basic_models_keep_saved_names_keys_and_visibility(page, local_app, kind
         app.state.credentials.set(credential_scope(settings), "synthetic-connection-key", False)
         before = app.state.store.all("SELECT * FROM providers ORDER BY id")
         page.goto(local_app.url)
+        skip_first_use(page)
         page.locator("#settings-open").click()
         expect(page.locator("#settings-dialog")).to_be_visible()
         expect(page.get_by_role("tab", name="OpenAI API", exact=True)).to_have_count(0)
@@ -156,6 +157,7 @@ def test_basic_models_keep_saved_names_keys_and_visibility(page, local_app, kind
     # Open Settings on this saved connection rather than the startup fixture's choice.
     set_default_provider(app.state.store, saved["id"])
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="OpenAI API" if kind == "openai" else "UCloud", exact=True).click()
@@ -164,8 +166,12 @@ def test_basic_models_keep_saved_names_keys_and_visibility(page, local_app, kind
     assert page.locator("#provider-model-options").evaluate(
         "e => e.closest('#provider-basic') !== null && e.closest('#provider-advanced') === null"
     )
+    runtime_offered = page.evaluate("featureOn('cbs_runtime')")
+    offered_models = [
+        model for model in ucloud_models() if runtime_offered or model.get("engine") != "whisperx"
+    ]
     expect(page.locator("#provider-model-options [data-enabled-model]")).to_have_count(
-        5 if kind == "openai" else len(ucloud_models())
+        5 if kind == "openai" else len(offered_models)
     )
     expect(page.locator("#provider-name-label")).to_be_hidden()
     expect(page.locator("#provider-name")).to_be_disabled()
@@ -217,6 +223,7 @@ def test_hugging_face_tab_saves_and_checks_token_without_echoing_it(page, inert_
         ),
     )
     page.goto(inert_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.get_by_role("tab", name="Hugging Face", exact=True).click()

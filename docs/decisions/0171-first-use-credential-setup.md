@@ -7,6 +7,18 @@ The user subsequently chose automatic HF access checking and configured local/UC
 preparation in Activity (ADR 0173), superseding the earlier Save-only proposal.
 UCloud-only setup still does not implicitly start preparation.
 
+## 12 November presentation amendment
+
+The user requests an independent setup dialog matching Settings/Export, with no inline
+connection card in the empty front page or above project content. Retain the existing
+eligibility, completion marker, optional HF field, Skip, Settings handoff and accepted-save
+fences. Close/Escape act as Skip only when no credential Save is pending; they cannot undo
+an accepted save. The change grants no new credential, model or job authority.
+
+Use the same pale-yellow missing-credential decoration for UCloud and HF: no saved
+credential and no draft. A blank input retaining a stored key stays normal; typing removes
+the missing decoration without implying validity or a successful connection check.
+
 ## Decision
 
 Offer a compact first-use form on the home page: password fields for the UCloud API key and
