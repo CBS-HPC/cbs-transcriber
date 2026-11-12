@@ -9,8 +9,10 @@ synchronization; the user did not install the preview manually.
 
 - Local App/.venv installation, exact-interpreter startup/shortcut/update and method-specific
   uninstall guides; sibling Library/Projects and shared credentials/caches stay separate.
-- Passage text 14 to 16 px, Text input/highlighting mirror 13 to 15 px together, timing replay
-  text 13 to 15 px and timing fields 11 to 13 px. No broader interface redesign.
+- Passage text was initially increased from 14 to 16 px, then refined to **15 px** on user
+  feedback; Text input/highlighting mirror remain 15 px. Passage actions are now 12 px with
+  24 px minimum height, sidebar text 13 px/headings 14 px. Timing replay text is 15 px and
+  timing fields 13 px. No broader interface redesign.
 - One existing guarded Follow pass after comparison alignment settles, fixing the measured
   larger-font short-window regression without changing drafts, playback or Follow-off intent.
 - Two narrow browser-fixture corrections: visible Text-pane Cancel selection and the accepted
@@ -36,6 +38,15 @@ unchanged. No timeout widening, weakened geometry checks or claim to fix platfor
 Independent receipt `independent-final-audit.json` SHA-256:
 `e65bee1d9b2ffcb0ffee9ed8c954c8f58865f72a6214c6f25f1189832fc77db0`.
 
+The font refinement has a separate immutable, independently reviewed **23-case MVP browser
+gate**, all passed without skips. It covers 1440/760/390 px wrapping and real action bounds,
+sidebar long names/notes, playback geometry, caret/focus/native undo, speaker assignment and
+compact Working controls. Source/test hashes match before and after; collection and outcomes
+are bijective. These cases overlap the earlier gate and are not added to its distinct total.
+Backend/native/installation checks were not repeated for CSS-only changes. Receipt
+`font-balance-independent-audit.json` SHA-256:
+`4602132628ecab6b2ac4742c0919044980243abc1790e3dea149dc13ec5823ec`.
+
 ## Installed-wheel check
 
 Released **0.1.0**, not this preview, was installed in a disposable local environment with
@@ -60,7 +71,7 @@ package version is still 0.1.0. Served assets exactly match the verified candida
 | Asset | SHA-256 |
 | --- | --- |
 | app.js | `b5ec372d935240165ee5417c613d8a677c82f64fe8d36c6fede3d4dcd5b2118f` |
-| app.css | `de1284a2a9b402bf9fb016ba67f8a02cc82a53ac49cd2a904604de7761bc2be6` |
+| app.css | `c1bcaef51a80988271bcb867271853763683b75cbab0eef4319c58738d04bb57` |
 | release.json | `c9919f5cb11bd398f86a63ec1db86db89a9f2282112ac88817b838a3907a2d88` |
 
 The user confirmed the 12-member batch is a real overnight native job and requested keeping

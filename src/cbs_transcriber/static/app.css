@@ -1622,7 +1622,9 @@ select {
   margin-left: auto;
 }
 .passage-actions button {
-  font-size: 10px;
+  font-size: 12px;
+  min-height: 24px;
+  white-space: nowrap;
   background: transparent;
   color: var(--muted);
   padding: 2px;
@@ -1631,7 +1633,7 @@ select {
   color: var(--cbs-blue);
 }
 .passage-text {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.95;
   color: var(--muted);
   white-space: pre-wrap;
@@ -1915,6 +1917,17 @@ select {
   margin-left: auto;
   color: var(--muted);
   font-size: 10px;
+}
+.details-panel .panel-heading {
+  font-size: 14px;
+}
+.details-panel .panel-heading small,
+.details-panel .detail-row,
+.details-panel .detail-row strong,
+.details-panel .speaker-entry,
+.details-panel .description-notes,
+.details-panel .field-note {
+  font-size: 13px;
 }
 .export-card {
   margin-top: 30px;
@@ -2828,8 +2841,7 @@ h1,
   font-size: 11px;
 }
 .speaker-badge,
-.timestamp,
-.passage-actions button {
+.timestamp {
   font-size: 10px;
 }
 @media (max-width: 1150px) {

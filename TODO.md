@@ -568,6 +568,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   existing development environment after preservation checks, without a user reinstall or
   public-main/release change. The user's overnight batch remains in the same library with
   exact stored allocation/parameters; Activity offers explicit Retry to reconnect it.
+  Follow-up font feedback is implemented: passage/editor 15 px, passage actions 12 px with
+  24 px minimum height, sidebar text 13 px/headings 14 px. An independently reviewed 23-case
+  MVP browser gate covers wrapping, action bounds, sidebar, playback, caret/undo and speakers;
+  it overlaps earlier coverage and is not added to its distinct total.
   [Verification and limits](docs/verification-2026-11-12-mvp-v2-preview.md).
   [Preview plan and UCloud scheduling findings](docs/work-plans/mvp-v2-preview-2026-11-12.md).
 
