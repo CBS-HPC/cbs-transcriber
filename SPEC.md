@@ -338,6 +338,16 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Never call manual Retry, clear Stop, recapture settings, invent replacement consent or start
   inference followups. Metadata admission has no network/file reads; I/O drains under the lease.
   [ADR 0174](docs/decisions/0174-native-startup-reconnection.md).
+- V219: Isolated Runtime generations never reclaim old locks or mutate promoted environments.
+  A collision-checked bounded registry, explicit fresh consent, exclusive folder intent/receipt
+  and exact owner/epoch/resource/readiness registry-CAS promotion are distinct authorities.
+  Seal compute/flavor before reservation and an explicit no-active choice at fresh acceptance;
+  delayed/Auto/followup/repair/Retry paths carry it without registry recapture. CPU and CUDA
+  targets/readiness remain distinct; changed models require a fresh candidate. Legacy absent
+  policy keeps exact paths/receipts. Restore drops operational pointers and archives owners.
+  Stage1 only validates data/paths and candidate CAS: no caller-ready promotion/capture grant.
+  All activation stays disabled until owner/admission/execution/capture/restore and live gates.
+  [ADR 0176](docs/decisions/0176-isolated-runtime-generation-recovery.md).
 - V218: Standalone Runtime preparation retries only typed bounded read observations of its
   exact frozen allocation/artifacts; no new submission, shared cache/lock mutation or Ready
   from missing/invalid proof. Keep auth/identity/generation/pins/refusal distinct from transient
@@ -1925,6 +1935,7 @@ T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
+T144|~|Isolated Runtime generation recovery: disabledStage1 registry/selection/path codecs and candidateCAS verified46distinctcases/independentGo; no promotion or integration; owner/admission/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results

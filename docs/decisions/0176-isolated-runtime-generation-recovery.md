@@ -1,8 +1,7 @@
 # 0176 — Isolated Runtime generations without reclaiming old locks
 
-Design reviewed 12 November 2026; disabled Stage 1 verified separately at `401769e`,
-not integrated here. See the [composition limits](../verification-2026-11-12-reliability-composition.md).
-The user
+Design reviewed 12 November 2026; disabled Stage 1 implemented with independent Go and
+[46 synthetic passes](../verification-2026-11-12-runtime-generations-stage1.md). The user
 prioritizes Runtime stability. This is a separate protocol after the bounded observation fixes
 in ADR 0175. Independent implementation review, complete synthetic boundary proofs and controlled UCloud acceptance
 are required before enabling it. Read the older prototype as reference only; never import

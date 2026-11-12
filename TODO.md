@@ -30,6 +30,15 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   Not loaded or real-provider accepted. Fresh singleton generic-curated failures, historical
   generic failures, uncertain submissions and cleanup-only obligations remain manual.
 
+- [ ] **Isolated Runtime recovery (T144), authorized stability work.** Stage1 on
+  `codex/mvp-v2-runtime-generations` from reviewed observation checkpoint `857a727` implements
+  only bounded registry/selection/path data and candidate CAS, default disabled; [46 distinct
+  synthetic cases and independent review pass](docs/verification-2026-11-12-runtime-generations-stage1.md).
+  Promotion, readiness, preparation and execution remain held. Later stages must bind the actual
+  durable preparation owner, exclusive folder receipt and all accepted compute/generation
+  carry before controlled live acceptance. Keep old locks/environments untouched; CPU/CUDA
+  targets stay separate and promoted environments cannot receive new model downloads.
+
 - [x] **CBS Runtime preparation observation stability (T143), authorized 12 November.** Reproduce and
   fix standalone transient-monitor/terminal-publication and late-Stop completion races on
   `codex/mvp-v2-runtime-reliability`. ADR 0175 requires typed bounded observations, one durable
