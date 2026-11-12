@@ -17,6 +17,14 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+- [x] **Automatic native startup reconnection (T141), verified locally 12 November.**
+  `codex/mvp-v2-native-reconnect` resumes exact submitted singleton/batch allocations with
+  durable Stop and no new allocation/upload/followup. Final 76 focused cases and independent
+  review pass; earlier 444 passes/one platform skip remain qualified prior-source evidence.
+  [Verification](docs/verification-2026-11-12-native-startup-reconnection.md).
+  Not loaded or real-provider accepted. Fresh singleton generic-curated failures, historical
+  generic failures, uncertain submissions and cleanup-only obligations remain manual.
+
 The user authorized selected follow-up work on local `codex/post-mvp-work`, descended from
 clean public main `708a27b`. The current morning checkpoint is `codex/post-mvp-morning`,
 including the reviewed isolated timing-policy work. **Do not merge/push it to main, update Desktop main, publish or

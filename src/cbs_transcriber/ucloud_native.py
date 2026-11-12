@@ -881,8 +881,8 @@ def capture_owned(settings, *extra):
     }
 
 
-def run_transcription(worker, job, recording, settings, key):
-    from . import restored_owners
+def run_transcription(worker, job, recording, settings, key, *, reconnect=None):
+    from . import native_startup, restored_owners
 
     restored_owners.require_job(worker.store, job["id"])
     from .providers import preserve_response, require_approval
@@ -903,21 +903,35 @@ def run_transcription(worker, job, recording, settings, key):
     # Only a policy frozen at fresh admission records evidence (ADR 0100); legacy runs keep
     # their exact journal, files and recovery behavior.
     capture = native_capture.enabled(job)
+    phase = None
 
     def checkpoint(**values):
+        if reconnect is not None:
+            current = native_startup.checkpoint(store, reconnect, values)
+            params.clear()
+            params.update(current)
+            run.clear()
+            run.update(current["ucloud_run"])
+            params["ucloud_run"] = run
+            return
         run.update(values)
         store.update_job(identifier, params=params)
 
     def guard():
-        if worker.cancel_event.is_set():
+        if worker.cancel_event.is_set() or (reconnect is not None and worker.stopping.is_set()):
             raise Cancelled()
+        native_startup.guard(store, reconnect)
         require_approval(store, recording["project_id"], params.get("provider_id"), settings)
 
     require_setup(settings, key)
     try:
+        guard()
         with client_for(settings, key) as client:
             try:
+                guard()
                 if not run.get("job_id"):
+                    if reconnect is not None:
+                        raise ValueError(native_startup.REFUSED)
                     if run.get("submission_attempted") and not run.get("reconciled_not_created"):
                         raise ValueError(
                             "UCloud submission outcome is unknown. Check your UCloud "
@@ -995,10 +1009,24 @@ def run_transcription(worker, job, recording, settings, key):
                     checkpoint(submission_attempted=True, reconciled_not_created=False)
                     remote_id = extract_job_id(cloud_call(client.submit_job, specification))
                     checkpoint(job_id=remote_id)
+                checkpoint(native_last_failure=None)
+                phase = "monitor"
                 deadline = time.monotonic() + settings.ucloud_transcriber.hours * 3600 + 600
                 while True:
                     guard()
-                    remote = cloud_call(client.retrieve_job, run["job_id"])
+                    if reconnect is not None:
+                        from .native_batch import _poll_job
+
+                        remote = _poll_job(
+                            client,
+                            reconnect.remote_id,
+                            worker,
+                            guard,
+                            lambda: store.update_job(identifier, message=native_startup.NOTICE),
+                            deadline,
+                        )
+                    else:
+                        remote = cloud_call(client.retrieve_job, run["job_id"])
                     state = remote.get("status", {}).get("state")
                     if state != run.get("remote_state"):
                         checkpoint(remote_state=state)
@@ -1015,11 +1043,29 @@ def run_transcription(worker, job, recording, settings, key):
                     )
                     worker.cancel_event.wait(5)
                 guard()
+                phase = "download"
                 raw_path = directory / ("ucloud-" + identifier + ".json")
                 observed = None
                 if raw_path.exists():
                     # A preserved file without a published observation stays an explicit gap.
+                    if reconnect is not None and raw_path.stat().st_size > MAX_TRANSCRIPT_BYTES:
+                        raise ValueError("Saved UCloud response exceeds the import limit.")
                     data = raw_path.read_bytes()
+                elif reconnect is not None:
+                    data, name = native_startup.download_single(
+                        client,
+                        settings,
+                        folder + "/out",
+                        job,
+                        recording,
+                        guard,
+                        worker.cancel_event.wait,
+                    )
+                    if capture:
+                        native_capture.write_output(raw_path, data)
+                        observed = native_capture.observe_output(store, job, name)
+                    else:
+                        preserve_response(raw_path, json.loads(data))
                 elif capture:
                     data, name = download_output(
                         client, settings.base_url, folder + "/out", with_name=True
@@ -1062,12 +1108,15 @@ def run_transcription(worker, job, recording, settings, key):
                         },
                         job_id=identifier,
                         native_artifacts=params[native_capture.KEYS[1]] if capture else None,
+                        **({"native_reconnect": reconnect} if reconnect is not None else {}),
                     )
                 if (
                     settings.ucloud_transcriber.cleanup_after_success
                     and run.get("cleanup_state") not in CLEANED
                 ):
                     if not worker.cancel_event.is_set():
+                        if reconnect is not None:
+                            guard()
                         cleanup_owned(store, worker.credentials, store.job(identifier))
                 elif not settings.ucloud_transcriber.cleanup_after_success:
                     checkpoint(cleanup_state="retained")
@@ -1077,11 +1126,16 @@ def run_transcription(worker, job, recording, settings, key):
                     checkpoint(cancellation_requested=True)
                 raise
     except UCloudAPIError as exc:
+        native_startup.failure(store, "job", identifier, exc, phase=phase)
         raise ValueError(
             f"UCloud operation failed (HTTP {exc.status_code}). Check setup."
         ) from None
-    except (httpx.HTTPError, RuntimeError):
+    except (httpx.HTTPError, RuntimeError) as exc:
+        native_startup.failure(store, "job", identifier, exc, phase=phase)
         raise ValueError("UCloud operation failed. Check the remote job before retrying.") from None
+    except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
+        native_startup.failure(store, "job", identifier, exc, phase=phase)
+        raise
 
 
 def terminate_owned(settings, credentials, remote_id):

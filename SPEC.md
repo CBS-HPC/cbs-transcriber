@@ -316,6 +316,17 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   digests before uv installation. Preserve copy/no-config flags, explicit update intent and
   isolation from the project environment; a running default-port app blocks installation.
   Never auto-start, kill an app or publish assets. An unpublished stable URL is labelled as such.
+- V217: Native startup reconnect is retrieval-only for exact submitted singleton/batch owners.
+  Dedicated bounded atomic admission preserves frozen identity, saved/Trash/Working results,
+  durable Stop/Cancel (including pre-ack crash), unknown/uncertain/restored/disposed refusal and
+  one attempt per queue lifecycle. Historical generic failures remain manual; only exact typed
+  current transient receipts may qualify. Both worker paths retain pinned authority outside
+  mutable params and refuse missing/changed IDs before any create/upload/submit fallback.
+  Reconciled submissions require a valid timezone-aware timestamp; completed siblings require
+  one exact producer/recording/remote-ID match, including Trash, rechecked during execution.
+  Never call manual Retry, clear Stop, recapture settings, invent replacement consent or start
+  inference followups. Metadata admission has no network/file reads; I/O drains under the lease.
+  [ADR 0174](docs/decisions/0174-native-startup-reconnection.md).
 - V215: Explicit nonempty primary HF Settings/first-use token Save starts a server-lifetime
   Activity setup task, not inline
   model work; no-worker tests remain inert. Current token/plan fences, pinned cached-file reuse,
@@ -1887,6 +1898,7 @@ T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
+T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop and no-submit worker fences; final76 focused passes/independentGo, earlier444pass+1skip source-qualified; real acceptance/not loaded separate|V217,V6,V9,I.native-batch,ADR0174
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1989,3 +2001,5 @@ B440|2026-11-12|A long Windows verification fixture produced a 277-character own
 B441|2026-11-12|An undo-merge browser fixture selected both visible Text and hidden Timing-pane Cancel controls|T140; scope the locator to the Text pane and retain draft/history/revision assertions; mechanical fixture correction needs no new product invariant
 B442|2026-11-12|Larger passage fonts exposed comparison alignment finishing after playback's resize reveal, stranding the current word below a short video viewport|V41,T140; schedule the existing guarded Follow pass after alignment writes; baseline/candidate differential, nine private geometry observations and formal resize/focus/draft checks
 B443|2026-11-12|An older layout test expected a quiet generic save status after rewriting an untimed passage, contradicting the accepted partial-timing notice|V208,T140; assert the actual nonblocking warning and persisted wording while retaining geometry/history checks; shared helper bodies unchanged
+B446|2026-11-12|Native startup cannot recover interrupted owners safely and a singleton Stop can disappear before worker acknowledgment, while generic recovery overwrites legacy Cancelling evidence|V217,T141; dedicated exact-ID singleton/batch admission, durable Stop before acknowledgment and conservative legacy negative exclusion; retain five old-source red seam cases
+B451|2026-11-12|Native startup accepted a merely nonempty reconciliation timestamp and completed siblings without a unique matching producer/remote-ID link|V217,T141; validate bounded timezone-aware timestamps and exact producer metadata including Trash at admission and late guards; eight positive/negative/late regressions

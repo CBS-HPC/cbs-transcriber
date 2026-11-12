@@ -685,7 +685,16 @@ def retry_batch(queue, job, replace=False):
         if not pending:
             raise ValueError("All batch results are saved. Retry remote cleanup separately.")
         # Cancellation requests apply to the previous attempt; ownership/POST receipts stay intact.
-        queue.store.update_native_batch(batch["id"], run_update={"cancel_requested": False})
+        queue.store.update_native_batch(
+            batch["id"],
+            run_update={
+                "cancel_requested": False,
+                "stop_requested": False,
+                "startup_reconnect": None,
+            },
+        )
+        for child in pending:
+            queue.native_reconnect.pop(child["id"], None)
         queue.store.finish_native_batch(batch["id"], "queued", "Queued to resume UCloud batch")
     queue.notify()
     return {"ok": True, "ucloud_batch_id": batch["id"], "affected_jobs": sorted(own_ids)}
@@ -701,6 +710,9 @@ def cancel_batch(queue, job):
     if batch is None:
         raise ValueError("This job has no shared UCloud batch.")
     members = _surviving_members(store, batch)
+    from . import native_startup
+
+    native_startup.stop_batch(store, batch["id"])
     identifiers = {m["job_id"] for m in members}
     owner = next(
         (
@@ -1115,9 +1127,9 @@ def cleanup_batch(store, credentials, identifier):
     return "trashed"
 
 
-def run_batch(worker, job):
+def run_batch(worker, job, *, reconnect=None):
     """Claim once, reconnect once, then commit each member's result independently."""
-    from . import restored_owners
+    from . import native_startup, restored_owners
 
     restored_owners.require_job(worker.store, job["id"])
     store = worker.store
@@ -1137,9 +1149,14 @@ def run_batch(worker, job):
     key = worker.credentials.get(providers.credential_scope(settings))
     run = params.setdefault("ucloud_run", {})
     folder = settings.ucloud_transcriber.storage_path + "/cbs-batch-" + identifier
+    output_failure = [None]
+    phase = None
 
     def checkpoint(**values):
-        current = store.update_native_batch(identifier, run_update=values)
+        native_startup.guard(
+            store, reconnect, allow_stop=values == {"cancellation_requested": True}
+        )
+        current = store.update_native_batch(identifier, run_update=values, reconnect=reconnect)
         run.clear()
         run.update(current["params"]["ucloud_run"])
 
@@ -1151,6 +1168,7 @@ def run_batch(worker, job):
             or latest.get("cancel_requested")
         ):
             raise Cancelled()
+        native_startup.guard(store, reconnect)
         for member in members:
             child = store.job(member["job_id"])
             batch_for_job(store, child)
@@ -1162,7 +1180,8 @@ def run_batch(worker, job):
             from .input_admission import uses_original
 
             if recording["project_id"] != batch["project_id"] or (
-                recording["status"] != "ready" and not uses_original(child, recording)
+                reconnect is None
+                and (recording["status"] != "ready" and not uses_original(child, recording))
             ):
                 raise ValueError("A UCloud batch recording changed. Check the project and media.")
             providers.require_approval(
@@ -1179,9 +1198,13 @@ def run_batch(worker, job):
 
     try:
         native.require_setup(settings, key)
+        native_startup.guard(store, reconnect)
         with native.client_for(settings, key) as client:
             try:
+                guard()
                 if not run.get("job_id"):
+                    if reconnect is not None:
+                        raise ValueError(native_startup.REFUSED)
                     if uncertain(run):
                         raise ValueError(
                             "UCloud batch submission outcome is unknown. Reconcile this batch "
@@ -1355,6 +1378,8 @@ def run_batch(worker, job):
                     return data, name, parse_transcript(data, "transcript.json")
 
                 def note_output_error(member, error):
+                    if output_failure[0] is not False:
+                        output_failure[0] = error
                     errors = _output_errors(run, members)
                     if member["job_id"] in errors or len(errors) < LOG_MEMBER_LIMIT:
                         errors[member["job_id"]] = error.details
@@ -1426,6 +1451,9 @@ def run_batch(worker, job):
                                 },
                                 job_id=member["job_id"],
                                 native_artifacts=evidence,
+                                **(
+                                    {"native_reconnect": reconnect} if reconnect is not None else {}
+                                ),
                             )
                             store.update_job(
                                 member["job_id"], state="completed", progress=1, message="Complete"
@@ -1434,6 +1462,7 @@ def run_batch(worker, job):
                         note_output_error(member, exc)
                         raise
                     except (ValueError, OSError, KeyError, json.JSONDecodeError):
+                        output_failure[0] = False
                         clear_output_error(member)
                         store.update_job(
                             member["job_id"],
@@ -1565,6 +1594,8 @@ def run_batch(worker, job):
 
                     _transfers(eligible, read_published, receive_published, guard)
 
+                checkpoint(native_last_failure=None)
+                phase = "monitor"
                 deadline = time.monotonic() + settings.ucloud_transcriber.hours * 3600 + 600
                 next_log_check = 0
                 while True:
@@ -1622,6 +1653,7 @@ def run_batch(worker, job):
                     )
                     worker.cancel_event.wait(5)
                 guard()
+                phase = "download"
                 try:
                     paths = _output_paths(
                         client, folder + "/out", guard=guard, wait=worker.cancel_event.wait
@@ -1654,6 +1686,8 @@ def run_batch(worker, job):
                     checkpoint(cleanup_state="retained")
                 elif settings.ucloud_transcriber.cleanup_after_success:
                     if run.get("cleanup_state") not in native.CLEANED:
+                        if reconnect is not None:
+                            guard()
                         cleanup_batch(store, worker.credentials, identifier)
                 else:
                     checkpoint(cleanup_state="retained")
@@ -1672,12 +1706,21 @@ def run_batch(worker, job):
         )
         raise
     except MonitoringInterrupted as exc:
+        native_startup.failure(store, "native_batch", identifier, exc, phase=phase)
         store.finish_native_batch(identifier, "interrupted", str(exc))
         raise
-    except (ValueError, OSError, KeyError, json.JSONDecodeError):
+    except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
+        native_startup.failure(
+            store,
+            "native_batch",
+            identifier,
+            output_failure[0] if isinstance(output_failure[0], OutputReadError) else exc,
+            phase=phase,
+        )
         store.finish_native_batch(identifier, "failed", "UCloud batch failed; saved results kept.")
         raise
-    except (UCloudAPIError, httpx.HTTPError, RuntimeError):
+    except (UCloudAPIError, httpx.HTTPError, RuntimeError) as exc:
+        native_startup.failure(store, "native_batch", identifier, exc, phase=phase)
         store.finish_native_batch(
             identifier, "failed", "UCloud batch connection failed; retry explicitly."
         )
