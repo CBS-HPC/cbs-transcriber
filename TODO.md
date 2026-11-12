@@ -219,7 +219,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   sufficient GPU hours means 1g MIG even if queued; known absent/insufficient GPU funding
   permits exact `cpu-amd-zen5-8-vcpu` only with CPU funding and model compatibility. Unknown
   funding is not zero. Affordability estimates/units and Runtime CPU preparation require
-  reviewed implementation; this rule is documented, not enabled in the preview.
+  reviewed implementation; this rule is documented, not enabled in the preview. See
+  [funding policy (T145)](docs/decisions/0177-funding-based-compute-fallback.md).
 - [ ] **Old UCloud obligations (T80/T80b).** Inspect and safely recover or explicitly dispose
   remaining legacy single-job and batch cleanup obligations; retain unresolved journals and
   user-visible controls. Emptying UCloud Trash or discarding unpreserved output requires the

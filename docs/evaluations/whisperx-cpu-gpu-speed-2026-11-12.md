@@ -33,9 +33,15 @@ speed claims into a promise for this app's pinned model, Danish audio or MIG sli
 
 ## Scheduling implication
 
-Compare total completion time: queue wait, startup/model load, ASR, alignment, speakers and
-transfer/import. CPU fallback is useful only when that total is lower than waiting for a
-MIG and processing there, subject to model compatibility, memory, quality and approved cost.
+The subsequently agreed rule is funding-based, for both native Transcriber and CBS Runtime:
+use 1g MIG when the selected project has sufficient usable GPU funding, including queuing.
+Consider the exact `cpu-amd-zen5-8-vcpu` fallback only for known absent/exhausted or
+insufficient GPU funding, with separate CPU funding and model compatibility. Availability
+or a predicted shorter queue is not a fallback trigger. This rule is not implemented yet;
+see [ADR 0177](../decisions/0177-funding-based-compute-fallback.md).
+
+Still measure total completion time: queue wait, startup/model load, ASR, alignment, speakers
+and transfer/import, so users can assess the permitted fallback's cost and expected speed.
 More CPU cores do not imply proportional single-file speedup; the
 [CTranslate2 performance guidance](https://opennmt.net/CTranslate2/performance.html) recommends
 INT8 and coordinating worker/thread counts with physical cores for throughput.
@@ -44,7 +50,7 @@ Before enabling fallback, benchmark the actual pinned same model and output stag
 MIG and selected CPU configurations. Separate cold/warm startup, each processing stage,
 transfer/import, memory and total time; include short and long Danish/English workloads.
 Hold decoding/batching/language/quality settings explicit, record differences and do not
-silently substitute a smaller model. No numerical fallback multiplier is accepted yet.
+silently substitute a smaller model. No numerical affordability multiplier is accepted yet.
 
 Parallel MIG requests, CPU fallback and machine availability belong in one policy. The
 currently checked API exposes per-product queue status, not exact free-instance counts.

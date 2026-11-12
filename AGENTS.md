@@ -596,6 +596,15 @@ Future public commits must descend only from the clean public main history.
   10 November 2026. Do not re-add them as a runtime or development dependency.
 - Use descriptive errors without exposing upstream credentials or transcript bodies.
 
+## Planned compute fallback
+
+The agreed future rule applies to both native Transcriber and CBS Runtime (ADR 0177):
+sufficient usable selected-project GPU funding means 1g MIG even when queued. Only known
+absent/exhausted/insufficient GPU funding permits considering `cpu-amd-zen5-8-vcpu`, with CPU
+funding and exact model/recipe proof. Unknown wallet evidence never means zero. This is not
+implemented; preserve current/frozen compute until affordability, CPU-generation and
+compatibility gates pass.
+
 ## Development usage documentation
 
 Keep [the AI development usage ledger](docs/development-usage.md) and its

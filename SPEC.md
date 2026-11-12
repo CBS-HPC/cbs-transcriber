@@ -316,6 +316,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V220: Planned CPU fallback applies to native Transcriber and CBS Runtime only for known
+  absent/exhausted or insufficient selected-project GPU funding. Sufficient usable funding
+  keeps exact 1g MIG even when queued; BUSY/FULL or unknown funding never authorizes CPU.
+  Exact cpu-amd-zen5-8-vcpu needs CPU funding and model/recipe proof; freeze accepted choices,
+  never retarget Retry/uncertain submissions. Affordability policy and activation remain pending;
+  current V76/V112 behavior stays unchanged until T145 is verified (ADR0177).
 - V216: Install-latest resolves one public stable release and one matching versioned wheel/
   constraints pair, rejects ambiguous/foreign/malformed assets and verifies GitHub SHA-256
   digests before uv installation. Preserve copy/no-config flags, explicit update intent and
@@ -1896,7 +1902,8 @@ T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
-T141|~|Automatic native singleton/batch startup reconnect authorized; ADR0174 reviewed, implementation frozen in separate child and final445-case gate running; not loaded|V6,V9,I.native-batch,ADR0174
+T141|~|Separate native child653b0e9 verified: final76 focused passes/independentGo and qualified earlier444pass+1skip; composition and real automatic reopen acceptance pending, not loaded|V6,V9,I.native-batch,ADR0174
+T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results

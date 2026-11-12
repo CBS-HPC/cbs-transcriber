@@ -8,10 +8,10 @@ preview. Public main, published 0.1.0 and Desktop source remain unchanged.
 
 | Work | Status | Next gate |
 | --- | --- | --- |
-| Separate setup dialog and missing-key colour | Implementation frozen; independent browser gate running | Record exact source/test results, integrate reviewed bytes, preserve user drafts and real library. |
-| Native automatic startup reconnection (T141) | ADR 0174 design Go; isolated implementation in progress | Actual singleton/batch startup, Stop and no-submit adversarial gates; independent source review. |
-| CBS Runtime observation stability (T143) | ADR 0175 design Go; three old-source red cases reproduced, first narrow green run passes | Typed observation/refusal, bounded settling and atomic Stop/writer-race gates; historical lock unchanged. |
-| Isolated Runtime generation recovery | ADR 0176 proposed; independent design review in progress | Separate child based on the reviewed observation fix; complete admission/legacy/HF/capture/restore proofs before enabling. |
+| Separate setup dialog and missing-key colour | Served static UI at `dbb3581`; independent browser Go, 74 MVP/10 full-profile qualified observations | Save drafts before refresh; no backend restart was needed. |
+| Native automatic startup reconnection (T141) | Local `653b0e9`, final 76 focused passes and independent Go; broader 444/one-skip evidence source-qualified | Compose and verify before preserved reload; real automatic provider reopen acceptance remains. |
+| CBS Runtime observation stability (T143) | Local `857a727`, 100 focused and 17 independent cases pass, independent Go | Compose and verify before preserved reload; historical lock unchanged. |
+| Isolated Runtime generation recovery (T144) | ADR 0176 reviewed for disabled Stage 1 implementation | Bounded registry/data/CAS first; no promotion until actual-owner, admission/HF/compute/capture/restore proofs pass. |
 | Funding-based CPU fallback | Rule agreed for native Transcriber and CBS Runtime; funding/units/affordability design in progress | MIG even when queued if GPU funding is sufficient; exact 8-vCPU fallback only for known absent/insufficient GPU funding, with CPU eligibility/model proof. Not implemented. |
 | Spelling interface | Proposed only | Replace the separate editing panel with local dictionary underlines and on-demand suggestions; right-click/keyboard is recommended, trigger remains undecided. No integration yet. |
 
@@ -78,4 +78,5 @@ reserve a whole future run. Full-run insufficiency needs a defined/versioned est
 an invented provider requirement or automatic use of the configured maximum walltime.
 Unknown/malformed/unavailable funding never becomes zero. CPU needs its own usable allocation
 and exact `cpu-amd-zen5-8-vcpu` compatibility. Preserve all already-frozen compute choices.
-See [AU and other published measurements](../evaluations/whisperx-cpu-gpu-speed-2026-11-12.md).
+See [funding policy (ADR 0177)](../decisions/0177-funding-based-compute-fallback.md) and
+[AU and other published measurements](../evaluations/whisperx-cpu-gpu-speed-2026-11-12.md).
