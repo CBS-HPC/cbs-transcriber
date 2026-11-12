@@ -17,6 +17,11 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
+tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
+It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime
+generation Stage 1 is verified separately at `401769e`, with later recovery stages still open.
+
 - [x] **Automatic native startup reconnection (T141), verified locally 12 November.**
   `codex/mvp-v2-native-reconnect` resumes exact submitted singleton/batch allocations with
   durable Stop and no new allocation/upload/followup. Final 76 focused cases and independent
