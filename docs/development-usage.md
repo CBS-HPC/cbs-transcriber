@@ -183,6 +183,32 @@ Events after the cutoff are excluded. Deleted or unindexed sessions, other compu
 cloud-only history may be absent. The phase stays open, subsets are not added twice, and
 post-MVP speed, rates, credit equivalent, actual billing/cost and Claude figures stay unknown.
 
+The 12 November preview/reliability milestone continues that phase through **12 November,
+12:32:09 UTC / 13:32:09 Copenhagen**, with last included event 12:31:52.462 UTC. The local
+checkout was `codex/post-mvp-uninstall-guide` at `dbb3581`; later commits and gates are outside
+this cutoff. This remains work in progress rather than a published v2 release.
+
+| Latest cumulative checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 1,448,968,353 |
+| Cached input, already included above | 1,429,569,664 |
+| Uncached input | 19,398,689 |
+| Output | 3,195,975 |
+| Reasoning output, already included above | 1,831,953 |
+| Total | **1,452,164,328** |
+
+The additional interval after the 11 November cutoff is **784,417,792 tokens**; do not add
+cumulative totals. All included events remain `gpt-6.1-sol`: 478,351,088 main-chat tokens and
+973,813,240 subagent tokens across one main and 17 contributing subagent sessions. The audit
+scanned 190 retained sessions, counted 5,586 positive updates and excluded 53 duplicate
+snapshots in the phase. All 190 source prefixes and prior evidence were rehashed unchanged.
+The fixed MVP baseline and prior cumulative checkpoints reconcile exactly. Root separately
+summed every included event and last-request counter, checking model/role totals and interval
+arithmetic against the private verifier. Aggregate SHA-256:
+`fca908128780dd4c638ebad57f3c2e630e07da8ab798d408a86ef38cc66bcb55`.
+Later/in-flight work remains excluded and unmeasured; speed/rates, credit equivalent,
+actual billing/cost and Claude usage remain unknown. No raw session records are published.
+
 Add separate non-overlapping phases for post-MVP planning/implementation and subsequent
 releases. Record explicit boundaries, provider/model, input/cache/output categories, scope,
 coverage gaps and rate assumptions. If a cumulative milestone view is useful, label it as
