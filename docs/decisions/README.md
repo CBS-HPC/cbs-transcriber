@@ -2,6 +2,7 @@
 
 - [0128 — Reversible library list visibility](0128-library-list-visibility.md) (proposed)
 - [0144 — Permanent deletion of an inactive library](0144-permanent-library-deletion.md) (proposed)
+- [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (proposed; not activated)
 
 Accepted architecture decisions. New decisions get the next number; supersede an old
 record explicitly rather than rewriting its historical rationale.
@@ -176,5 +177,7 @@ record explicitly rather than rewriting its historical rationale.
 - [0171 — First-use UCloud and optional Hugging Face setup](0171-first-use-credential-setup.md)
 - [0172 — Runtime stamp proof and retained-lock preflight](0172-runtime-readiness-and-preparation-preflight.md)
 - [0173 — HF access and configured-model preparation in Activity](0173-huggingface-background-preparation.md)
+- [0174 — Native startup reconnection](0174-native-startup-reconnection.md)
+- [0175 — Runtime preparation observation recovery](0175-runtime-preparation-observation-recovery.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

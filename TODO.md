@@ -17,6 +17,17 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+- [x] **CBS Runtime preparation observation stability (T143), authorized 12 November.** Reproduce and
+  fix standalone transient-monitor/terminal-publication and late-Stop completion races on
+  `codex/mvp-v2-runtime-reliability`. ADR 0175 requires typed bounded observations, one durable
+  Activity/allocation and no new preparation/lock/cache mutation. Independent design review
+  passed with the typed-reader/atomic-success conditions; 117 distinct final synthetic passes
+  and independent code/evidence Go qualify this local slice. It is not loaded in the preview.
+  The historical retained lock is unresolved; separate immutable-generation work and controlled
+  UCloud acceptance are needed before claiming the environment is ready.
+  [Verification and limits](docs/verification-2026-11-12-runtime-observation.md).
+  [Reliability plan](docs/work-plans/mvp-v2-reliability-2026-11-12.md).
+
 The user authorized selected follow-up work on local `codex/post-mvp-work`, descended from
 clean public main `708a27b`. The current morning checkpoint is `codex/post-mvp-morning`,
 including the reviewed isolated timing-policy work. **Do not merge/push it to main, update Desktop main, publish or

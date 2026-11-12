@@ -20,6 +20,7 @@ import httpx
 
 from . import enhancement_api as api
 from . import providers, runtime_compute, runtime_store
+from . import runtime_preparation_observation as observation
 from . import ucloud_native as native
 from .enhancement import local_settings
 from .store import new_id, now
@@ -28,6 +29,10 @@ POLICY = "cbs-runtime-preparation-v1"
 MODEL_PLAN = "cbs-runtime-model-plan-v1"
 MODEL_RECEIPT = "cbs-runtime-model-plan-receipt-v1"
 MODEL_CHECK_SECONDS = 30
+OBSERVATION_ATTEMPTS = 12
+OBSERVATION_BACKOFF_SECONDS = 5
+TERMINAL_SETTLE_SECONDS = 30
+TERMINAL_SETTLE_ATTEMPTS = 12
 _ABSENT = object()
 PREFIX = "runtime-preparation:"
 RECENT_ACTIVITY = 200
@@ -558,8 +563,13 @@ def request_huggingface(store, credentials, plan, guard):
     return _admit(store, identity, expected, guard=guard)
 
 
-def _model_bytes(client, settings, path, deadline):
+def _model_bytes(client, settings, path, deadline, *, strict=False):
     """Small public receipt only, using the reviewed bounded control/transfer transport."""
+    if strict:
+        item = observation.metadata(client, path, deadline=deadline)
+        if api._runtime_kind(item) != "FILE":
+            raise observation.Refused()
+        return observation.read_bytes(client, settings, path, deadline=deadline)
     item = api.runtime_metadata(client, path, deadline=deadline)
     if item is None or api._runtime_kind(item) != "FILE":
         return None
@@ -599,13 +609,29 @@ def _model_bytes(client, settings, path, deadline):
         raise api.RuntimePreflightBlocked("runtime-readiness-unknown") from None
 
 
-def _model_inventory(client, path, deadline):
-    folder = api.runtime_metadata(client, path, deadline=deadline)
+def _model_inventory(client, path, deadline, *, strict=False):
+    folder = (observation.metadata if strict else api.runtime_metadata)(
+        client, path, deadline=deadline
+    )
     if folder is None or api._runtime_kind(folder) != "DIRECTORY":
         return None
     try:
-        page = api._runtime_request(
-            client, "GET", "/api/files/browse", deadline, params={"path": path, "itemsPerPage": 64}
+        page = (
+            observation.control(
+                client,
+                "GET",
+                "/api/files/browse",
+                deadline=deadline,
+                params={"path": path, "itemsPerPage": 64},
+            )
+            if strict
+            else api._runtime_request(
+                client,
+                "GET",
+                "/api/files/browse",
+                deadline,
+                params={"path": path, "itemsPerPage": 64},
+            )
         )
     except native.UCloudAPIError:
         raise api.RuntimePreflightBlocked("runtime-readiness-unknown") from None
@@ -635,13 +661,14 @@ def _model_inventory(client, path, deadline):
     return sorted(inventory, key=lambda item: item["name"]) if inventory else None
 
 
-def _model_evidence(client, settings, model_plan):
+def _model_evidence(client, settings, model_plan, *, strict=False, deadline=None):
     """Fresh API metadata, not remote weight hashes or physical no-follow proof.
 
     HF snapshots ordinarily contain symlinks; their reported names/kinds/sizes are only
     inventory witnesses. A prior successful pinned prefetch is separately required.
     """
-    deadline = time.monotonic() + MODEL_CHECK_SECONDS
+    deadline = time.monotonic() + MODEL_CHECK_SECONDS if deadline is None else deadline
+    read_options = {"strict": True} if strict else {}
     evidence = {
         "snapshots": {},
         "speakers": [],
@@ -653,7 +680,9 @@ def _model_evidence(client, settings, model_plan):
         folder = api.model_folder(settings, name)
         if name == "speakers":
             for relative, (size, _) in model_plan["speaker_files"].items():
-                item = api.runtime_metadata(client, folder + "/" + relative, deadline=deadline)
+                item = (observation.metadata if strict else api.runtime_metadata)(
+                    client, folder + "/" + relative, deadline=deadline
+                )
                 if item is None:
                     return None
                 kind = api._runtime_kind(item)
@@ -667,12 +696,14 @@ def _model_evidence(client, settings, model_plan):
                 evidence["speakers"].append({"name": relative, "kind": kind, "bytes": size})
             repo, revision = model_plan["model_revisions"]["speakers"]
             if (
-                _model_bytes(client, settings, folder + "/" + api.SPEAKERS_COMPLETE, deadline)
+                _model_bytes(
+                    client, settings, folder + "/" + api.SPEAKERS_COMPLETE, deadline, **read_options
+                )
                 != f"{repo}@{revision}\n".encode()
             ):
                 return None
             continue
-        inventory = _model_inventory(client, folder, deadline)
+        inventory = _model_inventory(client, folder, deadline, **read_options)
         if not inventory or not any(
             item["kind"] != "DIRECTORY" and item["bytes"] > 0 for item in inventory
         ):
@@ -680,7 +711,9 @@ def _model_evidence(client, settings, model_plan):
         evidence["snapshots"][name] = inventory
         if name in api.DANISH_CHOICES:
             helper = api.danish_module()
-            raw = _model_bytes(client, settings, folder + "/" + helper.MARKER, deadline)
+            raw = _model_bytes(
+                client, settings, folder + "/" + helper.MARKER, deadline, **read_options
+            )
             try:
                 receipt = helper.validate_receipt(
                     json.loads(raw), choice=name, model=tuple(model_plan["model_revisions"][name])
@@ -708,6 +741,7 @@ def _model_evidence(client, settings, model_plan):
             client,
             api.runtime_folder(settings) + "/nltk/tokenizers/punkt_tab/" + language,
             deadline,
+            **read_options,
         )
         if not inventory or not {
             "collocations.tab",
@@ -1441,6 +1475,10 @@ class Run:
                 self.checkpoint(
                     state="failed", message=str(exc), journal={"preflight_failure": exc.code}
                 )
+        except observation.Error as exc:
+            fresh = get(self.store, self.identifier)
+            if fresh["epoch"] == self.epoch and fresh["state"] not in {"completed", "cancelled"}:
+                self.checkpoint(state="failed", message=str(exc))
         except Exception:
             fresh = get(self.store, self.identifier)
             if fresh["state"] in {"completed", "cancelled"}:
@@ -1577,17 +1615,105 @@ class Run:
             )
             self.worker.stopping.wait(api.POLL_SECONDS)
 
+    def _wait(self, delay):
+        self.worker.stopping.wait(max(0, delay))
+
+    def _poll_owner(self):
+        if self.worker.stopping.is_set():
+            raise Interrupted()
+        fresh = get(self.store, self.identifier, owned=True)
+        if fresh["epoch"] != self.epoch or fresh["journal"].get("job_id") != self.value[
+            "journal"
+        ].get("job_id"):
+            raise Interrupted()
+        return fresh
+
+    def _verification(self, remote, deadline):
+        if self.value["frozen"].get("runtime_id") != api.runtime_id():
+            raise observation.Refused()
+        doctor = observation.read_json(
+            self.client, self.settings, remote + "/doctor.json", deadline=deadline
+        )
+        if doctor.get("ready") is not True or doctor.get("version") != api.WHISPERX_VERSION:
+            raise observation.Refused()
+        runtime_compute.require_gpu_memory(doctor)
+        observation.stamp(self.client, self.settings, deadline=deadline)
+        verified = {"prepared": True, "doctor_verified": True}
+        if "model_plan" in self.value["frozen"]:
+            plan = self.value["frozen"]["model_plan"]
+            cache = observation.read_json(
+                self.client, self.settings, remote + "/cache.json", deadline=deadline
+            )
+            models = cache.get("models", {})
+            if (
+                type(models) is not dict
+                or any(models.get(key) is not True for key in plan["models"])
+                or cache.get("punkt_tab") is not True
+            ):
+                raise observation.Refused()
+            evidence = _model_evidence(
+                self.client, self.settings, plan, strict=True, deadline=deadline
+            )
+            if evidence is None:
+                raise observation.Refused()
+            verified["model_plan_receipt"] = {
+                "format": MODEL_RECEIPT,
+                "model_plan_sha256": runtime_store._digest(plan),
+                "runtime_id": self.value["frozen"]["runtime_id"],
+                "recipe_sha256": self.value["frozen"]["recipe_sha256"],
+                "evidence": evidence,
+            }
+            _validate_model_receipt(verified["model_plan_receipt"], self.value["frozen"])
+        return verified
+
+    def _complete_prepared(self, verified, deadline):
+        # BEGIN may wait for another writer. Read Stop/epoch only AFTER ownership of
+        # that writer is obtained, so a late remote reply cannot publish Ready.
+        with self.store.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            fresh = _get(db, self.identifier, owned=True)
+            if (
+                fresh["epoch"] != self.epoch
+                or fresh["journal"].get("job_id") != self.value["journal"].get("job_id")
+                or self.worker.stopping.is_set()
+            ):
+                raise Interrupted()
+            if fresh["state"] in {"completed", "cancelled"}:
+                self.value = fresh
+                return True
+            if fresh["journal"].get("stop_intent"):
+                return False
+            if time.monotonic() >= deadline:
+                raise observation.Refused()
+            deadline = fresh["journal"].get("deadline_at")
+            if type(deadline) in (int, float) and time.time() > deadline:
+                self.value = _update(db, fresh, journal={"stop_intent": True})
+                return False
+            if fresh["journal"].get("remote_state") != "SUCCESS":
+                raise observation.Refused()
+            self.value = _update(
+                db,
+                fresh,
+                state="completed",
+                progress=1,
+                journal=verified,
+                message=(
+                    "Base UCloud runtime prepared and CUDA checked; "
+                    if "model_plan" not in fresh["frozen"]
+                    else "Configured UCloud models prepared and caches checked; "
+                )
+                + "public run files await cleanup.",
+            )
+            return True
+
     def poll(self):
         if self.value["state"] == "completed":
             return
         remote = api.run_folder(self.settings, self.identifier)
+        transient, pending, terminal_at = 0, 0, None
         while True:
-            if self.worker.stopping.is_set():
-                raise Interrupted()
-            fresh = get(self.store, self.identifier)
-            if fresh["epoch"] != self.epoch:
-                raise Interrupted()
-            run = fresh["journal"]
+            fresh = self._poll_owner()
+            run, delay = fresh["journal"], api.POLL_SECONDS
             deadline = run.get("deadline_at")
             if type(deadline) in (int, float) and time.time() > deadline:
                 fresh = self.checkpoint(
@@ -1595,105 +1721,102 @@ class Run:
                     message="Preparation exceeded its time limit; stopping its allocation…",
                 )
                 run = fresh["journal"]
-            if run.get("stop_intent"):
-                try:
+            try:
+                if run.get("stop_intent"):
                     with _control(self.identifier):
                         self.value = _observe_stop(
                             self.store, self.client, self.identifier, self.epoch, run["job_id"]
                         )
-                except ControlBusy:
-                    self.worker.stopping.wait(api.POLL_SECONDS)
-                    continue
-                if self.value["state"] == "cancelled":
-                    return
-                self.worker.stopping.wait(api.POLL_SECONDS)
-                continue
-            state = api.remote_state(self.client, run["job_id"])
-            update = {"remote_state": state, **_release({**run, "remote_state": state})}
-            self.checkpoint(journal=update)
-            status = (
-                api.read_json(self.client, self.settings.base_url, remote + "/supervisor.json")
-                or {}
-            )
-            if status and status.get("generation") != self.identifier:
-                raise Conflict("The preparation status belongs to another run.")
-            phase = status.get("phase")
-            if state in api.TERMINAL:
-                if run.get("stop_intent"):
-                    self.checkpoint(
-                        state="cancelled",
-                        message="UCloud preparation stopped; public run files await cleanup.",
-                    )
-                    return
-                if phase == "failed":
-                    code = status.get("code")
-                    reason = (
-                        api.FAILURES.get(code)
-                        if isinstance(code, str)
-                        and code in {"runtime-busy", "runtime-prepare", "runtime"}
-                        else None
-                    )
-                    if reason:
-                        self.checkpoint(state="failed", message=reason)
+                    if self.value["state"] == "cancelled":
                         return
-                if phase != "finished" or state != "SUCCESS":
-                    raise Conflict("The UCloud preparation allocation did not finish successfully.")
-                if self.value["frozen"].get("runtime_id") != api.runtime_id():
-                    raise Conflict("This allocation prepared an earlier runtime recipe.")
-                doctor = (
-                    api.read_json(self.client, self.settings.base_url, remote + "/doctor.json")
-                    or {}
-                )
-                if doctor.get("ready") is not True or doctor.get("version") != api.WHISPERX_VERSION:
-                    raise Conflict("The prepared runtime failed its package readiness check.")
-                runtime_compute.require_gpu_memory(doctor)
-                if not api.stamped(self.client, self.settings):
-                    raise Conflict("The prepared runtime stamp is unavailable.")
-                verified = {"prepared": True, "doctor_verified": True}
-                if "model_plan" in self.value["frozen"]:
-                    plan = self.value["frozen"]["model_plan"]
-                    cache = (
-                        api.read_json(self.client, self.settings.base_url, remote + "/cache.json")
-                        or {}
+                else:
+                    state = observation.state(
+                        self.client,
+                        run["job_id"],
+                        run.get("specification"),
+                        deadline=None
+                        if terminal_at is None
+                        else terminal_at + TERMINAL_SETTLE_SECONDS,
                     )
-                    models = cache.get("models", {})
-                    if (
-                        type(models) is not dict
-                        or any(models.get(key) is not True for key in plan["models"])
-                        or cache.get("punkt_tab") is not True
-                    ):
-                        raise Conflict(
-                            "The allocation did not verify every configured Runtime cache."
-                        )
-                    evidence = _model_evidence(self.client, self.settings, plan)
-                    if evidence is None:
-                        raise Conflict("The configured Runtime cache inventory is incomplete.")
-                    verified["model_plan_receipt"] = {
-                        "format": MODEL_RECEIPT,
-                        "model_plan_sha256": runtime_store._digest(plan),
-                        "runtime_id": self.value["frozen"]["runtime_id"],
-                        "recipe_sha256": self.value["frozen"]["recipe_sha256"],
-                        "evidence": evidence,
-                    }
-                    _validate_model_receipt(verified["model_plan_receipt"], self.value["frozen"])
-                self.checkpoint(
-                    state="completed",
-                    progress=1,
-                    journal=verified,
-                    message=(
-                        "Base UCloud runtime prepared and CUDA checked; "
-                        if "model_plan" not in self.value["frozen"]
-                        else "Configured UCloud models prepared and caches checked; "
+                    if run.get("remote_state") in api.TERMINAL and state != run["remote_state"]:
+                        raise observation.Refused()
+                    self.checkpoint(
+                        journal={"remote_state": state, **_release({**run, "remote_state": state})}
                     )
-                    + "public run files await cleanup.",
-                )
-                return
-            self.checkpoint(
-                message=(
-                    "Preparing the UCloud runtime (20+ minutes can be needed)…"
-                    if phase == "preparing"
-                    else "Waiting for UCloud preparation to finish…"
-                ),
-                progress=0.5 if phase == "preparing" else 0.25,
-            )
-            self.worker.stopping.wait(api.POLL_SECONDS)
+                    if state == "SUCCESS" and terminal_at is None:
+                        terminal_at = time.monotonic()
+                    if state in api.TERMINAL and state != "SUCCESS":
+                        raise observation.Refused()
+                    status = observation.read_json(
+                        self.client,
+                        self.settings,
+                        remote + "/supervisor.json",
+                        deadline=None
+                        if terminal_at is None
+                        else terminal_at + TERMINAL_SETTLE_SECONDS,
+                    )
+                    phase = status.get("phase")
+                    if status.get("generation") != self.identifier or phase not in {
+                        "started",
+                        "preparing",
+                        "ready",
+                        "running",
+                        "finished",
+                        "failed",
+                    }:
+                        raise observation.Refused()
+                    if phase == "failed":
+                        code = status.get("code")
+                        if isinstance(code, str) and code in {
+                            "runtime-busy",
+                            "runtime-prepare",
+                            "runtime",
+                        }:
+                            self.checkpoint(state="failed", message=api.FAILURES[code])
+                            return
+                        raise observation.Refused()
+                    if state == "SUCCESS":
+                        if phase != "finished":
+                            raise observation.Pending()
+                        settle_deadline = terminal_at + TERMINAL_SETTLE_SECONDS
+                        if self._complete_prepared(
+                            self._verification(remote, settle_deadline), settle_deadline
+                        ):
+                            return
+                        continue  # Durable Stop won; use its actual control path.
+                    self.checkpoint(
+                        message="Preparing the UCloud runtime (20+ minutes can be needed)…"
+                        if phase == "preparing"
+                        else "Waiting for UCloud preparation to finish…",
+                        progress=0.5 if phase == "preparing" else 0.25,
+                    )
+                transient = 0
+            except ControlBusy:
+                pass
+            except (observation.Error, api.Transient) as exc:
+                current = self._poll_owner()
+                if current["journal"].get("stop_intent") and not run.get("stop_intent"):
+                    continue
+                if isinstance(exc, (observation.Refused, api.RuntimePreflightBlocked)):
+                    raise
+                if isinstance(exc, observation.Pending):
+                    if terminal_at is not None:
+                        pending += 1
+                        if pending > TERMINAL_SETTLE_ATTEMPTS:
+                            raise observation.Refused() from None
+                    self.checkpoint(message=str(exc))
+                else:
+                    transient += 1
+                    if transient > OBSERVATION_ATTEMPTS:
+                        raise observation.Refused() from None
+                    self.checkpoint(
+                        message="UCloud connection interrupted; reconnecting to the same "
+                        "preparation allocation…"
+                    )
+                delay = OBSERVATION_BACKOFF_SECONDS
+            if terminal_at is not None:
+                remaining = TERMINAL_SETTLE_SECONDS - (time.monotonic() - terminal_at)
+                if remaining <= 0:
+                    raise observation.Refused()
+                delay = min(delay, remaining)
+            self._wait(delay)

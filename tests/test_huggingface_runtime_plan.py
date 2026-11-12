@@ -78,7 +78,7 @@ def finish(f, monkeypatch, *, bad_cache=None):
     accepted = request(f)
     observed = evidence(f.plan["model_plan"])
     f.observed, f.scripts, f.seeded = observed, [], []
-    monkeypatch.setattr(subject, "_model_evidence", lambda *_: copy.deepcopy(f.observed))
+    monkeypatch.setattr(subject, "_model_evidence", lambda *_, **__: copy.deepcopy(f.observed))
     read_json = api.read_json
 
     def read(client, server, path, *args):

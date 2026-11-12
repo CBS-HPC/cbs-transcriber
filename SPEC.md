@@ -316,6 +316,14 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   digests before uv installation. Preserve copy/no-config flags, explicit update intent and
   isolation from the project environment; a running default-port app blocks installation.
   Never auto-start, kill an app or publish assets. An unpublished stable URL is labelled as such.
+- V218: Standalone Runtime preparation retries only typed bounded read observations of its
+  exact frozen allocation/artifacts; no new submission, shared cache/lock mutation or Ready
+  from missing/invalid proof. Keep auth/identity/generation/pins/refusal distinct from transient
+  transport and bounded partial publication; legacy generic read APIs retain their contracts.
+  Stop routes through owned remote observation; shutdown/epoch/terminal deadlines stay live.
+  Positive completion rechecks Stop and owner under the writer transaction, including a wait.
+  Historical retained-lock recovery and immutable-generation activation remain separate.
+  [ADR 0175](docs/decisions/0175-runtime-preparation-observation-recovery.md).
 - V215: Explicit nonempty primary HF Settings/first-use token Save starts a server-lifetime
   Activity setup task, not inline
   model work; no-worker tests remain inert. Current token/plan fences, pinned cached-file reuse,
@@ -1887,6 +1895,7 @@ T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
+T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1989,3 +1998,6 @@ B440|2026-11-12|A long Windows verification fixture produced a 277-character own
 B441|2026-11-12|An undo-merge browser fixture selected both visible Text and hidden Timing-pane Cancel controls|T140; scope the locator to the Text pane and retain draft/history/revision assertions; mechanical fixture correction needs no new product invariant
 B442|2026-11-12|Larger passage fonts exposed comparison alignment finishing after playback's resize reveal, stranding the current word below a short video viewport|V41,T140; schedule the existing guarded Follow pass after alignment writes; baseline/candidate differential, nine private geometry observations and formal resize/focus/draft checks
 B443|2026-11-12|An older layout test expected a quiet generic save status after rewriting an untimed passage, contradicting the accepted partial-timing notice|V208,T140; assert the actual nonblocking warning and persisted wording while retaining geometry/history checks; shared helper bodies unchanged
+B447|2026-11-12|Standalone Runtime preparation marked its owner failed after a transient observation or SUCCESS before supervisor publication|V218,T143; typed bounded same-allocation observation recovery and terminal settling, retaining old-source red reproductions and permanent-refusal boundaries
+B448|2026-11-12|A late Runtime doctor/verification observation could commit Ready after durable Stop under the same epoch|V218,T143; atomically recheck Stop and current owner after writer acquisition, then route through owned Stop observation; retain I/O and writer-barrier regressions
+B450|2026-11-12|The new strict preparation reader initially relied on fake full job specifications while omitting required API application/parameter inclusion flags|V218,T143; match the released SDK request contract and enforce response omission in the regression fixture before accepting identity proof
