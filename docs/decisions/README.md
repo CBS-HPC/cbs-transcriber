@@ -4,6 +4,7 @@
 - [0144 — Permanent deletion of an inactive library](0144-permanent-library-deletion.md) (proposed)
 - [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stage 1 verified separately; activation held)
 - [0177 — Funding-based CPU fallback](0177-funding-based-compute-fallback.md) (agreed; not implemented)
+- [0178 — Bounded project-funding observations](0178-bounded-project-funding-observation.md) (conditional design Go; unimplemented)
 
 Accepted architecture decisions. New decisions get the next number; supersede an old
 record explicitly rather than rewriting its historical rationale.
@@ -180,5 +181,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0173 — HF access and configured-model preparation in Activity](0173-huggingface-background-preparation.md)
 - [0174 — Native startup reconnection](0174-native-startup-reconnection.md)
 - [0175 — Runtime preparation observation recovery](0175-runtime-preparation-observation-recovery.md)
+- [0179 — Existing sole-result Working on schema 19](0179-existing-working-schema19.md) (design Go; unimplemented)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

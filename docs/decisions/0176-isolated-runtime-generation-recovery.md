@@ -103,6 +103,34 @@ schema 19 that the source remains unchanged, the restored library has no active 
 pointer, its archived owners remain inert and historical generation-bearing results verify.
 An operational registry is not restore/upload/cleanup or institutional approval authority.
 
+## Stage 2 owner/promotion design Go — implementation unstarted
+
+Independent review approved the following disabled recovery slice. Freeze the exact Terminal
+app and trusted MIG/CUDA compute before confirmation/reservation; unsupported CPU preparation
+refuses. Insert the actual durable preparation owner and candidate atomically, retaining the
+existing HF-plan, capacity, epoch and Stop rules. Require an already verified Runtime namespace;
+fresh namespace creation is a separate unimplemented boundary.
+
+Journal separate exclusive-create intents and acknowledged receipts for environment and public
+run folders before POST. Conflicts/lost replies never permit adoption or another create/submit.
+Drain accepted replies after Stop and retain evidence, but perform no later POST. Creation
+identity and current observation epoch are distinct; late old replies cannot authorize a new
+worker. New-generation execution branches before legacy-root idle/stamp shortcuts, checking
+only the exact acknowledged generation; legacy behavior remains unchanged.
+
+The sole `verify_and_promote(owner, epoch, client, deadline)` must read actual typed exact-ID
+allocation/specification and generation-root stamp/doctor/cache/model-plan evidence. It accepts
+no caller-ready payload. The writer rechecks the same observed operation/specification,
+folders, owner/epoch/Stop and registry candidate before atomic owner-completion/pointer CAS.
+Generic writers and legacy completion helpers anchor the current stored birth identity and
+refuse generation removal, frozen/fingerprint downgrade and injected Ready/spec/path proof.
+
+Known-ID recovery, including terminal SUCCESS awaiting verification, observes the same owner.
+No-ID Retry after any create intent/ack, name-based generation reconciliation, successor
+creation, failed-candidate supersession and environment cleanup remain refused in this slice.
+No public API/UI, active-selection capture, inference admission, portable-source changes or
+activation are included. Later carry/provenance/restore/live gates remain required.
+
 ## Required gates
 
 Verify settings 9/10 preservation/collision refusal; duplicate confirms/CAS; exclusive folder

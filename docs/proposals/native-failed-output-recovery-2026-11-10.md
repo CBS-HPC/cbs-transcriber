@@ -159,6 +159,22 @@ The requested broader inventory concerns the configured owned root, exemplified 
 The inventory must not create jobs, upload/download private media or perform disposition
 while being previewed. A successful read-only inventory is not deletion permission.
 
+## Explicit ongoing-work safeguard — 12 November
+
+The user emphasized that broader cleanup must not delete ongoing activities or their data.
+Keep this flow design-only. Queued/running owners, uncertain submissions, unfinished
+retrieval/import, complete unsaved outputs and unreadable recovery evidence are excluded,
+even when a local card says Failed or Cancelled. A newly accepted job or changed membership
+after preview invalidates cleanup eligibility; recheck under the allocation control reservation
+immediately before Trash. Incomplete status/inventory never means idle or disposable.
+
+Remote cleanup must not cancel jobs, erase their local Activity owners, hide ongoing cards,
+remove recovery controls or discard unresolved journals/provenance. Settled status may update
+through existing rules; Clear finished remains a separate user action. Preserve shared
+Runtime/model paths and all unknown ownership. Required adversaries include remote RUNNING
+with local Failed, queued work, a new member after preview, interrupted import and failed
+cleanup after local deletion. Previewing this design performs no remote mutation.
+
 ## Smallest offline implementation sequence and gate
 
 1. Add a pure classification/preview prototype over supplied synthetic local/remote

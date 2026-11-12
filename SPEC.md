@@ -316,6 +316,18 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V222: Existing sole-result Working may activate only reviewed runtime/DB18/18 or19/19 pairs
+  with all ADR0141 eligibility/source/role/snapshot fences intact. Preserve passage_reviews
+  exactly, never interpret marks as consent/veto. Before designation, bounded negative native
+  job/owner scans cover both membership directions and failed resumable/unknown work without
+  calling T141 admission or reordering startup. Unknown/opaque/incomplete scope refuses remaining
+  pages; foreign data_version invalidates cached negatives; writer rechecks preserve later
+  choices. Earlier committed pages are not falsely described as globally rolled back (ADR0179).
+- V221: Future project-funding observations use explicit configured context and bounded GET-only
+  complete wallet reads. Strict ownership/unit/scalar projection and curated reasons preserve
+  unknown versus complete absence/zero; partial/error reads grant no usable authority. Always
+  affordability=not_checked/reservation=false, with no routing/job/DB/credential discovery or
+  whole-run funding claim. Conditional design and implementation gates remain (ADR0178).
 - V220: Planned CPU fallback applies to native Transcriber and CBS Runtime only for known
   absent/exhausted or insufficient selected-project GPU funding. Sufficient usable funding
   keeps exact 1g MIG even when queued; BUSY/FULL or unknown funding never authorizes CPU.
@@ -1935,7 +1947,9 @@ T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
-T144|~|Isolated Runtime generation recovery: disabledStage1 registry/selection/path codecs and candidateCAS verified46distinctcases/independentGo; no promotion or integration; owner/admission/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
+T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2owner/promotion designGo but implementationunstarted; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
+T146|.|Standalone bounded project-funding observer; conditionaldesignGo, fullunitpin/realSDKmockedproof required; no code/routing/CPUactivation|V221,V220,I.providers,ADR0178
+T147|.|Existing sole-result Working schema19 extension designGo; preserve marks and stricteligibility, add bounded negative native-recovery fence; implementation/tests unstarted|V222,V149,V182,I.history,ADR0179
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results

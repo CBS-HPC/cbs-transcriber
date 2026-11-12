@@ -9,8 +9,8 @@ preview. Public main, published 0.1.0 and Desktop source remain unchanged.
 | Work | Status | Next gate |
 | --- | --- | --- |
 | Separate setup dialog and missing-key colour | Served static UI at `dbb3581`; independent browser Go, 74 MVP/10 full-profile qualified observations | Save drafts before refresh; no backend restart was needed. |
-| Native automatic startup reconnection (T141) | Local `653b0e9`, final 76 focused passes and independent Go; broader 444/one-skip evidence source-qualified | Compose and verify before preserved reload; real automatic provider reopen acceptance remains. |
-| CBS Runtime observation stability (T143) | Local `857a727`, 100 focused and 17 independent cases pass, independent Go | Compose and verify before preserved reload; historical lock unchanged. |
+| Native automatic startup reconnection (T141) | Local `653b0e9`, final 76 focused passes and independent Go; broader 444/one-skip evidence source-qualified; combined 193-case Go | Preserved labelled reload and real automatic provider reopen acceptance remain. |
+| CBS Runtime observation stability (T143) | Local `857a727`, 100 focused and 17 independent cases pass, independent Go; combined 193-case Go | Preserved labelled reload; historical lock unchanged. |
 | Isolated Runtime generation recovery (T144) | Disabled Stage 1 verified separately at `401769e`, 46 distinct synthetic passes and independent Go | No integration/promotion; actual-owner, admission/HF/compute/capture/restore proofs remain. |
 | Funding-based CPU fallback | Rule agreed for native Transcriber and CBS Runtime; funding/units/affordability design in progress | MIG even when queued if GPU funding is sufficient; exact 8-vCPU fallback only for known absent/insufficient GPU funding, with CPU eligibility/model proof. Not implemented. |
 | Spelling interface | Proposed only | Replace the separate editing panel with local dictionary underlines and on-demand suggestions; right-click/keyboard is recommended, trigger remains undecided. No integration yet. |

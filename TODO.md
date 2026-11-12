@@ -17,6 +17,11 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+12 November handover: [the continuation plan](docs/work-plans/mvp-v2-continuation-2026-11-12.md)
+records tested components and the unstarted Runtime Stage 2, funding-observer (T146) and
+schema-19 Working (T147) designs. Editor/review workflow is the next user discussion;
+broader cleanup must preserve ongoing/recoverable work and Activity evidence.
+
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
 It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime
@@ -283,15 +288,16 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   same recorded allocation, all 12 members completed, 12 newly saved results and the prior
   12 retained (24 total); the observed remote state is SUCCESS. This qualifies that served
   Windows batch, not early retrieval while running, every failure phase, or other devices.
-- [ ] **Automatic startup reconnect — authorized MVP v2 work (T141).** On reopening,
+- [ ] **Automatic startup reconnect — loading and real acceptance (T141).** On reopening,
   resume monitoring/retrieval for already-submitted native singleton/batch allocations with a
   confirmed saved remote ID. Preserve saved siblings and frozen identities, back off bounded
   transient reads and keep unmet authentication/ownership obligations visible. Explicit Stop/
   Cancel stays authoritative. Do not create replacement jobs, replay uncertain submissions,
   steal preparation locks or discard unresolved output. Historical failures and cleanup-only
-  actions are separate policies. ADR 0174 passed independent design review; implementation is
-  frozen in its separate child and the final 445-case gate is running. It is not loaded in the
-  preview yet. Historical generic failures and fresh singleton errors already curated to generic
+  actions are separate policies. Implementation passed its final 76-case gate and independent
+  review, then the assembled candidate passed 193 cases. Earlier 444/one-skip evidence remains
+  source-qualified; this item now tracks loading/real acceptance. It is not loaded yet.
+  Historical generic failures and fresh singleton errors already curated to generic
   errors remain manual; no error-text inference is used to grant automatic recovery.
 - [ ] **Activity and transcription audit (T104/T108/T109).** Complete the remaining deep audit
   and integrated verification of batch grouping, admission, per-file progress, Retry/Stop,
