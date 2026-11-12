@@ -45,7 +45,10 @@ Runtime additionally needs a separate positively verified CPU recipe/requirement
 CPU execution/precision/model checks and CPU-flavored generation selection. Missing CUDA is
 not proof of CPU readiness. Preserve existing CUDA/legacy identities and GPU memory checks;
 see [ADR 0176](0176-isolated-runtime-generation-recovery.md). Native Transcriber must verify
-the selected application/template's CPU contract too. Published
+the selected application/template's CPU contract too. Current
+setup discovery/profile validation assumes a GPU product; extend that boundary so
+a legitimate CPU-funded-only project can be configured without first requiring MIG funding.
+Published
 [CPU/GPU measurements](../evaluations/whisperx-cpu-gpu-speed-2026-11-12.md) inform planning,
 not compatibility or institutional acceptance.
 
