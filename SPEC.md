@@ -338,6 +338,14 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Never call manual Retry, clear Stop, recapture settings, invent replacement consent or start
   inference followups. Metadata admission has no network/file reads; I/O drains under the lease.
   [ADR 0174](docs/decisions/0174-native-startup-reconnection.md).
+- V218: Standalone Runtime preparation retries only typed bounded read observations of its
+  exact frozen allocation/artifacts; no new submission, shared cache/lock mutation or Ready
+  from missing/invalid proof. Keep auth/identity/generation/pins/refusal distinct from transient
+  transport and bounded partial publication; legacy generic read APIs retain their contracts.
+  Stop routes through owned remote observation; shutdown/epoch/terminal deadlines stay live.
+  Positive completion rechecks Stop and owner under the writer transaction, including a wait.
+  Historical retained-lock recovery and immutable-generation activation remain separate.
+  [ADR 0175](docs/decisions/0175-runtime-preparation-observation-recovery.md).
 - V215: Explicit nonempty primary HF Settings/first-use token Save starts a server-lifetime
   Activity setup task, not inline
   model work; no-worker tests remain inert. Current token/plan fences, pinned cached-file reuse,
@@ -1916,6 +1924,7 @@ T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refine
 T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop and no-submit worker fences; final76 focused passes/independentGo, earlier444pass+1skip source-qualified; real acceptance/not loaded separate|V217,V6,V9,I.native-batch,ADR0174
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
+T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -2020,6 +2029,9 @@ B442|2026-11-12|Larger passage fonts exposed comparison alignment finishing afte
 B443|2026-11-12|An older layout test expected a quiet generic save status after rewriting an untimed passage, contradicting the accepted partial-timing notice|V208,T140; assert the actual nonblocking warning and persisted wording while retaining geometry/history checks; shared helper bodies unchanged
 B444|2026-11-12|Cross-tab first-use completion could invalidate an accepted credential-save reply or hide its partial/uncertain outcome|V213,T142; retain the accepted Save owner until success or explicit dismissal, preserve optional-HF continuation and inline recovery, and test held Native/HF replies with another-tab completion
 B445|2026-11-12|A rejected hash navigation could rewind home eligibility and hide an accepted Save's later partial-HF error|V213,T142; keep the owned setup outcome visible across the rejected navigation until success or explicit dismissal; retain the failing diagnostic and recheck the exact browser adversary
-B449|2026-11-12|MVP Settings grouping hid a saved Runtime profile option despite retaining its form identity, leaving the hidden manager projection empty during credential recovery|V213,V212,T142; include only supplied saved held profiles in Settings grouping, preserve new-work/catalog hiding, and retain exact no-widening and generic-save oracles
 B446|2026-11-12|Native startup cannot recover interrupted owners safely and a singleton Stop can disappear before worker acknowledgment, while generic recovery overwrites legacy Cancelling evidence|V217,T141; dedicated exact-ID singleton/batch admission, durable Stop before acknowledgment and conservative legacy negative exclusion; retain five old-source red seam cases
+B447|2026-11-12|Standalone Runtime preparation marked its owner failed after a transient observation or SUCCESS before supervisor publication|V218,T143; typed bounded same-allocation observation recovery and terminal settling, retaining old-source red reproductions and permanent-refusal boundaries
+B448|2026-11-12|A late Runtime doctor/verification observation could commit Ready after durable Stop under the same epoch|V218,T143; atomically recheck Stop and current owner after writer acquisition, then route through owned Stop observation; retain I/O and writer-barrier regressions
+B449|2026-11-12|MVP Settings grouping hid a saved Runtime profile option despite retaining its form identity, leaving the hidden manager projection empty during credential recovery|V213,V212,T142; include only supplied saved held profiles in Settings grouping, preserve new-work/catalog hiding, and retain exact no-widening and generic-save oracles
+B450|2026-11-12|The new strict preparation reader initially relied on fake full job specifications while omitting required API application/parameter inclusion flags|V218,T143; match the released SDK request contract and enforce response omission in the regression fixture before accepting identity proof
 B451|2026-11-12|Native startup accepted a merely nonempty reconciliation timestamp and completed siblings without a unique matching producer/remote-ID link|V217,T141; validate bounded timezone-aware timestamps and exact producer metadata including Trash at admission and late guards; eight positive/negative/late regressions

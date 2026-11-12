@@ -226,7 +226,7 @@ def test_archived_completed_receipt_cannot_be_current_readiness(configured, monk
         },
         "conversions": {},
     }
-    monkeypatch.setattr(subject, "_model_evidence", lambda *_: copy.deepcopy(observed))
+    monkeypatch.setattr(subject, "_model_evidence", lambda *_, **__: copy.deepcopy(observed))
     monkeypatch.setattr(api, "seed_speakers", lambda *args, **kwargs: None)
     read_json = api.read_json
 
