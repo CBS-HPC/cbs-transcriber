@@ -10,11 +10,14 @@ Mac acceptance is still pending. See the [release checks and limits](docs/verifi
 
 This local post-MVP branch is **unreleased**. It disables the direct OpenAI service and adds
 first-use UCloud/optional-HF setup with background model preparation. The published MVP and
-installation commands below are unchanged; see the [branch verification](docs/verification-2026-11-11-post-mvp-morning.md).
+release wheel are unchanged. This guide now documents the requested local-folder installation;
+see the [branch verification](docs/verification-2026-11-11-post-mvp-morning.md).
+The local **MVP v2 preview 1** adds larger transcript/editor text; see its
+[checks and loaded-build limits](docs/verification-2026-11-12-mvp-v2-preview.md).
 
 ## Install and start (Windows and macOS)
 
-Use the versioned release with **uv**, which installs the app in its own environment.
+Use the versioned release with **uv**, in a local environment under your home folder.
 You do not need Git, Node.js or a separate FFmpeg installation. Allow about **6 GB** for
 installation, plus download/cache space, recordings and optional models. Keep your working
 library outside OneDrive/iCloud.
@@ -63,42 +66,59 @@ If Windows still finds an older uv, check `Get-Command uv -All`; follow the
 
 ### 2. Install MVP 0.1.0
 
-Run this same command in PowerShell or Terminal:
+On **Windows**, paste this into PowerShell. It works even when the terminal opens on a
+OneDrive-backed Desktop. It creates only `CBS Transcriber\App` under your user folder;
+the sibling `Library` and `Projects` folders are preserved. If App already exists, stop and
+use the [update or repair instructions](docs/installation.md#update-or-reinstall).
 
-```text
-uv tool install --python 3.13 --no-config --link-mode copy --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    $appDir = Join-Path $env:USERPROFILE 'CBS Transcriber\App'
+    if (Test-Path -LiteralPath $appDir) { throw 'App already exists. Follow the update or repair guide.' }
+    New-Item -ItemType Directory -Path $appDir -ErrorAction Stop | Out-Null
+    $appPython = Join-Path $appDir '.venv\Scripts\python.exe'
+    uv --no-config venv --managed-python --python 3.13 (Join-Path $appDir '.venv')
+    if ($LASTEXITCODE -ne 0) { throw 'Environment creation failed. Stop and review the error.' }
+    uv --no-config pip install --python $appPython --link-mode copy --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
+    if ($LASTEXITCODE -ne 0) { throw 'Package installation failed. Stop and review the error.' }
+    & $appPython -m cbs_transcriber --help
+    if ($LASTEXITCODE -ne 0) { throw 'Startup check failed. Keep its error for the maintainer or IT.' }
+    & $appPython -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp
+    if ($LASTEXITCODE -ne 0) { throw 'The app is installed, but shortcut creation failed. See launcher help.' }
+}
 ```
+
+On **macOS**, use the [matching local-folder commands](docs/installation.md#macos-local-folder-installation).
+No environment activation is required. Managed devices may still require approval to run
+Python, its dependencies or shortcut creation; changing folders does not establish a fix
+for the reported Windows Access denied error.
 
 Keep the wheel and constraints from the **same release**, including `--link-mode copy`.
 Copy mode avoids Windows Cloud Files/hardlink failures such as error 396. Installation
 fetches packages; it does not start transcription or download inference model weights.
 See [download alternatives and troubleshooting](docs/installation.md) if it stops.
 
-A reusable latest-release installer is prepared for a future release. **It is not yet
-published with v0.1.0**; use the working versioned command above. The
-[stable install/update command](docs/installation.md#stable-latest-release-installer) will
-keep the same URL once its release asset is published.
+An earlier latest-release installer prototype targets uv's tool environment. It is
+**unpublished and does not implement this App-folder workflow**. Use the versioned commands
+above; [installer publication and adaptation](docs/installation.md#stable-latest-release-installer)
+remain separate work.
 
 ### 3. Start the app
 
-```text
-cbs-transcriber
+Double-click the new **CBS Transcriber** Desktop shortcut. To start from PowerShell instead:
+
+```powershell
+$appPython = Join-Path $env:USERPROFILE 'CBS Transcriber\App\.venv\Scripts\python.exe'
+& $appPython -m cbs_transcriber --profile mvp
 ```
 
 The browser opens at **http://127.0.0.1:8765**. Keep the terminal open; **Ctrl+C** stops the
 app. Closing its browser tab does not stop it. Save edits and stop any earlier app copy
-before starting this installation. If the command is missing, run `uv tool update-shell`
-and reopen the terminal.
-
-Optional Desktop launcher, on either Windows or macOS:
-
-```text
-cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp
-```
-
-Windows creates a `.lnk`; macOS creates a `.command` file that opens Terminal. Omit
-`--shortcut-location desktop` for the Start menu or `~/Applications`. Existing launchers
-are never overwritten. See [launcher options and removal](docs/installation-shortcuts.md).
+before starting this installation. The shortcut binds this environment's Python directly;
+it does not install/update dependencies at startup or need `cbs-transcriber.exe` on PATH.
+Windows creates a `.lnk`; macOS creates a `.command` file that opens Terminal. Existing
+launchers are never overwritten. See [launcher options, uv run and troubleshooting](docs/installation-shortcuts.md).
 
 ## Set up and use
 
@@ -130,22 +150,18 @@ and accepted model terms are needed only for the first speaker-model download.
 
 Save edits, finish or stop jobs, make a [complete backup](docs/portable-backups.md), then stop
 the app. Use the next approved release's wheel and matching constraints, adding
-`--reinstall-package cbs-transcriber` to its install command. Keep `--link-mode copy`.
-An unqualified `uv tool upgrade` does not choose the approved wheel/constraints pair.
+`--reinstall-package cbs-transcriber` to the explicit environment's `uv pip install` command.
+Keep `--link-mode copy`. Do not replace or move a running environment.
 Recreate a launcher if its installation was replaced or moved. See [update details](docs/installation.md#update-or-reinstall).
 
 ## Uninstall
 
-Stop the app with **Ctrl+C**, then run:
-
-```text
-uv tool uninstall cbs-transcriber
-```
-
-Remove the optional `CBS Transcriber.lnk` or `CBS Transcriber.command` launcher separately.
+Stop the app with **Ctrl+C**, then follow the [uninstall guide](docs/uninstall.md) for the
+installation method you actually used. A local-folder install is removed differently from
+the earlier `uv tool install` method. Remove its named shortcut separately.
 **Your libraries, recordings, backups, cached models and saved credentials remain.** Removing
 the app does not stop remote UCloud jobs or erase research data. For optional data or key
-removal, follow [what remains and how to remove it deliberately](docs/storage-and-removal.md#uninstall-and-optional-cleanup).
+removal, follow [what remains and how to remove it deliberately](docs/uninstall.md).
 
 ## Help and further details
 

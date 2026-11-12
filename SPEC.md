@@ -38,6 +38,11 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   approved coding. NVivo owns advanced thematic interpretation, matrices, code co-occurrence,
   cross-interview comparisons and research reporting. See docs/ai-analysis-nvivo-roadmap.md.
 - UI: action button captions omit trailing ellipses, including dialog launchers and busy states.
+- The 12 November preview preparation uses a local App/.venv installation guide with
+  uv-managed CPython and matching release assets, preserving sibling Library/Projects.
+  Increase passage/editor fonts modestly while retaining editor/overlay wrapping and focus.
+  The user does not install the next preview manually; test installation in disposable
+  storage and prepare a labelled local preview without synchronizing the serving environment.
 - Post-MVP work stays on a separate local branch; no merge/push to main, installed-app reload
   or release. Limit frontend decisions to explicit requests; broader choices await colleague
   feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
@@ -918,6 +923,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Update search marks in place, retaining passage/word controls and unsaved passage drafts.
 - V41: enabling Follow playback immediately reveals the current timed passage, including
   during bounded replay and comparison; playback position, playing state and replay bounds stay intact.
+  Reapply the guarded reveal after comparison alignment settles changed pane geometry;
+  late layout cannot strand the current word below a short viewport's player.
   Follow playback and Show uncertainty start checked; manual scrolling never changes the follow
   checkbox, and explicit choices remain in effect for the current page session.
 
@@ -1878,6 +1885,8 @@ T135|x|Branch-only first-use UCloud/optional HF setup reuses checks/storage and 
 T136|x|Exact Runtime host/shell stamps and retained-lock/reader preflight verified offline; no reclaim, historical recovery or real Runtime acceptance implied|V214,V116,I.enhance-api,ADR0172
 T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans and credential/ownership fences verified with mocked providers; parent server-lifetime and child durable|V215,V213,V214,I.enhance-api,ADR0173
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
+T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
+T140|x|Modest passage/editor/timing fonts and post-alignment guarded Follow reveal; 56 unique MVP browser checks qualify, 8 native recovery and 23 backend/launcher checks pass; no public release|V41,V188,V210,I.transcript
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1976,3 +1985,7 @@ B436|2026-11-11|First-use setup could create a default-enabled/default-approved 
 B437|2026-11-11|A later token/settings change or shutdown overwrote an explicit HF Stop reason while the accepted child handoff drained, losing Stop for the child that task actually created|V215; keep sticky private user intent independently of display/supersede reasons, cancel an owned child once after handoff and never cancel an attached owner; barrier-controlled regressions
 B438|2026-11-11|HF durable-owner admission checked the parent before waiting for SQLite's writer, allowing Stop or a token change during that wait to become stale before insertion|V215; recheck the parent after writer acquisition immediately before insert/attachment, retain postacceptance drain and exact owner return; actual held-writer regression
 B439|2026-11-11|An adapted Settings absence assertion could pass before the dialog loaded, hiding an inverted native-tab expectation in the test|V8; wait for the visible dialog before negative/absence assertions and retain separate retired-OpenAI and available-UCloud oracles
+B440|2026-11-12|A long Windows verification fixture produced a 277-character owned transcript-source path whose parent existed but exclusive file creation returned Errno2|T139; retain the original failure and qualify the unchanged helper/node with a short fixture root; no timeout/assertion relaxation or claim to fix platform path limits
+B441|2026-11-12|An undo-merge browser fixture selected both visible Text and hidden Timing-pane Cancel controls|T140; scope the locator to the Text pane and retain draft/history/revision assertions; mechanical fixture correction needs no new product invariant
+B442|2026-11-12|Larger passage fonts exposed comparison alignment finishing after playback's resize reveal, stranding the current word below a short video viewport|V41,T140; schedule the existing guarded Follow pass after alignment writes; baseline/candidate differential, nine private geometry observations and formal resize/focus/draft checks
+B443|2026-11-12|An older layout test expected a quiet generic save status after rewriting an untimed passage, contradicting the accepted partial-timing notice|V208,T140; assert the actual nonblocking warning and persisted wording while retaining geometry/history checks; shared helper bodies unchanged

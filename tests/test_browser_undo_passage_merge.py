@@ -87,7 +87,7 @@ def test_undo_merge_preserves_other_edits_and_respects_draft(page, local_app, wa
     expect(draft).to_have_value("Unsaved draft")
     expect(page.locator("#transcript .passage")).to_have_count(2)
 
-    page.locator('#passage-2 [data-action="cancel-edit"]').click()
+    page.locator('#passage-2 [data-editor-pane="text"] [data-action="cancel-edit"]').click()
 
     # A late hints response must not re-enable editing while undo is pending.
     hints = []

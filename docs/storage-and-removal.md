@@ -78,32 +78,14 @@ Power-loss, cloud-sync and wider filesystem durability acceptance remain pending
 
 ## Uninstall and optional cleanup
 
-Save edits and resolve processing you want stopped. Closing the app or uninstalling it does
-not stop a remote UCloud allocation; use its Activity Stop/recovery controls first if required.
-Stop the app with **Ctrl+C**, then run:
+Follow the [uninstall guide](uninstall.md) for the installation method you actually used:
+local App environment, earlier uv tool, or developer/source checkout. Save edits and stop
+the app first. Removing the app or its shortcut preserves libraries, separately located
+projects, backups, credentials and shared model caches; it does not stop UCloud jobs.
 
-```text
-uv tool uninstall cbs-transcriber
-```
-
-Delete only the optional `CBS Transcriber.lnk` or `CBS Transcriber.command` launcher from
-Desktop/Start menu/`~/Applications`. Removing a launcher does not uninstall the app.
-
-Uninstall intentionally leaves the following items. They are separate decisions:
-
-| Retained item | If you explicitly want to remove it |
-| --- | --- |
-| Libraries and project folders, including originals, transcripts, notes/history and local backups | First verify an independent backup and identify every actual library/project location. Prefer the app's preview/confirmation flows for managed deletion. Remove only the exact folders whose research data you intend to erase; never infer ownership from a parent folder's name. |
-| Downloads, exported documents and separately copied backups | Review and remove those specific copies yourself when your retention policy permits. |
-| Inference-model caches | Identify which model/cache this app used and whether another application shares it before deleting specific cached models. Hugging Face commonly uses `~/.cache/huggingface/hub`, but environment overrides and alternate runtimes can change it. Clearing caches can force large downloads later. |
-| Saved keys/tokens | In Windows Credential Manager or macOS Keychain, inspect entries belonging to **CBS Transcriber** and remove only the intended credentials. Accounts may use endpoint hashes; ask the maintainer to identify them if unclear. Another app installation may share them. Deleting a provider configuration alone does not remove its shared key. |
-| uv-managed Python, uv and uv's package cache | Keep them if another tool/project uses them. They are not part of this app's tool uninstall. |
-| Preferences/library-list records and environment variables | They may remain outside the removed tool. Review only app-specific records with the maintainer. Uninstall does not remove a separately configured `OPENAI_API_KEY`. |
-| Remote run files and backups | Review them in the relevant service. The app's cleanup moves owned run files to UCloud Trash; uninstall does not empty Trash or erase cloud backups. |
-
-Removing a local key is not revocation at its service. Revoke/rotate unwanted OpenAI, UCloud
-or Hugging Face tokens in the issuing account when that is your intended outcome. Do not
-delete unrelated OS credentials or clear shared model/Python caches as an uninstall shortcut.
+The guide lists what remains and how to review optional data/key removal deliberately.
+Never delete the whole `CBS Transcriber` parent folder to remove only the app: it can also
+contain your Library and Projects. Removing a saved key is not revocation at its service.
 
 ## Supported imports
 

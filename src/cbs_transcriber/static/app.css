@@ -1631,7 +1631,7 @@ select {
   color: var(--cbs-blue);
 }
 .passage-text {
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.95;
   color: var(--muted);
   white-space: pre-wrap;
@@ -1672,7 +1672,7 @@ select {
   background: var(--surface-blue);
   padding: 12px;
   line-height: 1.8;
-  font-size: 13px;
+  font-size: 15px;
   margin: 12px 0;
 }
 .passage-text-surface {
@@ -1698,7 +1698,7 @@ select {
   padding: 12px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.8;
   color: transparent;
 }
@@ -1750,7 +1750,7 @@ select {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.9;
-  font-size: 13px;
+  font-size: 15px;
 }
 .export-choices {
   margin: 12px 0;
@@ -1846,6 +1846,7 @@ select {
 .passage-word-fields select {
   width: 100%;
   min-width: 0;
+  font-size: 13px;
 }
 .passage-realign {
   display: flex;

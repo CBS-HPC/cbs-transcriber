@@ -5359,6 +5359,7 @@ function scheduleAlignmentLayout() {
       node.style.minHeight = heights[i] + "px";
       right[i].style.minHeight = heights[i] + "px";
     });
+    schedulePlaybackViewport(true);
   });
 }
 async function refreshComparisonAlignment() {

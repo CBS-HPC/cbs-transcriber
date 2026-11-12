@@ -522,8 +522,15 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   separated from actual billing. Keep future milestones/phases current under AGENTS.md;
   leave Claude and combined AI totals pending until its figures are supplied.
 
-- [ ] **Installation and deployment (T92/T94/T106).** The primary guide now uses a versioned
-  GitHub wheel plus lock-derived runtime constraints through uv tool install, without Git.
+- [ ] **Installation and deployment (T92/T94/T106/T139).** The local preview branch now
+  documents a uv-managed Python environment in `<home>/CBS Transcriber/App/.venv`, installed
+  from a versioned GitHub wheel and matching runtime constraints without Git. The earlier
+  uv-tool route remains documented for existing installations and method-specific removal.
+  The new private Windows probe installed all 135 packages and passed module help, four core
+  smoke checks, private COM/no-overwrite and stopped-environment repair. Full environment
+  removal was blocked by automatic approval review and remains unverified; the environment
+  is retained. No manual preview install is required from the user. Mac, actual shortcut
+  clicks and the colleague's Access denied issue remain unverified.
   Installed-package/source shortcuts and the locked source fallback exist. A fresh isolated
   Windows environment resolved and installed all 135 packages and passed all four installed-
   app smoke checks; a native COM launcher was verified in a disposable folder without an
@@ -545,10 +552,24 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
-- [x] **Post-MVP branch README simplification and uninstall guide.** The main guide is 158
-  lines; focused install/review/export/provider/storage/development guides retain unique detail.
+- [x] **Post-MVP branch README simplification and uninstall guide.** The short main guide
+  links focused install/review/export/provider/storage/development guides retaining unique detail.
   Install pins, copy mode, shortcuts, uninstall and retained data/credentials remain explicit.
   Local outgoing and incoming README links pass; this is not a new published release.
+
+- [x] **MVP v2 preview readiness — resumed 12 November (T139/T140).** Finish the local-folder
+  guide and isolated Windows installation/removal probe, modestly enlarge transcript/editor
+  text and run a focused immutable candidate gate under the actual MVP profile. Preserve
+  draft, caret, selection, overlay wrapping, playback and existing review/export/recovery.
+  The assembled candidate qualifies 56 unique MVP browser passes, eight native recovery
+  passes and 23 backend/launcher passes, retaining original failures and scoped remedies.
+  Two fixture expectations were corrected and a one-line post-alignment Follow fix keeps
+  words visible after a short-window resize. **MVP v2 preview 1** is loaded using the
+  existing development environment after preservation checks, without a user reinstall or
+  public-main/release change. The user's overnight batch remains in the same library with
+  exact stored allocation/parameters; Activity offers explicit Retry to reconnect it.
+  [Verification and limits](docs/verification-2026-11-12-mvp-v2-preview.md).
+  [Preview plan and UCloud scheduling findings](docs/work-plans/mvp-v2-preview-2026-11-12.md).
 
 - [ ] **Post-MVP explanatory-text review.** Review feature-description and information boxes
   across the app; shorten long text, remove repetition and use plain, action-focused wording.
@@ -630,9 +651,15 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Keep ordinary model choices simple. Representative quality/MIG tests need separate scope;
   no model downloads or provider runs are authorized by this roadmap item.
 
-- [ ] **AI-assisted analysis and NVivo roadmap (T38/T88b/T88c).** The manual codebook/evidence
-  prototype exists; shared UCloud/OpenAI analysis, researcher-reviewed coding/summaries,
-  topic discovery, aspect sentiment/stance and expanded NVivo exports remain planned.
+- [ ] **AI-assisted qualitative coding, topic generation/search and NVivo roadmap
+  (T38/T88b/T88c).** Added to the later-release discussion on 12 November: suggest codes for
+  transcript passages, generate candidate topics/themes across selected recordings, and
+  find supporting passages by topic. Status: exploratory, not started; outside the current
+  MVP v2 commitment unless reprioritised. The manual codebook/evidence prototype exists;
+  it does not implement model-driven coding, topic generation or topic search. Agree the
+  workflow, inference provider and researcher review before implementation; preserve source
+  transcripts and distinguish AI suggestions from approved coding. Summaries, aspect
+  sentiment/stance and expanded NVivo exports remain separate planned parts of this roadmap.
   [Roadmap](docs/ai-analysis-nvivo-roadmap.md).
 - [ ] **Automatic second-pass word alignment (T93a).** Explicitly deferred as later fine-tuning;
   do not add a default extra inference pass now.

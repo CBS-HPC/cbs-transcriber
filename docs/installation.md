@@ -1,186 +1,245 @@
 # Installation help
 
-Start with [README — Install and start](../README.md#install-and-start-windows-and-macos).
-The ordinary-user route is a versioned release wheel and its matching constraints file,
-installed with uv. No GitHub account, Git, Node.js or separate FFmpeg is required for the
-public release. Use approved prerequisite routes on managed computers.
+Follow [README — Install and start](../README.md#install-and-start-windows-and-macos) for
+prerequisites. This post-MVP guide uses one local environment at
+`<user home>/CBS Transcriber/App/.venv`. It installs the released wheel and matching
+constraints; Git, Node.js, a separate FFmpeg installation and environment activation are
+unnecessary.
 
-## Stable latest-release installer
-
-**Prepared, not published:** v0.1.0 does not contain `install_latest.py`. Continue using
-the working [versioned MVP installation command](../README.md#2-install-mvp-010) until a
-separately approved release publishes that asset. The command below would currently return
-404; it is shown for the future release procedure, not as today's installation step.
-
-After publication, the same command will install the latest published stable release on
-Windows PowerShell or macOS Terminal:
+## Folder layout
 
 ```text
-uv run --no-project --no-config --no-env-file --python 3.13 https://github.com/CBS-HPC/cbs-transcriber/releases/latest/download/install_latest.py
+<user home>/CBS Transcriber/
+  App/.venv/    application and its Python dependencies
+  Library/     default working library
+  Projects/    default project recordings and results
 ```
 
-Save edits, finish/stop jobs, make a complete backup and stop every app copy before an update.
-After publication, use that same command with an explicit update option:
+The commands calculate the user-home path, so the terminal may start on the Desktop or
+elsewhere. Keep App, the active library and project folders outside OneDrive/iCloud. A
+Desktop shortcut may be in a synced Desktop folder; its destination is local to this PC.
+Existing libraries retain their selected locations. Installation does not move, open or
+reset them.
 
-```text
-uv run --no-project --no-config --no-env-file --python 3.13 https://github.com/CBS-HPC/cbs-transcriber/releases/latest/download/install_latest.py --update
-```
+The commands below use the currently published [MVP 0.1.0 release](https://github.com/CBS-HPC/cbs-transcriber/releases/tag/v0.1.0).
+They do not publish or install the unreleased post-MVP branch. Local-folder installation is
+a documented workflow, not evidence that the colleague's Windows Access denied error is
+fixed. Its cause and real CBS-managed/personal Windows and Mac acceptance remain open.
 
-The standard-library script resolves one release and its exact version-named wheel and
-constraints together. It checks their downloaded lengths and SHA-256 digests against that
-release's GitHub asset metadata before calling `uv tool install` with `--no-config --link-mode
-copy`. Only `--update` adds `--reinstall-package cbs-transcriber`. It reuses the invoking uv
-executable, including an explicitly selected newer uv when Conda shadows PATH.
+## Fresh Windows installation
 
-The script holds the default local port 8765 through installation and refuses if it is
-already in use. This protects the ordinary running app; it cannot discover every copy started
-on a custom port, so stop those yourself too. It never opens a library, starts the app,
-creates a shortcut, downloads inference models or synchronizes the current source project's
-environment. Start `cbs-transcriber` yourself afterward.
+First check `uv --version` (0.9.29 or later) and install approved CPython 3.13 as described
+in README. On managed PCs, use CBS-approved prerequisite routes. Save work and stop other
+CBS Transcriber app copies before first launch.
 
-The stable script URL trusts this GitHub repository and HTTPS; asset digests are not an
-independent signature or a guarantee for every dependency artifact. A missing digest,
-mismatched version/hash, ambiguous assets, unexpected redirect or unavailable release stops
-installation. Keep the explicit versioned route for reproducibility and restricted networks.
-See the [maintainer release procedure and primary sources](releasing.md).
-
-## Release and platform limits
-
-The current wheel release is [v0.1.0](https://github.com/CBS-HPC/cbs-transcriber/releases/tag/v0.1.0).
-Use uv 0.9.29 or later and standard CPython 3.13. Apple Silicon needs macOS 14+ and a native
-Terminal; Rosetta may select Intel packages. Windows x64 and Apple Silicon include CPU local
-inference packages. Intel Mac installations omit the incompatible pinned local inference
-stack and support the core/API/UCloud workflows. Apple GPU/MPS and free-threaded Python are
-outside this guide.
-
-Allow about 6 GB for installation, plus download/cache space and your recordings/models.
-The MVP profile hides unfinished features; it does not shrink the dependency download.
-Installing packages does not start transcription, contact a transcription provider or fetch
-inference model weights. uv-managed Python is separate from Conda/system Python; the app gets
-its own tool environment.
-
-Fresh isolated Windows wheel checks passed startup, media preparation, transcript import/export
-and playback-range checks using an existing Python on the development PC. The user's uv-tool
-startup on that PC is also verified. These are not clean-device acceptance. Actual clean
-Windows, Apple Silicon/Intel Mac installation, Keychain, playback, updates/removal and launcher
-clicks remain pending. A signed installer, notarized Mac app and automatic updater are not
-released. See the [release receipt](verification-2026-11-10-mvp-release.md) and
-[launcher verification limits](installation-shortcuts.md).
-
-## What the install command preserves
-
-Always pair the wheel and constraints from the same release. The constraints select runtime
-versions, the released UCloud client wheel and supported CPU PyTorch artifacts. They do not
-make `uv tool install` consume the source repository's `uv.lock` or provide all of that lock's
-artifact-hash guarantees. Do not remove constraints to force an incompatible installation or
-add a global PyTorch index.
-
-Keep `--no-config --link-mode copy` in release installation, update and retry commands. Copy
-mode avoids observed Windows Cloud Files/hardlink error 396; it uses more disk space and does
-not change transcription speed. Running the command from another folder does not relocate
-uv's tool environment or cache.
-
-## Download the release files first
-
-If direct download fails, open the release page and download both files:
-
-- `cbs_transcriber-0.1.0-py3-none-any.whl`
-- `cbs-transcriber-0.1.0-constraints.txt`
-
-Open PowerShell/Terminal in their folder and run:
-
-```text
-uv tool install --python 3.13 --no-config --link-mode copy --constraints "cbs-transcriber-0.1.0-constraints.txt" "./cbs_transcriber-0.1.0-py3-none-any.whl"
-```
-
-A missing/private release may return 404. Confirm the release with the maintainer. If access
-requires sign-in, download through your signed-in browser; never put a GitHub token in a
-command. GitHub CLI is unnecessary.
-
-## uv or the app command is not found
-
-After installing uv, reopen the terminal and run `uv --version`. If Windows still finds an
-older copy, inspect:
+Paste this whole block in PowerShell. An existing App folder is refused, including a
+partial installation: use the update/repair guidance below instead of overwriting it.
 
 ```powershell
-Get-Command uv -All
-& "$env:USERPROFILE\.local\bin\uv.exe" --version
+& {
+    $ErrorActionPreference = 'Stop'
+    $appDir = Join-Path $env:USERPROFILE 'CBS Transcriber\App'
+    $appPython = Join-Path $appDir '.venv\Scripts\python.exe'
+    $wheel = 'https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl'
+    $constraints = 'https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt'
+    if (Test-Path -LiteralPath $appDir) {
+        throw 'The App folder already exists. Use the update/repair instructions.'
+    }
+    New-Item -ItemType Directory -Path $appDir -ErrorAction Stop | Out-Null
+    uv --no-config venv --managed-python --python 3.13 (Join-Path $appDir '.venv')
+    if ($LASTEXITCODE -ne 0) { throw 'Environment creation failed; stop here.' }
+    uv --no-config pip install --python $appPython --link-mode copy --constraints $constraints $wheel
+    if ($LASTEXITCODE -ne 0) { throw 'Package installation failed; stop here.' }
+    & $appPython -m cbs_transcriber --help
+    if ($LASTEXITCODE -ne 0) { throw 'Startup check failed; keep the error for troubleshooting.' }
+    & $appPython -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp
+    if ($LASTEXITCODE -ne 0) { throw 'App installed, but shortcut creation failed. See launcher help.' }
+}
 ```
 
-Conda or another uv may be first on PATH. If the official installer's copy is suitable, use
-`& "$env:USERPROFILE\.local\bin\uv.exe"` in place of `uv` in subsequent PowerShell commands.
-There is no need to reinstall it or change Conda/global PATH just because another copy appears
-first. The version floor is not a guarantee about every future uv resolver release.
+`--managed-python` selects uv-managed Python rather than an active Conda/system interpreter.
+The final command creates the Desktop shortcut and exits. It does not start the server.
+The help check verifies the module entry point; it does not prove playback, credentials or
+all native dependencies work. Continue with normal startup below.
 
-If `cbs-transcriber` is missing after successful installation:
+## macOS local-folder installation
 
-```text
-uv tool update-shell
+Use native Terminal, approved uv 0.9.29 or later and CPython 3.13. Apple Silicon requires
+macOS 14+; avoid Rosetta. Intel Mac excludes the incompatible local inference stack.
+Paste this whole block; the subshell stops on failure without changing your shell settings.
+An existing App folder or link is refused.
+
+```bash
+(
+    set -eu
+    app_dir="$HOME/CBS Transcriber/App"
+    app_python="$app_dir/.venv/bin/python"
+    wheel='https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl'
+    constraints='https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt'
+    if [ -e "$app_dir" ] || [ -L "$app_dir" ]; then
+        printf '%s\n' 'The App folder already exists. Use the update/repair instructions.' >&2
+        exit 1
+    fi
+    mkdir -p "$app_dir"
+    uv --no-config venv --managed-python --python 3.13 "$app_dir/.venv"
+    uv --no-config pip install --python "$app_python" --link-mode copy --constraints "$constraints" "$wheel"
+    "$app_python" -m cbs_transcriber --help
+    "$app_python" -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp
+)
 ```
 
-Reopen the terminal and try again. If managed-device policy blocks these steps, ask IT.
-The [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/),
-[Python guide](https://docs.astral.sh/uv/guides/install-python/) and
-[tool guide](https://docs.astral.sh/uv/guides/tools/) explain these separate installations.
+The final command creates `~/Desktop/CBS Transcriber.command` and exits. If it fails, keep
+the exact error; the preceding package installation may already have completed. Do not
+repeat the fresh-install block or remove the environment blindly.
 
-## Other installation or startup problems
+## Start the installed app
 
-| What you see | Next step |
-| --- | --- |
-| Cloud Files/hardlink error 396 | Repeat the matching release command with `--link-mode copy`. Do not delete your library or clear the whole cache. |
-| A partial installation left a conflicting app command | Confirm the conflicting executable belongs to CBS Transcriber before adding `--force` to the matching install command. |
-| Wheel or constraints file not found | Check both exact filenames and open the terminal in their download folder. |
-| No compatible package or constraint resolution fails | Check CPython 3.13, architecture and macOS version. Retain the constraints. |
-| Permission denied | Use a writable per-user location; ask IT about managed-device restrictions. |
-| Browser did not open | Read any terminal startup error, then visit `http://127.0.0.1:8765`. |
-| Port 8765 is occupied | Use the existing app if it is yours. For another application, use `cbs-transcriber --port 8766`. |
-| This library is already open | Save edits, finish/stop jobs and press Ctrl+C in the earlier app's terminal. Closing its tab or changing ports does not release the library. Do not delete its lock file. |
+Double-click the created Desktop launcher, or use the exact installed Python from any folder.
+
+Windows PowerShell:
+
+```powershell
+& "$env:USERPROFILE\CBS Transcriber\App\.venv\Scripts\python.exe" -m cbs_transcriber --profile mvp
+```
+
+macOS Terminal:
+
+```bash
+"$HOME/CBS Transcriber/App/.venv/bin/python" -m cbs_transcriber --profile mvp
+```
+
+The browser opens at **http://127.0.0.1:8765**. Keep the terminal open; **Ctrl+C** stops the
+app. Closing its browser tab does not stop the app. The launcher calls this environment's
+Python directly, so startup does not install/update packages or depend on the global
+`cbs-transcriber.exe` command.
+
+If you prefer `uv run`, explicitly select the environment and skip project/environment-file
+discovery and synchronization. These commands also work from a Desktop terminal.
+
+Windows:
+
+```powershell
+uv run --no-project --no-config --no-env-file --no-sync --python "$env:USERPROFILE\CBS Transcriber\App\.venv\Scripts\python.exe" python -m cbs_transcriber --profile mvp
+```
+
+macOS:
+
+```bash
+uv run --no-project --no-config --no-env-file --no-sync --python "$HOME/CBS Transcriber/App/.venv/bin/python" python -m cbs_transcriber --profile mvp
+```
+
+See [shortcut details](installation-shortcuts.md) for Start menu/Applications destinations
+and retained launch arguments.
 
 ## Update or reinstall
 
-Save edits, finish or stop processing, create a complete backup, then stop the app. Do not
-replace or synchronize the environment of a running app.
+Save edits, finish/stop jobs, make a complete backup and stop **every app copy** first.
+Do not synchronize or replace a running environment. Keep the App folder and environment
+in place; virtual environments should be recreated rather than moved/copied.
 
-For the next approved release, use that release's wheel and matching constraints with
-`--reinstall-package cbs-transcriber`. An unqualified `uv tool upgrade` does not select those
-assets. To reinstall the current release, use:
+Use the next approved release's exact matching wheel/constraints pair. For reinstalling the
+current 0.1.0 release, use the appropriate command below, then repeat its module help check
+and normal startup. A failed command is not successful repair; keep its complete output.
 
-```text
-uv tool install --python 3.13 --no-config --link-mode copy --reinstall-package cbs-transcriber --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
+Windows:
+
+```powershell
+uv --no-config pip install --python "$env:USERPROFILE\CBS Transcriber\App\.venv\Scripts\python.exe" --link-mode copy --reinstall-package cbs-transcriber --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
 ```
 
-Start the app and refresh the browser. HTML/JavaScript/CSS are served without caching.
-An installation check does not require paid transcription or a model download. Recreate a
-launcher if its environment was replaced/moved; remove only its old named file first.
-See [uninstall and retained data](storage-and-removal.md#uninstall-and-optional-cleanup).
+macOS:
 
-## Startup options
-
-```text
-cbs-transcriber --port 8766 --no-browser
-cbs-transcriber --choose-library
-cbs-transcriber --data-dir "D:\My local transcription library"
-cbs-transcriber --profile mvp
+```bash
+uv --no-config pip install --python "$HOME/CBS Transcriber/App/.venv/bin/python" --link-mode copy --reinstall-package cbs-transcriber --constraints "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs-transcriber-0.1.0-constraints.txt" "https://github.com/CBS-HPC/cbs-transcriber/releases/download/v0.1.0/cbs_transcriber-0.1.0-py3-none-any.whl"
 ```
 
-`--choose-library` asks at startup. `--data-dir` opens a particular library for this launch
-without changing the remembered library. `--projects-dir` changes the default parent for new
-projects; existing projects stay where they are. See [storage locations](storage-and-removal.md).
-On macOS, use an absolute Mac path such as `/Users/yourname/Research/Library`.
-For source installations, prefix commands with `uv run --locked`.
+If fresh installation stopped after environment creation, and that exact environment's
+Python runs, retry its package-install command with the same approved pair. If the Python
+itself cannot run, stop and diagnose the failure; do not delete the parent folder, change
+security policy or repeatedly reinstall. A shortcut failure after successful package
+installation can be retried separately using [launcher help](installation-shortcuts.md).
+
+## Download the release files first
+
+If direct download fails, obtain both versioned files from the same release through an
+approved browser. Use their absolute downloaded paths in place of `$wheel`/`$constraints`
+on Windows or `$wheel`/`$constraints` on Mac; retain the exact environment target and copy
+mode. The wheel is `cbs_transcriber-0.1.0-py3-none-any.whl`; its matching constraints are
+`cbs-transcriber-0.1.0-constraints.txt`. Never put GitHub tokens in commands.
+
+Constraints select release versions and supported CPU artifacts; they do not make a wheel
+installation consume the source `uv.lock` or provide all of that lock's artifact-hash
+coverage. Do not drop constraints or add a global PyTorch index to force installation.
+
+## Troubleshooting and acceptance
+
+| What you see | Next step |
+| --- | --- |
+| App folder already exists | Use update/repair above. Do not overwrite, move or delete it automatically. |
+| uv is missing or an old version appears | Reopen the terminal; on Windows inspect `Get-Command uv -All`. Use the approved suitable uv executable; do not change global PATH or Conda silently. |
+| `cbs-transcriber.exe` gets Access denied | The local flow uses the exact Python module entry point. Test its `--help` command; success narrows the failing stage but does not establish a policy verdict. |
+| Python or shortcut also gets Access denied | Keep the exact error, time and resolved target; ask CBS IT/maintainer about permissions and application-control records. No policy bypass or blanket administrator step is part of this guide. |
+| Cloud Files/hardlink error 396 | Retain `--link-mode copy` and use unsynced local App/library folders. Do not clear shared caches or delete research data. |
+| Shortcut already exists | Identify the named shortcut's old destination before removing only that shortcut and recreating it. The app installation is separate. |
+| Port 8765 is occupied | Save/stop the earlier app if it is yours; do not terminate an unknown process. An intentional different-port launch may use `--port 8766`. |
+| Library is already open | Stop its earlier app copy with Ctrl+C. Closing a browser tab or changing ports does not release the library; never delete its lock file. |
+
+Allow about 6 GB for packages plus download/cache space and recordings/models. Package
+installation starts no transcription and downloads no inference model weights. uv-managed
+Python, the package environment, research data and model caches are separate.
+
+Earlier isolated Windows wheel/uv-tool smoke and disposable COM-shortcut checks passed;
+they are not acceptance of this new local-folder layout. Verify a fresh installation,
+module startup, actual shortcut click, media playback, OS credentials, restart, stopped-app
+update/repair and uninstall under ordinary accounts on CBS-managed and personal Windows,
+Apple Silicon/macOS14+ and Intel Mac. A successful `--help` check does not establish all of
+these. See [prior release evidence](verification-2026-11-10-mvp-release.md).
+
+## uv or the app command is not found
+
+The local-folder route requires uv only for installation/update, and does not add the
+app command to PATH. Start it with its exact Python or shortcut above. If uv is missing,
+reopen the terminal after its approved installation. On Windows, `Get-Command uv -All`
+shows which executable is selected; the official per-user install normally provides
+`$env:USERPROFILE\.local\bin\uv.exe`. Use the intended suitable version rather than
+silently changing Conda or global PATH.
+
+For an earlier uv-tool copy only, `uv tool update-shell` can make its installed app command
+discoverable after reopening the terminal. This addresses **command not found**, not
+**Access denied**. Keep those failure modes separate.
+
+## Earlier uv-tool installations
+
+Existing `uv tool install` environments remain a separate supported legacy layout. They
+are not moved by this guide. Inspect `uv tool list` and `uv tool dir`; use the installed
+tool's actual Python when diagnosing it, and uninstall only an intentionally retired tool
+copy. Do not manually pip-mutate an environment managed by `uv tool`.
+
+## Stable latest-release installer
+
+The branch's earlier `scripts/install_latest.py` prototype targets **uv tool installation**.
+It is not the local-folder workflow above, and its stable release asset remains unpublished
+(v0.1.0 does not contain it). Do not use its future URL as an installation step. A later
+separately approved release must align its installer, guide, package and acceptance before
+advertising a stable latest command. See [release preparation](releasing.md).
+
+For uninstall/data-retention choices, use [the uninstall guide](uninstall.md). Developers
+retain the separate [source installation](development.md).
 
 ## Release profiles and advanced features
 
-The published wheel packages MVP. `--profile mvp` selects it explicitly. Profile precedence is
-the command option, then `CBS_TRANSCRIBER_PROFILE`, then packaged `catalogs/release.json`, then
-`full`. The development `main` source uses full. Settings shows a non-full profile for reports.
+Add `--port 8766`, `--no-browser`, `--choose-library`, `--data-dir "<absolute library path>"`
+or `--projects-dir "<absolute parent>"` to the module launch command as needed. Explicit
+paths affect the selected/default locations as documented in [storage help](storage-and-removal.md).
+They do not migrate existing libraries or projects.
 
-MVP hides passage Re-transcribe, Topics & Sentiments, Research Report, CBS Runtime transcription,
-UCloud timing/speakers/repairs, Automatic rules, alternate Python runtime, Realign after saving,
-comparison Use wording, UCloud backup upload/retention, restore and Custom/UCloud vLLM setup.
-Existing results, exports and recovery actions remain available. Hidden new requests are refused.
+The published wheel packages MVP; `--profile mvp` selects it explicitly. Its unfinished
+features remain hidden, with existing data/recovery available. Some technical linked guides
+describe full-profile features; switching profiles is not evidence those features are
+accepted. See [ADR 0145](decisions/0145-release-profile.md).
 
-Some linked technical guides describe full-profile features. A maintainer can explicitly use
-`--profile full` for separately arranged work, such as backup-restore testing; this does not
-establish acceptance of those features. See [ADR 0145](decisions/0145-release-profile.md).
-For source/ZIP installation and contributor checks, see [development](development.md).
+## Primary references
+
+- [uv environment creation and explicit interpreter targeting](https://docs.astral.sh/uv/pip/environments/)
+- [uv run options](https://docs.astral.sh/uv/reference/cli/#uv-run)
+- [Python virtual environments and their path-specific lifecycle](https://docs.python.org/3.13/library/venv.html#how-venvs-work)
