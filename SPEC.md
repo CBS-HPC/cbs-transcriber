@@ -327,6 +327,17 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   digests before uv installation. Preserve copy/no-config flags, explicit update intent and
   isolation from the project environment; a running default-port app blocks installation.
   Never auto-start, kill an app or publish assets. An unpublished stable URL is labelled as such.
+- V217: Native startup reconnect is retrieval-only for exact submitted singleton/batch owners.
+  Dedicated bounded atomic admission preserves frozen identity, saved/Trash/Working results,
+  durable Stop/Cancel (including pre-ack crash), unknown/uncertain/restored/disposed refusal and
+  one attempt per queue lifecycle. Historical generic failures remain manual; only exact typed
+  current transient receipts may qualify. Both worker paths retain pinned authority outside
+  mutable params and refuse missing/changed IDs before any create/upload/submit fallback.
+  Reconciled submissions require a valid timezone-aware timestamp; completed siblings require
+  one exact producer/recording/remote-ID match, including Trash, rechecked during execution.
+  Never call manual Retry, clear Stop, recapture settings, invent replacement consent or start
+  inference followups. Metadata admission has no network/file reads; I/O drains under the lease.
+  [ADR 0174](docs/decisions/0174-native-startup-reconnection.md).
 - V215: Explicit nonempty primary HF Settings/first-use token Save starts a server-lifetime
   Activity setup task, not inline
   model work; no-worker tests remain inert. Current token/plan fences, pinned cached-file reuse,
@@ -1902,9 +1913,9 @@ T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
-T141|~|Separate native child653b0e9 verified: final76 focused passes/independentGo and qualified earlier444pass+1skip; composition and real automatic reopen acceptance pending, not loaded|V6,V9,I.native-batch,ADR0174
-T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
+T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop and no-submit worker fences; final76 focused passes/independentGo, earlier444pass+1skip source-qualified; real acceptance/not loaded separate|V217,V6,V9,I.native-batch,ADR0174
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
+T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -2010,3 +2021,5 @@ B443|2026-11-12|An older layout test expected a quiet generic save status after 
 B444|2026-11-12|Cross-tab first-use completion could invalidate an accepted credential-save reply or hide its partial/uncertain outcome|V213,T142; retain the accepted Save owner until success or explicit dismissal, preserve optional-HF continuation and inline recovery, and test held Native/HF replies with another-tab completion
 B445|2026-11-12|A rejected hash navigation could rewind home eligibility and hide an accepted Save's later partial-HF error|V213,T142; keep the owned setup outcome visible across the rejected navigation until success or explicit dismissal; retain the failing diagnostic and recheck the exact browser adversary
 B449|2026-11-12|MVP Settings grouping hid a saved Runtime profile option despite retaining its form identity, leaving the hidden manager projection empty during credential recovery|V213,V212,T142; include only supplied saved held profiles in Settings grouping, preserve new-work/catalog hiding, and retain exact no-widening and generic-save oracles
+B446|2026-11-12|Native startup cannot recover interrupted owners safely and a singleton Stop can disappear before worker acknowledgment, while generic recovery overwrites legacy Cancelling evidence|V217,T141; dedicated exact-ID singleton/batch admission, durable Stop before acknowledgment and conservative legacy negative exclusion; retain five old-source red seam cases
+B451|2026-11-12|Native startup accepted a merely nonempty reconciliation timestamp and completed siblings without a unique matching producer/remote-ID link|V217,T141; validate bounded timezone-aware timestamps and exact producer metadata including Trash at admission and late guards; eight positive/negative/late regressions

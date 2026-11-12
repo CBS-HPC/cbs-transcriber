@@ -1874,6 +1874,7 @@ class Store:
         provider_artifacts=None,
         native_artifacts=None,
         auto_first=False,
+        native_reconnect=None,
     ):
         from . import restored_owners
 
@@ -1918,6 +1919,12 @@ class Store:
                         "The imported transcript source could not be verified. Preserve its files."
                     ) from exc
             db.execute("BEGIN IMMEDIATE")
+            if native_reconnect is not None:
+                from . import native_startup
+
+                if job_id not in native_reconnect.job_ids:
+                    raise ValueError(native_startup.REFUSED)
+                native_startup.guard(self, native_reconnect, connection=db)
             current = db.execute("SELECT * FROM recordings WHERE id=?", (recording_id,)).fetchone()
             if current is None:
                 raise KeyError(recording_id)
@@ -3465,7 +3472,7 @@ class Store:
                 db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
             )
 
-    def update_native_batch(self, identifier, *, run_update=None, **fields):
+    def update_native_batch(self, identifier, *, run_update=None, reconnect=None, **fields):
         """Merge journal receipts instead of replacing a concurrent cancellation receipt."""
         from . import restored_owners
 
@@ -3474,6 +3481,17 @@ class Store:
             raise ValueError("Unknown UCloud batch field.")
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            if reconnect is not None:
+                from . import native_startup
+
+                if reconnect.kind != "native_batch" or reconnect.identifier != identifier:
+                    raise ValueError(native_startup.REFUSED)
+                native_startup.guard(
+                    self,
+                    reconnect,
+                    connection=db,
+                    allow_stop=run_update == {"cancellation_requested": True} and not fields,
+                )
             batch = self._native_batch(
                 db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
             )
@@ -3647,7 +3665,9 @@ class Store:
             from . import restored_owners
 
             restored_owners.require_owned(db, "job", identifier)
-            row = db.execute("SELECT kind,params FROM jobs WHERE id=?", (identifier,)).fetchone()
+            row = db.execute(
+                "SELECT id,kind,params,state FROM jobs WHERE id=?", (identifier,)
+            ).fetchone()
             if row is None:
                 raise KeyError(identifier)
             params = json.loads(row["params"])
@@ -3657,6 +3677,9 @@ class Store:
                 or "input_intent" in params
             ):
                 raise ValueError("Preparation cancellation requires its fenced lifecycle.")
+            from . import native_startup
+
+            native_startup.stop_row(db, {**dict(row), "params": params})
             db.execute(
                 "UPDATE jobs SET state=CASE WHEN state='running' THEN state ELSE 'cancelled' END,"
                 "message=CASE WHEN state='running' THEN ? ELSE ? END,updated=? "
@@ -3813,13 +3836,19 @@ class Store:
             params["audio_preparations"] = [*receipts, receipt]
             db.execute("UPDATE jobs SET params=? WHERE id=?", (json.dumps(params), identifier))
 
-    def recover_jobs(self):
-        from . import runtime_store
+    def recover_jobs(self, *, native_startup_lifecycle=None):
+        from . import native_startup, runtime_store
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            native_startup.preserve_legacy_stops(db)
             self._recover_jobs(db)
             runtime_store.recover(db)
+            return (
+                native_startup.admit(self, db, native_startup_lifecycle)
+                if native_startup_lifecycle is not None
+                else {}
+            )
 
     @staticmethod
     def _recover_jobs(db):

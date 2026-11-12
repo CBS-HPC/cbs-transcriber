@@ -686,6 +686,10 @@ class JobQueue:
         self.workers = [self]
         self.coordinator = self
         self.control_job_ids = set()
+        from .store import new_id
+
+        self.native_lifecycle = new_id()
+        self.native_reconnect = {}
         self.runtime_preparation_gate = threading.BoundedSemaphore(2)
         self.runtime_transfer_gate = threading.BoundedSemaphore(2)
         # Coordinator-owned claim state (ADR 0146), read and written under the claim lock.
@@ -745,7 +749,9 @@ class JobQueue:
                     input_admission.recover(self.store, job_ids=[row["id"]])
             except (ValueError, KeyError):
                 pass  # Preserve invalid proof; do not strand healthy siblings behind it.
-        self.store.recover_jobs()
+        self.native_reconnect.update(
+            self.store.recover_jobs(native_startup_lifecycle=self.native_lifecycle)
+        )
         from . import runtime_preparation
 
         runtime_preparation.recover(self.store)
@@ -986,12 +992,12 @@ class JobQueue:
                         child_id = children[0]["id"]
                         if allowed is not None and child_id not in allowed:
                             raise ValueError("Cancellation scope changed to include a follow-up.")
-                for worker in self.coordinator.workers:
-                    if worker.active_id == identifier or identifier in worker.active_ids:
-                        worker.cancel_event.set()
                 job = self.store.request_job_cancellation(identifier)
                 if job["state"] == "completed":
                     return None
+                for worker in self.coordinator.workers:
+                    if worker.active_id == identifier or identifier in worker.active_ids:
+                        worker.cancel_event.set()
         if runtime_id:
             from .runtime_batches import cancel
 
@@ -1316,6 +1322,26 @@ class JobQueue:
         if "input_intent" in job["params"]:
             raise ValueError("Input preparation must finish before a producer can run.")
         recording = self.store.recording(job["recording_id"])
+        from . import native_startup
+
+        reconnect = native_startup.authority(self, job)
+        if reconnect is not None:
+            native_startup.guard(self.store, reconnect)
+            settings = providers.Settings.model_validate(job["params"]["settings"])
+            providers.require_approval(
+                self.store, recording["project_id"], job["params"].get("provider_id"), settings
+            )
+            key = self.credentials.get(providers.credential_scope(settings))
+            providers.require_key(settings, key)
+            if job["params"].get("native_batch_id"):
+                from .native_batch import run_batch
+
+                run_batch(self, job, reconnect=reconnect)
+            else:
+                from .ucloud_native import run_transcription
+
+                run_transcription(self, job, recording, settings, key, reconnect=reconnect)
+            return
         directory = self.store.directory(recording["id"])
         if job["kind"] == "media":
             self.store.update_job(identifier, message="Preparing browser playback…", progress=0.1)

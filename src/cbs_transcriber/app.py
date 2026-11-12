@@ -4046,12 +4046,15 @@ def create_app(
                 store.execute(
                     "UPDATE recordings SET status='preparing' WHERE id=?", (current["id"],)
                 )
-            store.update_job(
-                identifier,
-                state="queued",
-                message="Queued for retry",
-                params=job["params"],
-            )
+            from . import native_startup
+
+            if not native_startup.explicit_retry(queue, job):
+                store.update_job(
+                    identifier,
+                    state="queued",
+                    message="Queued for retry",
+                    params=job["params"],
+                )
         queue.notify()
         return {"ok": True}
 

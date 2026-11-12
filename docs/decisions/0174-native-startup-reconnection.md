@@ -1,8 +1,10 @@
 # 0174 — Reconnect known native allocations on app reopen
 
 Accepted 12 November 2026 after independent design review; user authorized implementation.
-Implementation and synthetic gates remain pending. Applies to native Transcriber singleton and batch jobs, not
-CBS Runtime, repairs, API-compatible inference or every old Retry card.
+Implemented and independently verified on the isolated native-reconnect branch; not loaded.
+Applies to native Transcriber singleton and batch jobs, not CBS Runtime, repairs,
+API-compatible inference or every old Retry card. See the
+[verification receipt](../verification-2026-11-12-native-startup-reconnection.md).
 
 ## Decision
 
@@ -21,6 +23,9 @@ must stay outside queue/snapshot/writer locks.
 - Include both a standalone native job and a shared native batch owner with its exact members.
   Require valid frozen native Settings/allocation, a known submitted remote ID, consistent
   submission/folder ownership and live matching recording/project/member identities.
+  Reconciled submissions need a bounded valid timezone-aware timestamp. A completed sibling
+  needs a unique producer result linked to that recording and exact remote allocation,
+  including a retained Trash result; this metadata is rechecked during execution.
 - Interrupted work with that proof may resume. A failed job qualifies only with a new strict
   typed transient-monitor/download failure receipt bound to the current owner/remote ID and
   frozen generation. Historical generic failures and stale/unknown receipts stay manual;
