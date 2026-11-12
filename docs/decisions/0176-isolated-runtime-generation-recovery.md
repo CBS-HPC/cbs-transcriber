@@ -1,10 +1,16 @@
 # 0176 — Isolated Runtime generations without reclaiming old locks
 
-Proposed 12 November 2026; not activated. The user prioritizes Runtime stability. This is a
-separate protocol after the bounded observation fixes in ADR 0175. Independent design and
-implementation review, complete synthetic boundary proofs and controlled UCloud acceptance
+Design reviewed 12 November 2026; disabled Stage 1 implemented with independent Go and
+[46 synthetic passes](../verification-2026-11-12-runtime-generations-stage1.md). The user
+prioritizes Runtime stability. This is a separate protocol after the bounded observation fixes
+in ADR 0175. Independent implementation review, complete synthetic boundary proofs and controlled UCloud acceptance
 are required before enabling it. Read the older prototype as reference only; never import
 its private Git ancestors into the public-descendant development history.
+
+Stage 1 is limited to bounded registry/selection/path data, read-only snapshots and candidate
+revision/CAS. It cannot promote an active environment, grant execution/capture authority or
+accept a caller's readiness assertion. Those operations require the later durable-owner,
+exclusive-folder, admission/carry, provenance/restore and live-acceptance boundaries below.
 
 ## Goal and identity
 
@@ -22,6 +28,19 @@ Separate three identities: the stable base target (server/project/storage, base 
 pinned package requirements), the exact preparation operation recipe/worker/supervisor, and
 the request's model/file pins. Do not describe a requirements-only target hash as proof of
 the full recipe. Each accepted operation/receipt must bind the appropriate exact identities.
+
+The user's later CPU-fallback decision applies to CBS Runtime as well as native Transcriber.
+Generation selection consumes a trusted frozen compute decision; it does not inspect balances
+or interpret machine congestion. Freeze the exact product/device/flavor before candidate
+reservation or confirmation, never later in submit. Use distinct CPU and CUDA-12.8 base targets,
+requirements identities and active pointers, preserving the legacy no-argument CUDA runtime
+ID/stamp bytes. A CPU doctor must positively prove supported CPU execution/compute type and
+the requested model plan; absence of CUDA is not CPU readiness. CUDA retains its existing
+GPU/first-device-memory checks. Neither flavor can satisfy or mutate the other's target.
+Wallet observation timestamps belong to the compute decision, not the cache target identity.
+Carry both exact compute and generation through Auto, delayed admission, followups and Retry;
+later funding changes never retarget accepted work. Full-run funding estimation and the pinned
+CPU recipe/compatibility are separate proof boundaries before activation.
 
 ## Fresh preparation and ownership
 

@@ -2,7 +2,7 @@
 
 - [0128 — Reversible library list visibility](0128-library-list-visibility.md) (proposed)
 - [0144 — Permanent deletion of an inactive library](0144-permanent-library-deletion.md) (proposed)
-- [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (proposed; not activated)
+- [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stage 1 verified; later activation held)
 
 Accepted architecture decisions. New decisions get the next number; supersede an old
 record explicitly rather than rewriting its historical rationale.

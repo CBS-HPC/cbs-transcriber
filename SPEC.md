@@ -316,6 +316,16 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   digests before uv installation. Preserve copy/no-config flags, explicit update intent and
   isolation from the project environment; a running default-port app blocks installation.
   Never auto-start, kill an app or publish assets. An unpublished stable URL is labelled as such.
+- V219: Isolated Runtime generations never reclaim old locks or mutate promoted environments.
+  A collision-checked bounded registry, explicit fresh consent, exclusive folder intent/receipt
+  and exact owner/epoch/resource/readiness registry-CAS promotion are distinct authorities.
+  Seal compute/flavor before reservation and an explicit no-active choice at fresh acceptance;
+  delayed/Auto/followup/repair/Retry paths carry it without registry recapture. CPU and CUDA
+  targets/readiness remain distinct; changed models require a fresh candidate. Legacy absent
+  policy keeps exact paths/receipts. Restore drops operational pointers and archives owners.
+  Stage1 only validates data/paths and candidate CAS: no caller-ready promotion/capture grant.
+  All activation stays disabled until owner/admission/execution/capture/restore and live gates.
+  [ADR 0176](docs/decisions/0176-isolated-runtime-generation-recovery.md).
 - V218: Standalone Runtime preparation retries only typed bounded read observations of its
   exact frozen allocation/artifacts; no new submission, shared cache/lock mutation or Ready
   from missing/invalid proof. Keep auth/identity/generation/pins/refusal distinct from transient
@@ -1896,6 +1906,7 @@ T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints an
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
+T144|~|Isolated Runtime generation recovery: disabledStage1 registry/selection/path codecs and candidateCAS verified46distinctcases/independentGo; no promotion or integration; owner/admission/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
