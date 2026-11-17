@@ -305,11 +305,14 @@ class PlainStream(httpcore.NetworkStream):
 
 
 class PlainBackend(httpcore.NetworkBackend):
+    sockets = []  # Every client socket opened through this backend (cleared per test).
+
     def __init__(self):
         self._inner = httpcore.SyncBackend()
 
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
         stream = self._inner.connect_tcp(host, port, timeout, local_address, socket_options)
+        PlainBackend.sockets.append(stream._sock)
         return PlainStream(stream)
 
     def sleep(self, seconds):
@@ -417,6 +420,8 @@ def peers():
 
 @pytest.fixture
 def loopback(peers, monkeypatch):
+    PlainBackend.sockets.clear()
+
     def start(*scripts):
         peer = peers(*scripts)
         monkeypatch.setattr(sdk_client, "httpx", SimpleNamespace(Client=plain_tcp_client))
@@ -1427,3 +1432,183 @@ def test_sdk_client_without_the_selected_project_header_is_refused(mock_sdk):
     for request in service.requests:
         assert "Project" not in request.headers  # The simulated drift really happened.
     assert observation.complete is False
+
+
+# 8. Recheck of the watchdog (921fd0d): cancellation, worker lifetime and late effects.
+
+WORKER = "cbs-funding-observer"
+
+
+def observer_threads():
+    return [thread for thread in threading.enumerate() if thread.name == WORKER]
+
+
+def drain_workers(timeout):
+    """Wait for every observer worker to end; returns those still alive afterwards."""
+    end = time.monotonic() + timeout
+    for thread in observer_threads():
+        thread.join(max(0.0, end - time.monotonic()))
+    return observer_threads()
+
+
+class LaggingClock:
+    """Injected worker clock that never runs out, so per-read socket timeouts stay long.
+
+    Only the watchdog (real monotonic time) can then end a blocked read: this isolates the
+    close-to-wake path from httpx's own timeouts.
+    """
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        return 1000.0 if self.calls == 1 else 0.0
+
+
+@pytest.fixture
+def thread_errors(monkeypatch):
+    """Unhandled exceptions in any thread (a late worker must never raise past _work)."""
+    errors = []
+    monkeypatch.setattr(threading, "excepthook", lambda args: errors.append(args.exc_type))
+    yield errors
+    assert drain_workers(10) == [], "an observer worker outlived the test"
+
+
+def cancel_bound():
+    return funding.DEADLINE_SECONDS + funding.JOIN_GRACE_SECONDS + GRACE
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="Socket close wake-up is only verified on Windows."
+)
+def test_back_to_back_cancellations_leave_no_workers_or_open_sockets(
+    loopback, monkeypatch, thread_errors
+):
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.3)
+    rounds = 12
+    assert drain_workers(5) == []
+    peer = loopback(*([60.0] for _ in range(rounds)))  # Accept, read, never answer.
+
+    for _ in range(rounds):
+        started = time.monotonic()
+        observation = funding.observe(
+            peer.origin, PROJECT, KEY, monotonic=LaggingClock(), now=lambda: NOW
+        )
+        elapsed = time.monotonic() - started
+
+        assert_unknown(observation, "deadline_exceeded")
+        assert elapsed <= cancel_bound()
+        # Only the watchdog's close could end this read (its own timeout is ~1000 s).
+        assert observer_threads() == []
+
+    assert len(peer.heads) == rounds
+    assert len(PlainBackend.sockets) == rounds
+    assert all(client.fileno() == -1 for client in PlainBackend.sockets)
+    assert thread_errors == []
+
+
+@pytest.mark.parametrize("construction", [0.5, 1.2])
+def test_cancel_during_sdk_client_construction_never_sends(
+    mock_sdk, monkeypatch, thread_errors, construction
+):
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.3)
+    service = mock_sdk(reply(page([gpu(600)])), adjust=lambda kwargs: time.sleep(construction))
+
+    observation, elapsed = timed(SERVER)
+
+    assert_unknown(observation, "deadline_exceeded")
+    assert elapsed <= cancel_bound()
+    assert drain_workers(5) == []
+    # The late client was refused at attach, closed by the SDK context and never used.
+    assert service.requests == [] and service.closed
+    assert thread_errors == []
+
+
+def test_repeated_slow_lookups_pile_up_workers_until_each_lookup_returns(
+    loopback, guarded_network, monkeypatch, thread_errors
+):
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.1)
+    calls = 4
+    peer = loopback(*([response(encode(page([gpu()])))] for _ in range(calls)))
+    guarded_network["funding.example.test"] = 3.0
+    assert drain_workers(5) == []
+
+    for _ in range(calls):
+        observation, elapsed = timed(f"https://funding.example.test:{peer.port}")
+        assert_unknown(observation, "deadline_exceeded")
+        assert elapsed <= cancel_bound()
+
+    # Documented: an OS name lookup cannot be interrupted, so each call leaves one worker.
+    assert len(observer_threads()) == calls
+    assert drain_workers(10) == []
+    assert thread_errors == []
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "DEFECT (minor, late side effect): Client.close() cannot reach a connection that is "
+        "still resolving/connecting (httpcore's HTTPConnection.close is a no-op until the "
+        "connection exists). A worker cancelled during a slow lookup later connects and "
+        "sends the authenticated GET after observe() already returned deadline_exceeded; "
+        "back-to-back calls during a resolver outage burst these when it recovers. A "
+        "deadline check before sending headers (e.g. an httpcore 'trace' extension) avoids it."
+    ),
+)
+def test_cancelled_worker_never_sends_its_request_after_a_late_lookup(
+    loopback, guarded_network, monkeypatch, thread_errors
+):
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.2)
+    peer = loopback([response(encode(page([gpu()])))])
+    guarded_network["funding.example.test"] = 1.2
+
+    observation, _ = timed(f"https://funding.example.test:{peer.port}")
+
+    assert_unknown(observation, "deadline_exceeded")
+    assert drain_workers(10) == []
+    assert peer.heads == [], "the cancelled worker still sent the key after observe() returned"
+
+
+class HeldBody(Body):
+    """A body whose read cannot be woken by closing the client (the unwoken-read case)."""
+
+    def __init__(self, data, release):
+        super().__init__([data])
+        self.release = release
+
+    def __iter__(self):
+        self.release.wait(10)
+        yield from super().__iter__()
+
+
+def test_late_worker_cannot_change_the_returned_observation_or_a_later_call(
+    mock_sdk, monkeypatch, thread_errors
+):
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.2)
+    release = threading.Event()
+    late = HeldBody(encode(page([gpu(600), cpu(50)])), release)
+    held = httpx.Response(200, headers={"Content-Type": "application/json"}, stream=late)
+    service = mock_sdk(held, reply(page([gpu(7)])))
+
+    first, elapsed = timed(SERVER)
+    snapshot = first.as_dict()
+
+    assert_unknown(first, "deadline_exceeded")
+    assert elapsed <= cancel_bound()
+    assert len(observer_threads()) == 1  # Still blocked in a read the close did not wake.
+
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 5.0)
+    second = funding.observe(SERVER, PROJECT, KEY, now=lambda: NOW)
+    second_snapshot = second.as_dict()
+    release.set()
+
+    assert drain_workers(5) == []
+    # The late worker read a complete positive page and still changed nothing.
+    assert late.served == 1 and late.closed
+    assert first.as_dict() == snapshot and second.as_dict() == second_snapshot
+    assert (second.complete, second.gpu.balance, second.cpu.state) == (True, 7, "absent")
+    assert len(service.requests) == 2
+    assert thread_errors == []
+    with pytest.raises(AttributeError):
+        first.complete = True
