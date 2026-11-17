@@ -116,6 +116,55 @@ def test_browser_token_first_native_presets_and_cleanup(page, local_app, monkeyp
     assert len(calls) == (2 if ambiguous else 1)
 
 
+def test_rotated_or_unchecked_ucloud_key_is_checked_by_save(page, local_app, monkeypatch):
+    """A new key saved with Save alone must not leave every model unchecked (12 Nov)."""
+    calls = []
+
+    def discover(settings, key, *, compute_id=None):
+        assert key in {"first-token", "rotated-token", "out-of-band-token"}
+        calls.append(key)
+        setup = settings.ucloud_transcriber.model_dump()
+        setup.update(
+            project_id=setup["project_id"] or "p1",
+            application={"name": "transcriber-batch", "version": "1.12"},
+            product=dict(MIG_PRODUCT),
+            storage_path="/drive/CBS-Transcriber",
+        )
+        return {"ready": True, "setup": setup, "choices": {}, "note": "Ready to save."}
+
+    monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
+    app = local_app.server.config.app
+    scope = "ucloud-control:https://cloud.sdu.dk"
+
+    def save_with_key(key):
+        page.locator("#settings-open").click()
+        expect(page.locator("#settings-dialog")).to_be_visible()
+        page.get_by_role("tab", name="UCloud", exact=True).click()
+        if key:
+            page.locator("#api-key").fill(key)
+        page.get_by_role("button", name="Save settings").click()
+        expect(page.locator("#settings-dialog")).not_to_be_visible()
+
+    page.goto(local_app.url)
+    skip_first_use(page)
+    save_with_key("first-token")
+    expect(page.locator("#bulk-provider")).not_to_contain_text("Settings")
+    # Rotating the key with Save alone checks the new key before it is saved.
+    save_with_key("rotated-token")
+    assert calls == ["first-token", "rotated-token"]
+    assert app.state.credentials.get(scope) == "rotated-token"
+    expect(page.locator("#bulk-provider")).not_to_contain_text("Settings")
+    # A key changed outside this form is reported as unchecked, not as a missing provider,
+    # and Save alone checks the saved key.
+    app.state.credentials.set(scope, "out-of-band-token", True)
+    page.reload()
+    expect(page.locator("#bulk-provider")).to_contain_text("Check the connection in Settings")
+    save_with_key(None)
+    assert calls[-1] == "out-of-band-token"
+    expect(page.locator("#bulk-provider")).not_to_contain_text("Settings")
+    assert not app.state.store.all("SELECT id FROM jobs")
+
+
 def test_native_retired_model_is_preserved_without_an_editable_model_control(
     page, local_app, monkeypatch
 ):
