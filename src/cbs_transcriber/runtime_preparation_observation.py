@@ -198,9 +198,10 @@ def read_json(client, settings, path, *, deadline=None):
     return _json(read_bytes(client, settings, path, deadline=deadline), incomplete=True)
 
 
-def stamp(client, settings, *, deadline=None):
+def stamp(client, settings, *, deadline=None, root=None):
+    """Exact stamp bytes at the legacy root, or only at one explicitly frozen generation."""
     deadline = time.monotonic() + READ_SECONDS if deadline is None else deadline
-    root = api.runtime_folder(settings)
+    root = api.frozen_runtime_root(settings, root)
     folder = metadata(client, root, deadline=deadline)
     item = metadata(client, root + "/stamp.json", deadline=deadline)
     expected = api.runtime_stamp_bytes()

@@ -1,8 +1,11 @@
-"""Disabled, local-only Runtime generation metadata (ADR 0176, Stage 1).
+"""Disabled, local-only Runtime generation metadata (ADR 0176, Stages 1-2).
 
 These codecs and candidate reservations establish neither preparation ownership,
-readiness nor execution authority. Promotion, active-selection capture and remote
-operations deliberately do not exist here. Callers own their SQLite transaction.
+readiness nor execution authority. Active-selection capture and remote operations
+deliberately do not exist here. The private, separately disabled active-pointer writer is
+the registry half of the Stage-2 owner promotion; only
+``runtime_generation_preparation.verify_and_promote`` may call it, inside the same writer
+transaction as the owner's completion. Callers own their SQLite transaction.
 """
 
 import copy
@@ -19,6 +22,8 @@ TARGET_POLICY = "cbs-runtime-base-target-v1"
 SELECTION_POLICY = "cbs-runtime-selection-v1"
 GENERATION_POLICY = "cbs-runtime-generation-v1"
 CANDIDATE_RESERVATION_ENABLED = False
+# Stage 2: off means an occupied active pointer still refuses exactly as in Stage 1.
+ACTIVE_POINTERS_ENABLED = False
 MAX_BYTES = 256 * 1024
 MAX_TARGETS = 128
 _HEX32 = re.compile(r"[a-f0-9]{32}\Z")
@@ -209,6 +214,23 @@ def runtime_path(settings, *, runtime_id, selection=_ABSENT):
     return settings.ucloud_transcriber.storage_path + "/cbs-runtime/" + runtime_id + suffix
 
 
+def generation_root(settings, target, token):
+    """Pure candidate/promoted generation folder; grants no create/mount/use permission."""
+    settings = providers.Settings.model_validate(settings)
+    base = validate_target(target)
+    setup = settings.ucloud_transcriber
+    if (
+        settings.provider_type != "ucloud"
+        or setup is None
+        or base["server"] != settings.base_url
+        or base["project_id"] != setup.project_id
+        or base["storage_path"] != setup.storage_path
+    ):
+        _refuse()
+    _hex(token, _HEX32)
+    return setup.storage_path + "/cbs-runtime/" + base["runtime_id"] + "-g-" + token
+
+
 def _pairs(pairs):
     value = {}
     for key, item in pairs:
@@ -224,6 +246,18 @@ def _candidate(value, target, revision):
     _hex(value["owner_id"], _HEX32)
     _hex(value["operation_sha256"], _HEX64)
     if _revision(value["expected_revision"]) != revision:
+        _refuse()
+    _matching_compute(value["compute"], target)
+
+
+def _active(value, target, revision):
+    # Shape only. Readers must still verify the durable owner's promotion receipt.
+    _keys(value, {"token", "owner_id", "operation_sha256", "compute", "promoted_revision"})
+    _hex(value["token"], _HEX32)
+    _hex(value["owner_id"], _HEX32)
+    _hex(value["operation_sha256"], _HEX64)
+    # Only promotion changes the revision, so a published pointer names the current one.
+    if _revision(value["promoted_revision"]) != revision or revision == 0:
         _refuse()
     _matching_compute(value["compute"], target)
 
@@ -244,17 +278,23 @@ def _validate_registry(value):
         if _hex(identifier, _HEX64) != base["target_sha256"]:
             _refuse()
         revision = _revision(entry["revision"])
-        # Stage 1 has no promotion or active-owner verification. Never accept an
-        # asserted active pointer as if these metadata primitives had proved it.
-        if entry["active"] is not None:
-            _refuse()
+        # Stage 1 had no promotion. While Stage 2 stays disabled, an asserted active
+        # pointer still refuses; enabled, it is shape only and never owner proof.
+        active = entry["active"]
+        if active is not None:
+            if not ACTIVE_POINTERS_ENABLED:
+                _refuse()
+            _active(active, base, revision)
         candidate = entry["candidate"]
         if candidate is not None:
             _candidate(candidate, base, revision)
-            if candidate["token"] in tokens or candidate["owner_id"] in owners:
-                _refuse()
-            tokens.add(candidate["token"])
-            owners.add(candidate["owner_id"])
+        for item in (active, candidate):
+            if item is not None:
+                # One token/owner names exactly one generation across the whole registry.
+                if item["token"] in tokens or item["owner_id"] in owners:
+                    _refuse()
+                tokens.add(item["token"])
+                owners.add(item["owner_id"])
     return value
 
 
@@ -336,6 +376,61 @@ def reserve_candidate(db, target, *, expected_revision, owner_id, token, operati
         changed = db.execute(
             "UPDATE settings SET value=? WHERE id=? AND value=?", (encoded, SETTING, previous)
         ).rowcount
+    if changed != 1:
+        _refuse()
+    return snapshot(db, base)
+
+
+def _publish_active(db, target, *, owner_id, token, operation_sha256, compute):
+    """Registry half of Stage-2 promotion; never call it outside the owner-completion CAS.
+
+    The exact reserved candidate becomes the active pointer and the revision advances.
+    Nothing is deleted; an earlier active generation simply stops being selected for new
+    acceptance. Repeating the same acknowledgment is idempotent.
+    """
+    if not ACTIVE_POINTERS_ENABLED:
+        raise Conflict("Runtime generation promotion is disabled.")
+    if not db.in_transaction:
+        raise Conflict("Runtime generation promotion requires a writer transaction.")
+    base = validate_target(target)
+    choice = _matching_compute(compute, base)
+    registry, previous = _registry(db)
+    entry = registry["targets"].get(base["target_sha256"])
+    if entry is None or previous is None:
+        _refuse()
+    expected = {
+        "token": _hex(token, _HEX32),
+        "owner_id": _hex(owner_id, _HEX32),
+        "expected_revision": entry["revision"],
+        "operation_sha256": _hex(operation_sha256, _HEX64),
+        "compute": choice,
+    }
+    if entry["candidate"] is None:
+        active = entry["active"]
+        if active is not None and {
+            key: active[key] for key in ("token", "owner_id", "operation_sha256", "compute")
+        } == {key: expected[key] for key in ("token", "owner_id", "operation_sha256", "compute")}:
+            return snapshot(db, base)
+        _refuse()
+    if entry["candidate"] != expected:
+        _refuse()
+    revision = _revision(entry["revision"] + 1)
+    entry["revision"] = revision
+    entry["candidate"] = None
+    entry["active"] = {
+        "token": token,
+        "owner_id": owner_id,
+        "operation_sha256": operation_sha256,
+        "compute": choice,
+        "promoted_revision": revision,
+    }
+    _validate_registry(registry)
+    encoded = _encoded(registry)
+    if len(encoded.encode("utf-8")) > MAX_BYTES:
+        _refuse()
+    changed = db.execute(
+        "UPDATE settings SET value=? WHERE id=? AND value=?", (encoded, SETTING, previous)
+    ).rowcount
     if changed != 1:
         _refuse()
     return snapshot(db, base)
