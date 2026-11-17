@@ -79,6 +79,19 @@ Use **Not checked**, **Checked** and **Needs review** to track your listening re
 **Next to review** cycles through unchecked/needs-review passages and works with uncertainty
 display off. Editing a checked passage makes it need review again; unrelated marks stay.
 
+**Show** limits the transcript to one group of passages, with a count for each choice:
+**All**, **Not checked**, **Needs review**, **Checked**, **Uncertain** or **Missing word
+timing**. Uncertain means the passages marked "Review suggested" at the chosen Show
+uncertainty level; it is available while Show uncertainty is on. Missing word timing means
+passages without complete word timing, including passages with no timestamps. Show works
+together with search: a passage appears only if it matches both, and the counts describe the
+passages your search finds. **Next to review** visits only the shown Not checked and Needs
+review passages, so with **Checked** it has nothing to visit. A passage you mark or edit
+stays visible until you choose a filter again, and the passage you are editing always stays
+visible with its unsaved draft. Opening another recording resets Show to All. Show is not
+available while you compare two results. Model uncertainty only suggests where to listen; it
+never sets or changes a review mark.
+
 **Show uncertainty** identifies the model's relatively weakest passages/words in this
 transcript. The 5/10/20% choices and tooltips help prioritize listening. These scores are not
 accuracy measurements; manual Checked marks are independent. Editing removes stale model

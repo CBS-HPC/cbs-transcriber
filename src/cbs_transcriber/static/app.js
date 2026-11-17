@@ -3259,6 +3259,8 @@ async function openEditor() {
   $("#library-view").hidden = true;
   $("#editor-view").hidden = false;
   document.title = `${state.recording.name} · CBS Transcriber`;
+  // The Show filter belongs to one opened recording view.
+  if (typeof resetTranscriptFilter === "function") resetTranscriptFilter();
   renderEditorDetails();
   renderTranscript();
   state.media = "audio";
@@ -6169,6 +6171,7 @@ function refreshTranscriptHints() {
   if (changed.length) highlightSearch(changed, "passage-");
   if (activeWord && !activeWord.isConnected) activeWord = null;
   if (state.comparison) scheduleAlignmentLayout();
+  if (typeof applyTranscriptFilter === "function") applyTranscriptFilter();
 }
 // Rank-based: mark at most `share` percent of all items, lowest first, and only items below
 // a confidence ceiling, so a consistently confident transcript shows few or no marks.
