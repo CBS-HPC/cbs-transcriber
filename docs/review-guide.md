@@ -43,6 +43,14 @@ Double-click a rendered word or choose **Edit** to open **Text**. Make the chang
 **Cancel** discards the draft. Save is disabled until the wording changes. Conflicting edits
 from another window are rejected so you can review them rather than overwrite saved work.
 
+While a passage plays, **Text** highlights the spoken word inside the text box using the
+saved word timing. **Replay passage** in the editor plays only that passage. Highlighting
+never moves your cursor or selection and does not affect Undo. Once your draft differs from
+the saved text, only words you have not touched keep their highlight: an edited or newly
+typed word is not highlighted, and the app never guesses a time for it. Untimed words are
+never highlighted. With **Follow playback** on, the text box scrolls to the spoken word, but
+waits while you are typing.
+
 Text corrections save even when word timing is missing or ambiguous. Proven unchanged words
 retain their intervals; a uniquely matched replacement can retain the replaced interval.
 Added or uncertain words stay untimed, with a nonblocking explanation. Saving does not
