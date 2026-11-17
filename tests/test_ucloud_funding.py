@@ -7,6 +7,8 @@ replaced by ``httpx.MockTransport``. No UCloud contact, real token or credential
 import dataclasses
 import functools
 import json
+import threading
+import time
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -330,6 +332,73 @@ def test_sdk_client_that_follows_redirects_is_refused_before_any_request(connect
 
     assert_unknown(run(), "transport_unsupported")
     assert service.requests == [] and service.closed
+
+
+def _without(name):
+    def change(headers):
+        return [(key, value) for key, value in headers.items() if key != name]
+
+    return change
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        _without("Authorization"),
+        _without("Project"),
+        lambda headers: {**headers, "Project": OTHER_PROJECT},
+        lambda headers: {**headers, "Authorization": "Bearer another-synthetic-key"},
+        lambda headers: [*headers.items(), ("Project", OTHER_PROJECT)],
+    ],
+)
+def test_sdk_client_must_carry_the_exact_project_and_auth_context(monkeypatch, change):
+    service = Service(reply(page([])))
+
+    def factory(**kwargs):
+        kwargs["headers"] = change(kwargs["headers"])
+        return httpx.Client(transport=service, **kwargs)
+
+    monkeypatch.setattr(sdk_client, "httpx", SimpleNamespace(Client=factory))
+
+    assert_unknown(run(), "transport_unsupported")
+    assert service.requests == [] and service.closed
+
+
+class StalledTransport(httpx.BaseTransport):
+    """Blocks inside the request like a stalled socket until the SDK client is closed."""
+
+    def __init__(self):
+        self.entered, self.released, self.closed = threading.Event(), threading.Event(), False
+
+    def handle_request(self, request):
+        self.entered.set()
+        self.released.wait(10)
+        # A late, valid answer: the watchdog must still refuse it.
+        return reply(page([gpu(600), cpu(40)]))
+
+    def close(self):
+        self.closed = True
+        self.released.set()
+
+
+def test_watchdog_closes_the_sdk_client_and_reaps_the_worker_at_the_deadline(monkeypatch):
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NO_PROXY", "*")
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 1.0)
+    transport = StalledTransport()
+    factory = functools.partial(httpx.Client, transport=transport)
+    monkeypatch.setattr(sdk_client, "httpx", SimpleNamespace(Client=factory))
+    earlier = set(threading.enumerate())
+
+    started = time.monotonic()
+    observation = funding.observe(SERVER, PROJECT, KEY, now=lambda: NOW)
+    elapsed = time.monotonic() - started
+
+    assert_unknown(observation, "deadline_exceeded")
+    assert transport.entered.is_set() and transport.closed
+    assert elapsed < 1.0 + funding.JOIN_GRACE_SECONDS
+    assert not [t for t in set(threading.enumerate()) - earlier if t.name == "cbs-funding-observer"]
 
 
 @pytest.mark.parametrize(

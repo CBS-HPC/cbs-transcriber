@@ -542,15 +542,6 @@ def test_body_drip_never_yields_a_result_after_the_deadline(loopback, monkeypatc
     assert elapsed <= 2 * BODY_DRIP_DEADLINE + GRACE
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (bounded): the 15 s overall deadline is only checked between socket reads. "
-        "A one-byte drip just below the per-read timeout (httpx.Timeout(remaining)) keeps each "
-        "read alive, so wall time reaches deadline + one more read timeout (about 2x; up to "
-        "~30 s with the real 15 s bound) before deadline_exceeded is returned."
-    ),
-)
 def test_body_drip_below_the_read_timeout_is_cut_at_the_overall_deadline(loopback, monkeypatch):
     monkeypatch.setattr(funding, "DEADLINE_SECONDS", BODY_DRIP_DEADLINE)
 
@@ -568,15 +559,6 @@ def test_header_drip_never_yields_a_result_after_the_deadline(loopback, monkeypa
     assert_unknown(observation, "deadline_exceeded")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (unbounded): response headers are read by httpcore with a fresh per-read "
-        "timeout and the first deadline check runs only after all headers arrive. A peer "
-        "dripping one header byte per interval below the read timeout holds observe() for as "
-        "long as it likes (h11 allows 100 KiB of headers, i.e. days at the real 15 s bound)."
-    ),
-)
 def test_header_drip_is_cut_at_the_overall_deadline(loopback, monkeypatch):
     monkeypatch.setattr(funding, "DEADLINE_SECONDS", 1.0)
 
@@ -599,14 +581,6 @@ def test_slow_name_resolution_never_yields_a_result_after_the_deadline(
     assert len(peer.heads) == 1  # The late, valid answer was received and still refused.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (unbounded): name resolution (socket.getaddrinfo) is outside every httpx "
-        "timeout and outside the overall deadline, so a slow resolver extends observe() "
-        "by its full delay before deadline_exceeded is returned."
-    ),
-)
 def test_slow_name_resolution_is_cut_at_the_overall_deadline(
     loopback, guarded_network, monkeypatch
 ):
@@ -1445,15 +1419,6 @@ def _drop_project_header(kwargs):
     kwargs["headers"] = {k: v for k, v in kwargs["headers"].items() if k != "Project"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "HARDENING GAP: the observer verifies the SDK client's type, base URL and redirect "
-        "flag but not that it sends 'Project: <selected>'. If an SDK drift drops or renames "
-        "that header, UCloud answers in the personal workspace and an empty page becomes a "
-        "complete GPU/CPU 'absent' for the selected project (ADR: exact Project/auth context)."
-    ),
-)
 def test_sdk_client_without_the_selected_project_header_is_refused(mock_sdk):
     service = mock_sdk(reply(page([])), adjust=_drop_project_header)
 

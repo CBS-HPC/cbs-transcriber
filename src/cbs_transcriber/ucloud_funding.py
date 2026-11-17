@@ -3,9 +3,23 @@
 Standalone and unwired: no route, setting, job, routing decision or database uses it. One
 call makes complete GET-only ``browseWallets`` reads for an explicitly supplied server,
 project and API key through the released SDK's ``CloudSettings``/``UCloudClient``. It
-reports what that traversal observed. It never estimates affordability, reserves funding,
-selects compute or discovers credentials. Unknown is never zero: any failed, partial,
-foreign, duplicate or unsupported evidence makes the whole observation unknown.
+reports what that traversal observed. It never estimates affordability, reserves funding or
+selects compute. Unknown is never zero: any failed, partial, foreign, duplicate or
+unsupported evidence makes the whole observation unknown.
+
+The server, project and key come only from the caller: no ``.env`` file, ``UCLOUD_*``
+variable or credential store is read. Like the app's other SDK clients, the SDK's HTTPX
+client keeps httpx's default ``trust_env``, so HTTPS_PROXY/ALL_PROXY/NO_PROXY and
+SSL_CERT_FILE/SSL_CERT_DIR in the process environment still apply to this connection.
+
+Network reads run on a daemon worker thread. At the overall deadline the caller closes the
+SDK client (and so its pooled sockets) from its own thread, waits at most
+``JOIN_GRACE_SECONDS`` for the worker and returns unknown/deadline_exceeded; a result the
+worker completes after that moment is never accepted. An operating-system name lookup
+cannot be interrupted: such a worker finishes the lookup on its own, its one in-flight
+request stays bounded by that request's timeouts, and its outcome is discarded. Closing a
+socket from the caller's thread woke blocked reads promptly in Windows tests; on other
+platforms that wake-up is unverified, and an unwoken read stays bounded by its read timeout.
 
 Interpreted units follow upstream UCloud commit 2c23d295318cabdb960a8baa69dc175e806254ac
 (provider-integration/shared/pkg/accounting and k8s/shared/products.go): resource-paid
@@ -16,6 +30,7 @@ currency (floating-point) and any other representation stay unsupported.
 
 import json
 import re
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -33,6 +48,7 @@ _TARGETS = {(GPU_CATEGORY, PROVIDER): "gpu", (CPU_CATEGORY, PROVIDER): "cpu"}
 
 # Local application limits (ADR 0178), not provider guarantees.
 DEADLINE_SECONDS = 15.0
+JOIN_GRACE_SECONDS = 0.5  # After the deadline, time allowed for the worker to release sockets.
 MAX_PAGE_BYTES = 1024 * 1024
 MAX_TOTAL_BYTES = 4 * 1024 * 1024
 MAX_PAGES = 32
@@ -89,6 +105,43 @@ class _Unknown(Exception):
     def __init__(self, reason):
         super().__init__(reason)
         self.reason = reason
+
+
+class _Deadline:
+    """Overall budget shared by observe()'s watchdog and its worker thread."""
+
+    def __init__(self, monotonic, seconds):
+        self._monotonic = monotonic
+        self._end = monotonic() + seconds
+        self._lock = threading.Lock()
+        self._cancelled = False
+        self._client = None
+
+    def remaining(self):
+        left = self._end - self._monotonic()
+        if self._cancelled or left <= 0:
+            raise _Unknown("deadline_exceeded")
+        return left
+
+    def check(self):
+        self.remaining()
+
+    def attach(self, http):
+        """Register the SDK client before its first request, unless already cancelled."""
+        with self._lock:
+            self.check()
+            self._client = http
+
+    def cancel(self):
+        """Watchdog side: closing the client closes its pooled sockets, failing blocked reads."""
+        with self._lock:
+            self._cancelled = True
+            http, self._client = self._client, None
+        if http is not None:
+            try:
+                http.close()
+            except Exception:  # The worker's own outcome is discarded after cancellation.
+                pass
 
 
 def _canonical_server(value):
@@ -202,22 +255,22 @@ def _status_reason(status):
     return reason.get(status, "server_error" if 500 <= status < 600 else "http_status")
 
 
-def _read_page(http, params, deadline, monotonic, used):
-    """One streamed GET page; every bound is checked before and after EOF and closure."""
-    remaining = deadline - monotonic()
-    if remaining <= 0:
-        raise _Unknown("deadline_exceeded")
+def _read_page(http, params, deadline, used):
+    """One streamed GET page; the worker checks every bound through EOF and closure.
+
+    Per-operation HTTPX timeouts restart on each socket read, so they cannot bound a drip
+    or a slow name lookup; the caller's watchdog enforces the overall deadline instead.
+    """
     chunks, size = [], 0
     with http.stream(
         "GET",
         PATH,
         params=params,
         headers={"Accept-Encoding": "identity"},
-        timeout=httpx.Timeout(remaining),
+        timeout=httpx.Timeout(deadline.remaining()),
         follow_redirects=False,
     ) as response:
-        if monotonic() >= deadline:
-            raise _Unknown("deadline_exceeded")
+        deadline.check()
         if response.status_code != 200:
             raise _Unknown(_status_reason(response.status_code))
         encodings = response.headers.get_list("content-encoding", split_commas=True)
@@ -241,13 +294,10 @@ def _read_page(http, params, deadline, monotonic, used):
                 raise _Unknown("page_too_large")
             if used + size > MAX_TOTAL_BYTES:
                 raise _Unknown("total_too_large")
-            if monotonic() >= deadline:
-                raise _Unknown("deadline_exceeded")
+            deadline.check()
             chunks.append(chunk)
-        if monotonic() >= deadline:
-            raise _Unknown("deadline_exceeded")
-    if monotonic() >= deadline:
-        raise _Unknown("deadline_exceeded")
+        deadline.check()
+    deadline.check()
     return b"".join(chunks)
 
 
@@ -341,8 +391,9 @@ def _classify(item, project, found):
     found[target] = (balance, unit, frequency)
 
 
-def _traverse(server, project, api_key, deadline, monotonic):
-    # Construct explicitly: from_env() would read .env files and the process environment.
+def _traverse(server, project, api_key, deadline):
+    # Construct explicitly: from_env() would read .env files and UCLOUD_* variables. The
+    # SDK's HTTPX client still honours proxy/CA environment variables (trust_env).
     settings = CloudSettings(server=server, token=api_key, project=project)
     with UCloudClient(settings, timeout=DEADLINE_SECONDS) as sdk:
         http = getattr(sdk, "_client", None)  # The pinned SDK's own HTTPX transport.
@@ -350,14 +401,18 @@ def _traverse(server, project, api_key, deadline, monotonic):
             not isinstance(http, httpx.Client)
             or http.follow_redirects is not False
             or str(http.base_url).rstrip("/") != server
+            # The exact selected Project/auth context, never a personal-workspace default.
+            or http.headers.get_list("project") != [project]
+            or http.headers.get_list("authorization") != [f"Bearer {api_key}"]
         ):
             raise _Unknown("transport_unsupported")
+        deadline.attach(http)
         found, seen, cursor, used, rows = {}, set(), None, 0, 0
         for _ in range(MAX_PAGES):
             params = {"includeChildren": "false", "itemsPerPage": ITEMS_PER_PAGE}
             if cursor is not None:
                 params["next"] = cursor
-            body = _read_page(http, params, deadline, monotonic, used)
+            body = _read_page(http, params, deadline, used)
             used += len(body)
             items, cursor = _page_parts(_decode(body))
             rows += len(items)
@@ -372,9 +427,22 @@ def _traverse(server, project, api_key, deadline, monotonic):
             seen.add(cursor)
         else:
             raise _Unknown("too_many_pages")
-    if monotonic() >= deadline:
-        raise _Unknown("deadline_exceeded")
+    deadline.check()
     return found
+
+
+def _work(server, project, api_key, deadline, outcome):
+    """Worker thread: records only a found mapping or a curated reason, never text."""
+    try:
+        outcome["found"] = _traverse(server, project, api_key, deadline)
+    except _Unknown as unknown:
+        outcome["reason"] = unknown.reason
+    except httpx.TimeoutException:
+        outcome["reason"] = "deadline_exceeded"
+    except httpx.HTTPError:
+        outcome["reason"] = "connection_failed"
+    except Exception:  # Unknown evidence never propagates upstream text or secrets.
+        outcome["reason"] = "internal_error"
 
 
 def _category(name, entry):
@@ -388,8 +456,10 @@ def _category(name, entry):
 def observe(server, project, api_key, *, monotonic=time.monotonic, now=None):
     """Observe the selected project's GPU/CPU wallets once; never raises on remote evidence.
 
-    Invalid caller-supplied arguments (or an injected naive clock) raise ValueError without
-    echoing their values. ``monotonic`` and ``now`` exist for deterministic tests.
+    Returns within DEADLINE_SECONDS + JOIN_GRACE_SECONDS of wall time. Invalid caller-supplied
+    arguments (or an injected naive clock) raise ValueError without echoing their values.
+    ``monotonic`` and ``now`` exist for deterministic tests; the watchdog always uses real
+    monotonic time.
     """
     if not _canonical_server(server):
         raise ValueError("Use the canonical HTTPS UCloud server origin.")
@@ -399,18 +469,28 @@ def observe(server, project, api_key, *, monotonic=time.monotonic, now=None):
         raise ValueError("Use a single-line UCloud API key.")
     now = now or (lambda: datetime.now(UTC))
     started = _timestamp(now)
-    deadline = monotonic() + DEADLINE_SECONDS
+    seconds = DEADLINE_SECONDS
+    deadline = _Deadline(monotonic, seconds)
+    watchdog_end = time.monotonic() + seconds
+    outcome = {}
+    worker = threading.Thread(
+        target=_work,
+        args=(server, project, api_key, deadline, outcome),
+        name="cbs-funding-observer",
+        daemon=True,  # A name lookup (or an unwoken read off Windows) may outlive observe().
+    )
     try:
-        found = _traverse(server, project, api_key, deadline, monotonic)
-    except _Unknown as unknown:
-        reason = unknown.reason
-    except httpx.TimeoutException:
-        reason = "deadline_exceeded"
-    except httpx.HTTPError:
-        reason = "connection_failed"
-    except Exception:  # Unknown evidence never propagates upstream text or secrets.
-        reason = "internal_error"
+        worker.start()
+    except RuntimeError:
+        outcome["reason"] = "internal_error"
     else:
+        worker.join(max(0.0, watchdog_end - time.monotonic()))
+        if worker.is_alive():
+            deadline.cancel()
+            worker.join(JOIN_GRACE_SECONDS)
+            outcome = {"reason": "deadline_exceeded"}  # Never a result after the deadline.
+    if "found" in outcome:
+        found = outcome["found"]
         return FundingObservation(
             server=server,
             project=project,
@@ -420,6 +500,7 @@ def observe(server, project, api_key, *, monotonic=time.monotonic, now=None):
             gpu=_category(GPU_CATEGORY, found.get("gpu")),
             cpu=_category(CPU_CATEGORY, found.get("cpu")),
         )
+    reason = outcome.get("reason")
     return FundingObservation(
         server=server,
         project=project,
