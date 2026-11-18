@@ -24,9 +24,9 @@ broader cleanup must preserve ongoing/recoverable work and Activity evidence.
 
 17–18 November (Claude): T147 is implemented with independent Go; the Show filter and
 default-on Text highlighting are implemented; saving a new UCloud key reconnects
-automatically (B452). They are combined on `claude/v2-integration`, not loaded. Funding
-observer (T146) and Runtime Stage 2 (T144) are recorded when their independent reviews
-finish. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
+automatically (B452). The standalone funding observer (T146) is implemented with independent
+Go (unwired). All are combined on `claude/v2-integration`, not loaded. Runtime Stage 2 (T144)
+is recorded when its independent review finishes. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
 
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).

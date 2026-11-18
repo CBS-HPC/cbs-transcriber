@@ -336,7 +336,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   complete wallet reads. Strict ownership/unit/scalar projection and curated reasons preserve
   unknown versus complete absence/zero; partial/error reads grant no usable authority. Always
   affordability=not_checked/reservation=false, with no routing/job/DB/credential discovery or
-  whole-run funding claim. Conditional design and implementation gates remain (ADR0178).
+  whole-run funding claim. A watchdog enforces the overall deadline; no result or request
+  headers after observe() returns. Unwired standalone module with independent Go (T146); any
+  caller, live acceptance and macOS/Linux socket wake-up remain (ADR0178).
 - V220: Planned CPU fallback applies to native Transcriber and CBS Runtime only for known
   absent/exhausted or insufficient selected-project GPU funding. Sufficient usable funding
   keeps exact 1g MIG even when queued; BUSY/FULL or unknown funding never authorizes CPU.
@@ -1960,7 +1962,7 @@ T142|x|Independent first-use dialog, truthful missing-key colour and retained Se
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
 T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2owner/promotion designGo but implementationunstarted; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
-T146|.|Standalone bounded project-funding observer; conditionaldesignGo, fullunitpin/realSDKmockedproof required; no code/routing/CPUactivation|V221,V220,I.providers,ADR0178
+T146|x|Standalone bounded project-funding observer: unit pin verified vs upstream 2c23d295, watchdog deadline, Project/Authorization check; builder 8698d4c and independent Go dccf2f6 (259 tests); unwired, no routing/CPU activation|V221,V220,I.providers,ADR0178
 T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
 T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148
 T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-pause Follow; prototype gate removed; Chromium/Windows browser checks only|V210,V188,I.transcript
