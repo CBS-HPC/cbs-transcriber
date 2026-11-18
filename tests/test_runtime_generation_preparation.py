@@ -256,6 +256,50 @@ def test_disabled_worker_fails_a_generation_owner_without_credentials_or_cloud(e
     assert registry(f, value)["candidate"]["owner_id"] == value["id"]
 
 
+@pytest.mark.parametrize("off", ["reservation", "pointers", "both"])
+def test_partial_gates_refuse_every_entry_and_never_start_a_paid_allocation(env, monkeypatch, off):
+    # With only some switches on, an allocation could run that could never be promoted.
+    f = env
+    value, _ = admit(f)
+    if off in {"reservation", "both"}:
+        monkeypatch.setattr(generations, "CANDIDATE_RESERVATION_ENABLED", False)
+    if off in {"pointers", "both"}:
+        monkeypatch.setattr(generations, "ACTIVE_POINTERS_ENABLED", False)
+    assert subject.ENABLED is True
+    for module, name in (
+        (api.native, "client_for"),
+        (runtime_compute, "freeze"),
+        (api, "script_application"),
+        (preparation, "huggingface_plan"),
+    ):
+        monkeypatch.setattr(
+            module, name, lambda *_, _name=name, **__: pytest.fail("reached " + _name)
+        )
+    monkeypatch.setattr(f.credentials, "get", lambda *_: pytest.fail("credentials"))
+    rows, before = f.store.all("SELECT * FROM runtime_preparations"), raw_settings(f)
+    confirmation = {key: None for key in subject._CONFIRMATION_KEYS}
+    target = value["frozen"]["generation"]["target"]
+    calls = (
+        lambda: subject.preview(f.store, f.credentials),
+        lambda: subject.admit(f.store, f.credentials, confirmation, lambda: None),
+        lambda: subject.verify_and_promote(
+            f.store, value["id"], value["epoch"], f.cloud, time.monotonic() + 30
+        ),
+        lambda: subject.active(f.store, target),
+    )
+    for call in calls:
+        with pytest.raises(subject.Conflict, match="disabled"):
+            call()
+    assert f.store.all("SELECT * FROM runtime_preparations") == rows
+    assert raw_settings(f) == before
+    final, _ = execute(f)
+    assert final["id"] == value["id"] and final["state"] == "failed"
+    assert final["message"] == subject.DISABLED
+    assert final["journal"] == {"run_name": "CBS runtime generation " + value["id"]}
+    assert not f.drive.touched and not f.drive.creates and not f.cloud.submissions
+    assert raw_settings(f) == before
+
+
 def test_admission_inserts_owner_and_candidate_in_one_writer_and_keeps_other_slots(env):
     f = env
     before = raw_settings(f)
@@ -726,6 +770,85 @@ def test_decoder_refuses_forged_proof_and_legacy_rows_with_generation_keys(env, 
         preparation.get(f.store, value["id"])
     cards = [item for item in preparation.activity(f.store) if item["id"].endswith(value["id"])]
     assert cards and cards[0].get("preparation_unverified")
+
+
+def _store_journal(f, identifier, journal):
+    f.store.execute(
+        "UPDATE runtime_preparations SET journal=? WHERE id=?",
+        (runtime_store.canonical(journal), identifier),
+    )
+
+
+@pytest.mark.parametrize(
+    "retype", ["control", "read-only-zero", "hours-float", "absence-receipt", "no-post-zero"]
+)
+def test_decoder_compares_generation_proof_type_strictly(env, retype):
+    f = env
+    value, _ = admit(f)
+    root, _run = roots(value, f)
+    specification = api.build_script_specification(
+        f.settings,
+        value["frozen"]["generation"]["operation"]["application"],
+        value["id"],
+        SimpleNamespace(timeout_minutes=1),
+        True,
+        runtime_product=runtime_compute.MIG_PRODUCT,
+        runtime=root,
+    )
+    specification["name"] = value["journal"]["run_name"]
+    journal = {**value["journal"], "specification": specification}
+    if retype == "read-only-zero":
+        specification["resources"][0]["readOnly"] = 0
+    elif retype == "hours-float":
+        specification["timeAllocation"]["hours"] = float(specification["timeAllocation"]["hours"])
+    elif retype == "absence-receipt":
+        journal["reconciled_not_created"] = True
+    elif retype == "no-post-zero":
+        journal["no_post"] = 0
+    _store_journal(f, value["id"], journal)
+    if retype == "control":
+        stored = preparation.get(f.store, value["id"])["journal"]["specification"]
+        assert runtime_store.canonical(stored) == runtime_store.canonical(specification)
+    else:
+        with pytest.raises(preparation.Conflict):
+            preparation.get(f.store, value["id"])
+
+
+def test_decoder_refuses_a_retyped_submission_epoch(env):
+    f = env
+    value, _ = admit(f)
+    f.drive.damage = _cache
+    failed, _ = execute(f)
+    assert failed["state"] == "failed" and "generation_submission" in failed["journal"]
+    journal = copy.deepcopy(failed["journal"])
+    assert journal["reconciled_not_created"] is False and journal["no_post"] is False
+    journal["generation_submission"]["epoch"] = float(journal["generation_submission"]["epoch"])
+    _store_journal(f, value["id"], journal)
+    with pytest.raises(preparation.Conflict):
+        preparation.get(f.store, value["id"])
+
+
+@pytest.mark.parametrize(
+    ("module", "name", "changed"),
+    [
+        (runtime_compute, "POLICY", "mig-v2"),
+        (api, "SCRIPT_FLAVOURS", ("terminal-debian", "terminal-almalinux")),
+    ],
+    ids=["compute-policy", "terminal-flavours"],
+)
+def test_version_changes_keep_a_queued_owner_readable_but_refuse_its_fresh_submission(
+    env, monkeypatch, module, name, changed
+):
+    # Decoding is data-only; current support is refused at the fresh submission instead.
+    f = env
+    queued, _ = admit(f)
+    monkeypatch.setattr(module, name, changed)
+    assert preparation.get(f.store, queued["id"])["state"] == "queued"
+    final, _ = execute(f)
+    assert final["id"] == queued["id"] and final["state"] == "failed"
+    assert not {"specification", "generation_folders", "submission_intent"} & set(final["journal"])
+    assert not f.drive.creates and not f.cloud.submissions
+    assert_unpromoted(f, final)
 
 
 def test_legacy_paths_never_match_or_reuse_a_generation_owner(env, monkeypatch):

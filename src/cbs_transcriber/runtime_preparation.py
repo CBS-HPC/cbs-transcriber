@@ -39,8 +39,10 @@ RECENT_ACTIVITY = 200
 _CONTROL_LOCK = threading.Lock()
 _CONTROLS = set()
 # ADR 0176 Stage 2 (disabled): journal proof only the generation module's trusted writers
-# may change on a generation-born owner. Generic/legacy writers can never inject, alter or
-# remove it; legacy-born owners can never acquire the generation-only keys.
+# may change on a generation-born owner. Generic/legacy writers can never inject, alter,
+# re-type or remove it; legacy-born owners can never acquire the generation-only keys.
+# The absence receipts are reserved too: name reconciliation never resolves a generation
+# POST, so no generic writer may record one. Legacy rows keep their reconcile semantics.
 GENERATION_ONLY = frozenset({"generation_folders", "generation_submission", "generation_promotion"})
 GENERATION_RESERVED = GENERATION_ONLY | {
     "specification",
@@ -51,6 +53,8 @@ GENERATION_RESERVED = GENERATION_ONLY | {
     "model_plan_receipt",
     "runtime_product",
     "runtime_compute_policy",
+    "reconciled_not_created",
+    "no_post",
 }
 _IMMUTABLE_COLUMNS = frozenset({"id", "frozen", "connection_fingerprint", "archived", "created"})
 DDL = """CREATE TABLE IF NOT EXISTS runtime_preparations (
@@ -930,6 +934,20 @@ def _valid_inventory(items):
     )
 
 
+def _same(left, right):
+    """Type-strict, recursive equality of JSON values: their exact canonical stored bytes.
+
+    Python ``==`` treats ``False == 0`` and ``1 == 1.0`` as equal; stored proof does not.
+    Values that cannot be stored canonically are never the same as anything.
+    """
+    if left is _ABSENT or right is _ABSENT:
+        return left is right
+    try:
+        return runtime_store.canonical(left) == runtime_store.canonical(right)
+    except (ValueError, RecursionError):
+        return False
+
+
 def _birth(db, value, fields, journal, trusted):
     """Anchor the stored birth identity, never the caller's possibly stale/stripped copy."""
     if _IMMUTABLE_COLUMNS & set(fields):
@@ -946,10 +964,11 @@ def _birth(db, value, fields, journal, trusted):
             raise Conflict("A legacy preparation cannot acquire Runtime generation evidence.")
         return
     completes = fields.get("state") == "completed" and stored["state"] != "completed"
+    # Type-strict: a re-typed value (False->0, 1->1.0) is a change to stored proof.
     changed = any(
-        after.get(key, _ABSENT) != before.get(key, _ABSENT) for key in GENERATION_RESERVED
+        not _same(after.get(key, _ABSENT), before.get(key, _ABSENT)) for key in GENERATION_RESERVED
     )
-    if value["frozen"] != frozen or (not trusted and (completes or changed)):
+    if not _same(value["frozen"], frozen) or (not trusted and (completes or changed)):
         raise Conflict("Runtime generation proof can change only through its own verified writers.")
 
 

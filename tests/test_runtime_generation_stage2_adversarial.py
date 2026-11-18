@@ -480,7 +480,9 @@ def test_slice_on_but_reservation_off_admits_nothing(stage, monkeypatch):
     confirmation = subject.preview(f.store, f.credentials)
     monkeypatch.setattr(generations, "CANDIDATE_RESERVATION_ENABLED", False)
     rows, settings = _rows(f), _settings(f)
-    with pytest.raises(generations.Conflict, match="disabled"):
+    # The slice gate itself now requires all three switches, so admission refuses before
+    # freezing anything rather than at the registry's own reservation gate.
+    with pytest.raises(subject.Conflict, match="disabled"):
         subject.admit(f.store, f.credentials, confirmation, lambda: None)
     assert _rows(f) == rows and _settings(f) == settings
     assert not f.drive.touched and not f.cloud.submissions
@@ -498,7 +500,6 @@ D1 = (
 )
 
 
-@pytest.mark.xfail(strict=True, raises=DefectReproduced, reason=D1)
 def test_generic_writer_cannot_retype_the_specification_before_submission(stage):
     f = stage
     value, _ = admit(f)
@@ -533,7 +534,6 @@ def test_generic_writer_cannot_retype_the_specification_before_submission(stage)
     raise DefectReproduced(f"promotion binds {bound[:12]}; the POSTed spec is {posted[:12]}")
 
 
-@pytest.mark.xfail(strict=True, raises=DefectReproduced, reason=D1)
 def test_generic_writer_cannot_retype_the_submission_receipt(stage):
     f = stage
     value, _ = admit(f)
@@ -556,16 +556,6 @@ def test_generic_writer_cannot_retype_the_submission_receipt(stage):
     raise DefectReproduced("generic checkpoint stored " + runtime_store.canonical(stored)[:60])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=DefectReproduced,
-    reason=(
-        "D2: reconciled_not_created/no_post are not generation-reserved. Name reconciliation "
-        "is refused for generation owners, yet a generic checkpoint can inject the absence "
-        "receipt into an uncertain generation POST: it stops being uncertain and its owned "
-        "run folder becomes cleanable while the allocation may exist."
-    ),
-)
 def test_generic_writer_cannot_forge_an_absence_receipt_for_an_uncertain_post(stage):
     f = stage
     value, _ = admit(f)
@@ -1114,50 +1104,14 @@ def test_create_reply_classification_rejects_shapes_and_foreign_paths():
 @pytest.mark.parametrize(
     ("module", "name", "value"),
     [
-        pytest.param(
-            runtime_compute,
-            "POLICY",
-            "mig-v2",
-            id="compute-policy",
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=DefectReproduced,
-                reason=(
-                    "D3: validate_owner compares the frozen operation's compute_policy with the "
-                    "current runtime_compute.POLICY; a later policy bump makes every promoted "
-                    "generation row undecodable, which then blocks all legacy preparation "
-                    "admission ('Resolve unverified preparation evidence')."
-                ),
-            ),
-        ),
+        pytest.param(runtime_compute, "POLICY", "mig-v2", id="compute-policy"),
         pytest.param(
             api,
             "SCRIPT_FLAVOURS",
             ("terminal-debian", "terminal-almalinux"),
             id="terminal-flavours",
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=DefectReproduced,
-                reason=(
-                    "D3: _application checks the frozen Terminal app name against the current "
-                    "api.SCRIPT_FLAVOURS; retiring a flavour orphans historical owners."
-                ),
-            ),
         ),
-        pytest.param(
-            api,
-            "SCRIPT_PARAMETER",
-            "batchScriptV2",
-            id="script-parameter",
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=DefectReproduced,
-                reason=(
-                    "D3: _bound_specification checks the recorded specification against the "
-                    "current api.SCRIPT_PARAMETER name instead of the frozen binding."
-                ),
-            ),
-        ),
+        pytest.param(api, "SCRIPT_PARAMETER", "batchScriptV2", id="script-parameter"),
         pytest.param(runtime_compute, "MIG_PRODUCT", dict(CPU), id="mig-product"),
         pytest.param(api, "WHISPERX_VERSION", "9.9.9", id="whisperx-version"),
         pytest.param(

@@ -3,9 +3,10 @@
 A fresh generation is prepared by the existing durable preparation owner (its Stop,
 capacity, epoch, submission and Activity rules), never by a second remote-job manager.
 Nothing here is reachable from admission, carry, batching/execution, selected repair,
-provenance/capture or restore: every entry point refuses while ``ENABLED`` is false, and the
-Stage-1 candidate and active-pointer gates stay independently off. The legacy decoder and
-worker import this module only for a row already born with a generation.
+provenance/capture or restore: every entry point and the worker refuse unless ``ENABLED``
+and the Stage-1 candidate and active-pointer gates are all on; each stays independently
+off. The legacy decoder and worker import this module only for a row already born with a
+generation.
 
 Not implemented (refused): namespace creation, CPU recipes, base-only generations,
 no-ID Retry or successors, name-based reconciliation, failed-candidate supersession,
@@ -101,8 +102,18 @@ class Conflict(preparation.Conflict):
     """Disabled, stale, unverified or unimplemented generation work grants no authority."""
 
 
+def _enabled():
+    # All three switches: with only some on, a paid allocation could run whose candidate
+    # could never be reserved or whose promotion could never be published.
+    return bool(
+        ENABLED
+        and generations.CANDIDATE_RESERVATION_ENABLED
+        and generations.ACTIVE_POINTERS_ENABLED
+    )
+
+
 def _require_enabled():
-    if not ENABLED:
+    if not _enabled():
         raise Conflict(DISABLED)
 
 
@@ -148,15 +159,27 @@ def _cuda(compute):
     return choice
 
 
+def _label(value):
+    return (
+        type(value) is str and 0 < len(value) <= 200 and not any(ord(char) < 32 for char in value)
+    )
+
+
 def _application(value):
+    """Shape and type only, so a frozen choice stays readable after flavours change."""
     if (
         type(value) is not dict
         or set(value) != {"name", "version"}
-        or value["name"] not in api.SCRIPT_FLAVOURS
-        or type(value["version"]) is not str
-        or not 0 < len(value["version"]) <= 200
-        or any(ord(char) < 32 for char in value["version"])
+        or not _label(value["name"])
+        or not _label(value["version"])
     ):
+        _bad()
+    return dict(value)
+
+
+def _supported_application(value):
+    """Fresh confirmation/submission only: one of this version's Terminal batch flavours."""
+    if _application(value)["name"] not in api.SCRIPT_FLAVOURS:
         _bad()
     return dict(value)
 
@@ -169,7 +192,7 @@ def _operation(settings, target, application, compute, connection_fingerprint, m
         "runtime_id": target["runtime_id"],
         "recipe_sha256": preparation.recipe_hash(),
         "model_plan_sha256": _digest(model_plan),
-        "application": _application(application),
+        "application": _supported_application(application),
         "compute": _cuda(compute),
         "compute_policy": runtime_compute.POLICY,
         "namespace": settings.ucloud_transcriber.storage_path + "/cbs-runtime",
@@ -278,7 +301,7 @@ def admit(store, credentials, confirmation, guard):
         raise Conflict("Review and confirm the Runtime generation request again.")
     guard()
     fresh, chosen, model_plan, _ = _freeze(store, credentials)
-    if fresh != confirmation:
+    if not preparation._same(fresh, confirmation):  # Type-strict: 1.0 is not revision 1.
         raise Conflict("The Runtime generation request changed. Review and confirm it again.")
     _accepted_files(model_plan)
     guard()
@@ -350,7 +373,11 @@ def admit(store, credentials, confirmation, guard):
 
 
 def _owner(value):
-    """Data-only frozen binding; never current-version constants that would orphan history."""
+    """Data-only frozen binding; never current-version constants that would orphan history.
+
+    Current support (compute policy, Terminal flavours, script parameter, recipe) is refused
+    only at the specific fresh action that depends on it, never by making a record unreadable.
+    """
     frozen, identifier = value["frozen"], value["id"]
     generation = frozen["generation"]
     if (
@@ -380,7 +407,7 @@ def _owner(value):
         or operation["runtime_id"] != frozen["runtime_id"]
         or operation["recipe_sha256"] != frozen["recipe_sha256"]
         or operation["model_plan_sha256"] != _digest(frozen["model_plan"])
-        or operation["compute_policy"] != runtime_compute.POLICY
+        or not _label(operation["compute_policy"])
         or operation["namespace"] != settings.ucloud_transcriber.storage_path + "/cbs-runtime"
         or type(operation["allocation_hours"]) is not int
         or not 1 <= operation["allocation_hours"] <= 48
@@ -403,26 +430,43 @@ def _owner(value):
     return settings, generation, root
 
 
-def _bound_specification(specification, settings, generation, root, identifier):
-    """The recorded specification may mount only this owner's run folder and generation."""
+def _bound_specification(specification, settings, generation, root, identifier, *, parameter=None):
+    """The recorded specification may mount only this owner's run folder and generation.
+
+    Comparisons are type-strict (canonical bytes). Decoding (``parameter=None``) checks the
+    stored script-parameter name for shape only; a fresh submission passes this version's
+    name, so a later rename keeps recorded history readable.
+    """
     run = api.run_folder(settings, identifier)
     operation = generation["operation"]
     if (
         type(specification) is not dict
         or len(runtime_store.canonical(specification).encode()) > MAX_SPECIFICATION_BYTES
-        or specification.get("name") != "CBS runtime generation " + identifier
-        or specification.get("application") != operation["application"]
-        or specification.get("product") != operation["compute"]["product"]
-        or specification.get("parameters")
-        != {api.SCRIPT_PARAMETER: {"type": "file", "path": run + "/supervisor.sh"}}
-        or specification.get("resources")
-        != [
+    ):
+        _bad()
+    parameters = specification.get("parameters")
+    if type(parameters) is not dict or len(parameters) != 1:
+        _bad()
+    ((name, script),) = parameters.items()
+    expected = {
+        "application": operation["application"],
+        "product": operation["compute"]["product"],
+        "resources": [
             {"type": "file", "path": run, "readOnly": False},
             {"type": "file", "path": root, "readOnly": False},
-        ]
-        or specification.get("timeAllocation")
-        != {"hours": operation["allocation_hours"], "minutes": 0, "seconds": 0}
-        or specification.get("sshEnabled") is not False
+        ],
+        "timeAllocation": {"hours": operation["allocation_hours"], "minutes": 0, "seconds": 0},
+        "sshEnabled": False,
+    }
+    if (
+        specification.get("name") != "CBS runtime generation " + identifier
+        or not _label(name)
+        or (parameter is not None and name != parameter)
+        or not preparation._same(script, {"type": "file", "path": run + "/supervisor.sh"})
+        or any(
+            not preparation._same(specification.get(key, preparation._ABSENT), item)
+            for key, item in expected.items()
+        )
     ):
         _bad()
     return specification
@@ -470,6 +514,7 @@ def validate_owner(value):
     if submission is not None and (
         type(submission) is not dict
         or set(submission) != {"epoch", "specification_sha256", "folders_sha256"}
+        or type(submission["epoch"]) is not int  # Type-strict: 1.0 is not epoch 1.
         or not all(acknowledged(kind) for kind in FOLDERS)
         or any(folders[kind]["epoch"] != submission["epoch"] for kind in FOLDERS)
         or "specification" not in journal
@@ -480,6 +525,8 @@ def validate_owner(value):
         _bad()
     if submission is None and (journal.get("submission_intent") or "job_id" in journal):
         _bad()  # Only the receipt-proving submission writer may accept a POST.
+    if any(journal.get(key, False) is not False for key in ("reconciled_not_created", "no_post")):
+        _bad()  # Name reconciliation never resolves a generation POST; no absence receipt.
     if {"runtime_product", "runtime_compute_policy"} & set(journal):
         _bad()  # Compute is frozen in the operation, never journaled at submit.
     promotion = journal.get("generation_promotion")
@@ -582,7 +629,7 @@ class GenerationRun(preparation.Run):
     """The existing durable owner, with generation folders, mounts and sole promotion."""
 
     def execute(self):
-        if not ENABLED:
+        if not _enabled():
             # No credentials, client, legacy-root check or remote request while disabled.
             try:
                 self.checkpoint(state="failed", message=DISABLED)
@@ -625,7 +672,8 @@ class GenerationRun(preparation.Run):
             raise Conflict(FOLDER_FAILURES[outcome])
         self.guard(submitting=True)
 
-    def _receipts(self, value):
+    def _receipts(self, value, posted):
+        """Prove folders and that the recorded specification is exactly the one to POST."""
         settings, generation, root = _owner(value)
         journal = value["journal"]
         folders = journal.get("generation_folders") or {}
@@ -637,6 +685,7 @@ class GenerationRun(preparation.Run):
             )
             or journal.get("owned_folder") != api.run_folder(settings, value["id"])
             or "specification" not in journal
+            or not preparation._same(journal["specification"], posted)
         ):
             raise Conflict(
                 "Runtime generation folders are not acknowledged for this owner. "
@@ -671,6 +720,19 @@ class GenerationRun(preparation.Run):
             or operation["allocation_hours"] != _hours()
         ):
             raise Conflict("The runtime recipe changed. This generation cannot be prepared.")
+        # Current support is checked here, at the fresh submission, never while decoding:
+        # a later version keeps the frozen record readable but never submits its old choices.
+        if operation["compute_policy"] != runtime_compute.POLICY:
+            raise Conflict(
+                "The Runtime compute policy changed. This generation cannot be prepared."
+            )
+        try:
+            _supported_application(operation["application"])
+        except ValueError:
+            raise Conflict(
+                "The frozen UCloud Terminal application is no longer a supported batch flavour. "
+                "This generation cannot be prepared."
+            ) from None
         # Refusal-only: later funding changes never retarget the frozen product.
         current = operation_compute(runtime_compute.freeze(self.settings, self.worker.credentials))
         if current != operation["compute"]:
@@ -687,7 +749,14 @@ class GenerationRun(preparation.Run):
         )
         specification["name"] = journal["run_name"]
         try:
-            _bound_specification(specification, settings, generation, root, self.identifier)
+            _bound_specification(
+                specification,
+                settings,
+                generation,
+                root,
+                self.identifier,
+                parameter=api.SCRIPT_PARAMETER,
+            )
         except ValueError:
             raise Conflict("The Runtime generation specification is not bound.") from None
         self._write(lambda _: {"specification": specification})
@@ -743,7 +812,10 @@ class GenerationRun(preparation.Run):
         while True:
             self.guard(submitting=True)
             if preparation.begin_submission(
-                self.store, self.identifier, self.epoch, require=self._receipts
+                self.store,
+                self.identifier,
+                self.epoch,
+                require=lambda value: self._receipts(value, specification),
             ):
                 self.checkpoint(journal={"deadline_at": time.time() + api.PREPARE_SECONDS + 300})
                 remote_id = api.extract_job_id(
@@ -881,7 +953,7 @@ def verify_and_promote(store, owner, epoch, client, deadline, *, stopping=None):
         fresh = preparation._get(db, owner, owned=True)
         if fresh["epoch"] != epoch or (stopping is not None and stopping.is_set()):
             raise preparation.Interrupted()
-        if fresh["frozen"] != frozen:
+        if not preparation._same(fresh["frozen"], frozen):
             raise Conflict("The Runtime generation owner changed. Preserve its evidence.")
         if fresh["state"] == "completed":
             return True
@@ -894,7 +966,7 @@ def verify_and_promote(store, owner, epoch, client, deadline, *, stopping=None):
             preparation._update(db, fresh, journal={"stop_intent": True})
             return False
         if fresh["state"] != "running" or any(
-            fresh["journal"].get(key) != item for key, item in observed.items()
+            not preparation._same(fresh["journal"].get(key), item) for key, item in observed.items()
         ):
             raise observation.Refused()
         submission = fresh["journal"]["generation_submission"]
