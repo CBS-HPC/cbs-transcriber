@@ -13,7 +13,8 @@ preserved. No merge/push/release or app reload is implied by the handover.
 | Runtime generation Stage 1 `401769e` | Disabled metadata/path/candidate foundation; 46 distinct synthetic passes | Kept separate from that candidate, then composed into the isolated protocol baseline `2df4dfd`; no new execution authority. [Receipt](../verification-2026-11-12-runtime-generations-stage1.md). |
 | Runtime Stage 2 (T144) | Design Go; implementation unstarted | Implement only the disabled owner/folder/readiness-promotion slice in [ADR 0176](../decisions/0176-isolated-runtime-generation-recovery.md). Later admission/carry/execution/capture/restore remain mandatory. |
 | Funding observer (T146) | Conditional design Go; implementation unstarted | Standalone observer/mock tests under [ADR 0178](../decisions/0178-bounded-project-funding-observation.md); independently verify the full primary unit pin before accepting fixtures. No CPU routing or affordability claim. |
-| Existing Working schema 19 (T147) | Design Go; implementation unstarted | Extend [ADR 0179](../decisions/0179-existing-working-schema19.md), retaining strict eligibility and native startup dependency fences. |
+| Existing Working schema 19 (T147) | Implemented 17 November; independent Go (`f484571`, 171 focused cases) | Combined on `claude/v2-integration`; not loaded. Real-library activation follows the authorized activation process. |
+| Editor/review (T148/T149) | Show filter and default-on Text highlighting implemented (`claude/editor-review-v2`) | User decisions in [editor/review decisions](editor-review-decisions-2026-11-12.md); Undo/history scope awaits the user. Re-transcription parked. |
 
 Use separate file ownership and independent review. Suggested Runtime Stage-2 ownership is
 new `runtime_generation_preparation.py`, the preparation owner/registry and exact-root

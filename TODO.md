@@ -22,6 +22,12 @@ records tested components and the unstarted Runtime Stage 2, funding-observer (T
 schema-19 Working (T147) designs. Editor/review workflow is the next user discussion;
 broader cleanup must preserve ongoing/recoverable work and Activity evidence.
 
+17–18 November (Claude): T147 is implemented with independent Go; the Show filter and
+default-on Text highlighting are implemented; saving a new UCloud key reconnects
+automatically (B452). They are combined on `claude/v2-integration`, not loaded. Funding
+observer (T146) and Runtime Stage 2 (T144) are recorded when their independent reviews
+finish. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
+
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
 It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime
@@ -43,6 +49,12 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   durable preparation owner, exclusive folder receipt and all accepted compute/generation
   carry before controlled live acceptance. Keep old locks/environments untouched; CPU/CUDA
   targets stay separate and promoted environments cannot receive new model downloads.
+
+- [x] **Existing sole-result Working on schema 19 (T147).** `codex/mvp-v2-existing-working`
+  accepts only 18/18 and 19/19 pairs, never reads or writes review marks, and skips any
+  recording with doubtful native-recovery evidence (ADR 0179). Builder `1b4d566`; independent
+  tester Go `f484571` (171 focused cases). Not loaded. Follow-up: undecodable text in old job
+  data stops the pass as `aborted: OperationalError` instead of a typed refusal (nothing written).
 
 - [x] **CBS Runtime preparation observation stability (T143), authorized 12 November.** Reproduce and
   fix standalone transient-monitor/terminal-publication and late-Stop completion races on
@@ -469,7 +481,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   (ADR 0148), verified with synthetic backend/browser/restore checks. Validate real-user use;
   Next to review now visits Not checked/Needs review, skips Checked and wraps independently
   of model hints, with focused browser and draft-safety verification.
-  Review filtering and coordination with future re-transcription tags remain open.
+  The Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing word timing)
+  is implemented and browser-verified; Next to review follows it (T148). Real-user acceptance
+  and coordination with any future re-transcription tags remain open.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
@@ -483,10 +497,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   editable passage while replaying it, without a separate duplicate playback panel. Preserve
   the draft, typing focus, cursor/selection and undo; use available valid word timing without
   inventing times for new words or blocking editing. Review scrolling and responsiveness on
-  long passages. An off-by-default local prototype now exists on the post-MVP branch;
-  enable only for review with `localStorage.setItem("cbs-text-playback-prototype", "1")`
-  and reload. Remove that key and reload to revert. Differing drafts pause highlighting.
-  This is not installed in the MVP and does not settle the broader editor design.
+  long passages. **MVP v2 (user decision 12 November):** highlighting is on by default with no
+  setting; a differing draft keeps highlighting provably unchanged prefix/suffix words and
+  never times new or changed words; Follow playback waits while typing (T149). Browser-verified
+  on Chromium/Windows; Mac/Firefox/IME/screen-reader and real-user acceptance remain. This does
+  not settle the broader editor design.
   **Released MVP 0.1.0:** the fresh timing-independent manual policy (ADR 0166) preserves proven
   unchanged/replacement intervals and leaves inserted or ambiguous words untimed, without
   blocking wording changes. ADR 0156 retains the older conservative generation for history.
@@ -508,9 +523,17 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   restoration passed lifecycle/API/browser/portable checks and is loaded in rc3. Broader passage-level undo
   remains open; preserve other
   edits, timing, speakers, concurrency safety and an auditable history.
+  User direction 12 November: one **Undo last change** whose label names the next step
+  (instead of separate undo buttons), undo recorded as history, a Git-like change list with
+  word-level diffs and later a branch view of results/versions with the Working marker.
+  Scope (selective reverts, Redo, reach) awaits the user's confirmation.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
+  **Parked by the user 12 November:** same-model re-runs add little. If revived, prefer the
+  NVIDIA Parakeet UCloud model (`nvidia/parakeet-tdt-0.6b-v3`) only where the catalog confirms
+  the passage language, warn on identical model/language, and offer per-passage suggestions
+  that start as Needs review, never automatic replacements.
 - [ ] **Spelling integration and acceptance — post-MVP, parked by user.** The local DA/en-GB preview above is implemented
   and independently tested; integrate only after user approval. Danish suggestions remain
   disabled after measured timeouts. Broader languages, representative quality/platform checks,

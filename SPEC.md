@@ -141,6 +141,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Marking does not edit text, timing, content history or Working roles.
   Next to review navigates visible Not checked/Needs review passages, skipping Checked and
   wrapping independently of the optional model-uncertainty display.
+  A view-local Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing
+  word timing) narrows rendered passages, with counts, together with search; Next to review
+  visits only shown passages (V223).
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
@@ -316,6 +319,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V223: The Show filter is view-local: it resets when a recording is opened and survives
+  re-renders. It hides rendered passages in place, never hides the passage being edited and
+  keeps passages edited or marked since the filter was chosen until the next choice. Review
+  states use the V192 snapshot; Uncertain uses Show uncertainty flags at the chosen level and
+  is unavailable while that display is off; Missing word timing means !word_timing. Model
+  uncertainty never writes manual marks. Disabled while comparing (user decision 12 Nov).
 - V222: Existing sole-result Working may activate only reviewed runtime/DB18/18 or19/19 pairs
   with all ADR0141 eligibility/source/role/snapshot fences intact. Preserve passage_reviews
   exactly, never interpret marks as consent/veto. Before designation, bounded negative native
@@ -431,12 +440,15 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   credential diagnostics. Newer checks invalidate older save proofs; wrong drafts and late
   responses cannot revoke another saved identity. Missing/stale/unavailable connections do not
   hide results, Stop, Retry or recovery. No passive probes, expiry or ASR-readiness claim.
-- V210: Text-editor word following is an off-by-default local prototype. Only exact current
-  saved wording and verified intervals may highlight; differing drafts pause it. Native text
-  input retains focus, caret/selection, scroll choices and undo without value replacement or
-  invented timing. No duplicate saved-text panel, provider call or persisted transcript change.
-- V192: Next to review uses the current validated manual review snapshot and rendered passage
-  order, skipping Checked and wrapping from the end. Zero model hints or hidden uncertainty
+- V210: Text-editor word following is on by default without a setting (user decision,
+  12 November). Exact saved wording highlights verified intervals. A differing draft keeps only
+  saved words wholly inside the common code-point prefix (same offsets) or suffix (shifted by
+  the length change) and separated from edited letters; changed or new words never receive
+  times. Native text input keeps focus, caret/selection, undo and, while typing, its scroll
+  position, with no value replacement. No duplicate saved-text panel, provider call or
+  persisted transcript change.
+- V192: Next to review uses the current validated manual review snapshot and rendered, shown
+  passage order, skipping Checked and wrapping from the end. Zero model hints or hidden uncertainty
   controls cannot disable available manual work. Disable on all checked, unavailable/loading
   marks or unsupported historical views. Refresh eligibility after status/filter/view changes;
   preserve drafts, caret and content and refuse stale view authority. Navigation writes no marks.
@@ -1949,7 +1961,9 @@ T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direct
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
 T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2owner/promotion designGo but implementationunstarted; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
 T146|.|Standalone bounded project-funding observer; conditionaldesignGo, fullunitpin/realSDKmockedproof required; no code/routing/CPUactivation|V221,V220,I.providers,ADR0178
-T147|.|Existing sole-result Working schema19 extension designGo; preserve marks and stricteligibility, add bounded negative native-recovery fence; implementation/tests unstarted|V222,V149,V182,I.history,ADR0179
+T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
+T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148
+T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-pause Follow; prototype gate removed; Chromium/Windows browser checks only|V210,V188,I.transcript
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
