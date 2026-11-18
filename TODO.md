@@ -28,6 +28,20 @@ automatically (B452). The standalone funding observer (T146) is implemented with
 Go (unwired). Runtime Stage 2 (T144) is implemented disabled with independent Go after three
 review defects were fixed. All are combined on `claude/v2-integration`, not loaded. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
 
+18 November browser baseline (Claude): the first full browser run on v2 code failed 105
+cases. Fixed, test-only unless noted: the notes overlap (B455, CSS); fresh-profile
+first-use setup now pre-completed unless a module is marked `first_use` (B457, ~70 cases);
+journeys built on retired direct OpenAI moved onto a checked native UCloud model; 20 stale
+Settings/runtime/consent cases updated (B458). Tests can no longer reach a real host
+(B456). After these fixes the full browser suite passed on `claude/v2-integration`
+(668 passed); `test_release_profile` fails on this branch only because it packages the MVP
+profile. Settings design findings, unchanged: Protected approval is per model but the form
+does not name the model it edits; choosing the open tab again reloads its form, re-runs the
+UCloud check and drops unsaved entries. That reload is also the tab-error Retry and the
+late Forget-key reply fence, so changing it needs an explicit Retry/discard design first.
+The UCloud form always saves the words_speakers capability, so narrower native profiles
+exist only through the API or legacy saves.
+
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
 It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime
