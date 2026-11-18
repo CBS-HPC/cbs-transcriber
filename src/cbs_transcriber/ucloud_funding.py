@@ -16,8 +16,9 @@ Network reads run on a daemon worker thread. At the overall deadline the caller 
 SDK client (and so its pooled sockets) from its own thread, waits at most
 ``JOIN_GRACE_SECONDS`` for the worker and returns unknown/deadline_exceeded; a result the
 worker completes after that moment is never accepted. An operating-system name lookup
-cannot be interrupted: such a worker finishes the lookup on its own, its one in-flight
-request stays bounded by that request's timeouts, and its outcome is discarded. Closing a
+cannot be interrupted: such a worker finishes the lookup on its own, but once observe() has
+returned an httpcore ``trace`` hook refuses to write its request headers, so the late
+connection is closed without sending the key or project. Closing a
 socket from the caller's thread woke blocked reads promptly in Windows tests; on other
 platforms that wake-up is unverified, and an unwoken read stays bounded by its read timeout.
 
@@ -115,6 +116,7 @@ class _Deadline:
         self._end = monotonic() + seconds
         self._lock = threading.Lock()
         self._cancelled = False
+        self._abandoned = False
         self._client = None
 
     def remaining(self):
@@ -142,6 +144,19 @@ class _Deadline:
                 http.close()
             except Exception:  # The worker's own outcome is discarded after cancellation.
                 pass
+
+    def abandon(self):
+        """observe() is returning without this worker; it must never send a request again."""
+        self._abandoned = True
+
+    def trace(self, event, info):
+        """httpcore trace hook: refuse request headers on a connection set up too late.
+
+        Closing the client cannot reach a connection still resolving or connecting, so a
+        late connection reaches this check before any request byte is written.
+        """
+        if self._abandoned and event.endswith(".send_request_headers.started"):
+            raise _Unknown("deadline_exceeded")
 
 
 def _canonical_server(value):
@@ -269,6 +284,7 @@ def _read_page(http, params, deadline, used):
         headers={"Accept-Encoding": "identity"},
         timeout=httpx.Timeout(deadline.remaining()),
         follow_redirects=False,
+        extensions={"trace": deadline.trace},
     ) as response:
         deadline.check()
         if response.status_code != 200:
@@ -478,6 +494,7 @@ def observe(server, project, api_key, *, monotonic=time.monotonic, now=None):
         args=(server, project, api_key, deadline, outcome),
         name="cbs-funding-observer",
         daemon=True,  # A name lookup (or an unwoken read off Windows) may outlive observe().
+        # Such a worker never sends request headers afterwards (Deadline.trace).
     )
     try:
         worker.start()
@@ -488,6 +505,7 @@ def observe(server, project, api_key, *, monotonic=time.monotonic, now=None):
         if worker.is_alive():
             deadline.cancel()
             worker.join(JOIN_GRACE_SECONDS)
+            deadline.abandon()
             outcome = {"reason": "deadline_exceeded"}  # Never a result after the deadline.
     if "found" in outcome:
         found = outcome["found"]

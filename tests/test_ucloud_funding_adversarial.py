@@ -1545,17 +1545,6 @@ def test_repeated_slow_lookups_pile_up_workers_until_each_lookup_returns(
     assert thread_errors == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (minor, late side effect): Client.close() cannot reach a connection that is "
-        "still resolving/connecting (httpcore's HTTPConnection.close is a no-op until the "
-        "connection exists). A worker cancelled during a slow lookup later connects and "
-        "sends the authenticated GET after observe() already returned deadline_exceeded; "
-        "back-to-back calls during a resolver outage burst these when it recovers. A "
-        "deadline check before sending headers (e.g. an httpcore 'trace' extension) avoids it."
-    ),
-)
 def test_cancelled_worker_never_sends_its_request_after_a_late_lookup(
     loopback, guarded_network, monkeypatch, thread_errors
 ):
