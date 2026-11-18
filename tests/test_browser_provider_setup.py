@@ -13,7 +13,7 @@ from cbs_transcriber.catalog import ucloud_models
 from cbs_transcriber.providers import Settings, save_profile
 from cbs_transcriber.ucloud_native import MIG_PRODUCT
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 
 @pytest.mark.parametrize("ambiguous", [False, True])

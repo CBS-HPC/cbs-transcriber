@@ -4,7 +4,7 @@ from test_browser import local_app as local_app
 from test_browser import page as page
 from test_browser import skip_first_use
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 
 def test_older_settings_open_cannot_reset_a_newer_dialog(page, local_app):

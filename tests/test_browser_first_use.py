@@ -16,7 +16,7 @@ from cbs_transcriber.store import new_id, now
 from cbs_transcriber.transcripts import normalize_segments
 from cbs_transcriber.ucloud_native import COMPUTE_ID, MIG_PRODUCT
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 MARKER = "cbs-first-use-completed-v1"
 
 

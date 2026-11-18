@@ -24,7 +24,12 @@ from cbs_transcriber.media import ffmpeg
 from cbs_transcriber.providers import Settings, default_provider_id, public_profiles, save_profile
 from cbs_transcriber.transcripts import normalize_segments
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
+
+FIRST_USE_COMPLETED = "cbs-first-use-completed-v1"
+# Unrelated journeys start as a returning browser that already chose Skip in first-use
+# setup (ADR 0171). Modules marked first_use keep a fresh browser profile.
+RETURNING_BROWSER = f"try {{ localStorage.setItem('{FIRST_USE_COMPLETED}', '1'); }} catch {{}}"
 
 
 class LocalApp:
@@ -78,10 +83,12 @@ def local_app(tmp_path_factory):
 
 
 @pytest.fixture
-def page():
+def page(request):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         context = browser.new_context(viewport={"width": 1440, "height": 1000})
+        if request.node.get_closest_marker("first_use") is None:
+            context.add_init_script(RETURNING_BROWSER)
         page = context.new_page()
         yield page
         context.close()

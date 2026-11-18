@@ -34,7 +34,10 @@ dev = ["pytest>=8.3", "httpx>=0.28", "ruff>=0.11", "playwright>=1.51"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["browser: opt-in browser acceptance tests"]
+markers = [
+    "browser: opt-in browser acceptance tests",
+    "first_use: browser tests that start with a fresh profile showing first-use setup",
+]
 addopts = "-m 'not browser'"
 
 [tool.ruff]

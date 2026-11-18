@@ -8,7 +8,7 @@ from test_browser import local_app as local_app
 from test_browser import page as page
 from test_browser import skip_first_use
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 TABS = [
     ("huggingface", "huggingface-settings", "hf"),
     ("processing", "enhancement-settings", "processing"),

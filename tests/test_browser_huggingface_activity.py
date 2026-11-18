@@ -13,7 +13,7 @@ from test_browser_first_use import native_account as native_account
 
 from cbs_transcriber.enhancement import HF_SCOPE
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 TASK_ID = "a" * 32
 
 

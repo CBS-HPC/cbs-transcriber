@@ -12,7 +12,7 @@ from test_native_model_profiles import native_settings, raw_profile
 
 from cbs_transcriber.providers import save_profile, set_default_provider
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 
 def test_first_setup_defaults_and_preserves_existing_flags(page, local_app, monkeypatch):

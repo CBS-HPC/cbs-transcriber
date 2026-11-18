@@ -22,7 +22,7 @@ from cbs_transcriber.providers import (
 from cbs_transcriber.store import new_id, now
 from cbs_transcriber.transcripts import normalize_segments
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 
 def test_deferred_families_stay_saved_but_leave_new_provider_choices(page, local_app):

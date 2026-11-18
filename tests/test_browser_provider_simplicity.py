@@ -18,7 +18,7 @@ from cbs_transcriber.providers import (
     set_default_provider,
 )
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 
 @pytest.mark.parametrize(

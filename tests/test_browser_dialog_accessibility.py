@@ -53,6 +53,7 @@ DIALOG_NAMES = [
     ("speaker-dialog", "Speaker for this passage"),
     ("word-dialog", "Correct a word"),
     ("settings-dialog", "Settings"),
+    ("first-use-dialog", "Connect UCloud"),
 ]
 
 

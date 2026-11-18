@@ -9,7 +9,7 @@ from test_browser import provider_advanced, skip_first_use
 from cbs_transcriber import providers, ucloud_discovery
 from cbs_transcriber import ucloud_native as native
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 FULL = {"id": native.COMPUTE_ID, "category": "gpu", "provider": "ucloud"}
 
 

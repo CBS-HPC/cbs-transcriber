@@ -12,7 +12,7 @@ from test_browser_activity_stop import activity_job
 from cbs_transcriber import providers
 from cbs_transcriber.transcripts import normalize_segments
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 HIDDEN_REQUESTS = (
     "/retranscriptions",
