@@ -1,6 +1,8 @@
 # Review a transcript
 
-This guide covers MVP 0.1.0. [Provider setup](provider-setup.md) explains transcription;
+This guide covers MVP 0.1.0 and, where marked, the unreleased post-MVP branch: the **Show**
+filter and spoken-word highlighting in **Text** are post-MVP and not in the 0.1.0 package.
+[Provider setup](provider-setup.md) explains transcription;
 [exports](export-guide.md) explains downloads. Some specialist guides describe advanced
 features hidden in MVP; check the [profile list](installation.md#release-profiles-and-advanced-features).
 
@@ -43,7 +45,7 @@ Double-click a rendered word or choose **Edit** to open **Text**. Make the chang
 **Cancel** discards the draft. Save is disabled until the wording changes. Conflicting edits
 from another window are rejected so you can review them rather than overwrite saved work.
 
-While a passage plays, **Text** highlights the spoken word inside the text box using the
+Post-MVP: while a passage plays, **Text** highlights the spoken word inside the text box using the
 saved word timing. **Replay passage** in the editor plays only that passage. Highlighting
 never moves your cursor or selection and does not affect Undo. Once your draft differs from
 the saved text, only words you have not touched keep their highlight: an edited or newly
@@ -87,7 +89,7 @@ Use **Not checked**, **Checked** and **Needs review** to track your listening re
 **Next to review** cycles through unchecked/needs-review passages and works with uncertainty
 display off. Editing a checked passage makes it need review again; unrelated marks stay.
 
-**Show** limits the transcript to one group of passages, with a count for each choice:
+Post-MVP: **Show** limits the transcript to one group of passages, with a count for each choice:
 **All**, **Not checked**, **Needs review**, **Checked**, **Uncertain** or **Missing word
 timing**. Uncertain means the passages marked "Review suggested" at the chosen Show
 uncertainty level; it is available while Show uncertainty is on. Missing word timing means

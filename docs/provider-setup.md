@@ -38,6 +38,12 @@ application, compute and storage choices; choose explicitly where there is ambig
 account's ownership metadata can suggest a project but does not establish permission.
 Saving does not upload a recording or start compute.
 
+A model appears for new work only after the saved token's connection has been checked. In
+MVP 0.1.0, after entering a new token choose **Connect to UCloud**, then **Save**. On the
+unreleased post-MVP branch, **Save** runs that connection check itself whenever a token was
+typed or the saved token is unchecked, in Settings and in the first-use dialog. While a saved
+token is unchecked, the Provider/Model lists say **Check the connection in Settings**.
+
 New native Transcriber jobs use the fixed **B200 1g MIG** policy. Missing or ambiguous funded
 compute blocks new work; there is no fallback to a different GPU. Reconnect older or
 template-bound configurations before new jobs; frozen existing runs keep their original choices.
