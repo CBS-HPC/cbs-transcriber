@@ -151,6 +151,23 @@ def runtime_folder(settings):
     return settings.ucloud_transcriber.storage_path + "/cbs-runtime/" + runtime_id()
 
 
+def frozen_runtime_root(settings, root=None):
+    """Absent root keeps the exact legacy folder; a present one is only a frozen generation.
+
+    ADR 0176: a derived path grants no permission to create, mount, prepare or use it.
+    """
+    base = runtime_folder(settings)
+    if root is None:
+        return base
+    if (
+        type(root) is not str
+        or not root.startswith(base + "-g-")
+        or re.fullmatch(r"[a-f0-9]{32}", root[len(base) + 3 :]) is None
+    ):
+        raise ValueError("Unexpected frozen UCloud runtime generation path.")
+    return root
+
+
 def run_folder(settings, identifier):
     return settings.ucloud_transcriber.storage_path + "/cbs-enhancement-" + identifier
 
@@ -276,17 +293,12 @@ def freeze_profile(store, credentials, provider, project_ids, options):
     }
 
 
-def model_folder(settings, key):
+def model_folder(settings, key, *, root=None):
+    base = frozen_runtime_root(settings, root)
     if key in DANISH_CHOICES:
-        return runtime_folder(settings) + "/hf/hub/" + danish_module().relative_folder(key)
+        return base + "/hf/hub/" + danish_module().relative_folder(key)
     repo, revision = MODELS[key]
-    return (
-        runtime_folder(settings)
-        + "/hf/hub/models--"
-        + repo.replace("/", "--")
-        + "/snapshots/"
-        + revision
-    )
+    return base + "/hf/hub/models--" + repo.replace("/", "--") + "/snapshots/" + revision
 
 
 def converted_model_ready(client, settings, choice):
@@ -637,7 +649,9 @@ def frozen(job):
     return params, providers.Settings.model_validate(params["settings"])
 
 
-def supervisor_script(settings, identifier, prepare, models=(), *, batch=False, prepare_only=False):
+def supervisor_script(
+    settings, identifier, prepare, models=(), *, batch=False, prepare_only=False, runtime=None
+):
     models = ",".join(models)
     if not re.fullmatch(r"[a-z0-9,-]*", models):
         raise ValueError("Unexpected model identifiers for the UCloud runtime.")
@@ -648,7 +662,7 @@ def supervisor_script(settings, identifier, prepare, models=(), *, batch=False, 
             if batch
             else container_path(run_folder(settings, identifier))
         ),
-        "__RUNTIME__": container_path(runtime_folder(settings)),
+        "__RUNTIME__": container_path(frozen_runtime_root(settings, runtime)),
         "__PREPARE__": "1" if prepare else "0",
         "__BATCH__": "1" if batch else "0",
         "__PREPARE_ONLY__": "1" if prepare_only else "0",
@@ -725,9 +739,10 @@ def script_application(client):
 
 
 def build_script_specification(
-    settings, application, identifier, options, prepare, *, runtime_product=None
+    settings, application, identifier, options, prepare, *, runtime_product=None, runtime=None
 ):
     """Use separately frozen runtime compute; earlier jobs keep the native product exactly."""
+    runtime = frozen_runtime_root(settings, runtime)
     setup = settings.ucloud_transcriber
     folder = run_folder(settings, identifier)
     hours = math.ceil((options.timeout_minutes + (PREPARE_SECONDS // 60 if prepare else 0)) / 60)
@@ -752,7 +767,7 @@ def build_script_specification(
     }
     specification["resources"] = [
         {"type": "file", "path": folder, "readOnly": False},
-        {"type": "file", "path": runtime_folder(settings), "readOnly": not prepare},
+        {"type": "file", "path": runtime, "readOnly": not prepare},
     ]
     return specification
 
@@ -1092,12 +1107,12 @@ def _local_hub_cache():
     return Path(constants.HF_HUB_CACHE)
 
 
-def remote_speaker_gaps(client, settings):
+def remote_speaker_gaps(client, settings, *, root=None):
     """Pinned speaker files missing or of the wrong size on the runtime.
 
     The completion marker alone is not trusted: an earlier copy uploaded it first and was then
     interrupted, leaving a marked but incomplete model (B127)."""
-    snapshot = model_folder(settings, "speakers")
+    snapshot = model_folder(settings, "speakers", root=root)
     gaps = []
     for relative, (size, _) in sorted(SPEAKER_FILES.items()):
         try:
@@ -1140,15 +1155,15 @@ def upload_retrying(client, server, path, target, guard):
             time.sleep(SEED_RETRY_SECONDS * attempt)
 
 
-def seed_speakers(client, server, settings, files, guard, marker):
+def seed_speakers(client, server, settings, files, guard, marker, *, root=None):
     """Copy missing or damaged pinned files, check them, then write the completion marker."""
     repo, revision = MODELS["speakers"]
-    root = runtime_folder(settings)
+    gaps_root, root = root, frozen_runtime_root(settings, root)
     model = "hf/hub/models--" + repo.replace("/", "--")
     snapshot = root + "/" + model + "/snapshots/" + revision
     for name in ("hf", "hf/hub", model, model + "/snapshots", model + "/snapshots/" + revision):
         ensure_folder(client, root + "/" + name)
-    gaps = set(remote_speaker_gaps(client, settings))
+    gaps = set(remote_speaker_gaps(client, settings, root=gaps_root))
     created = set()
     for path, relative in files:
         if relative not in gaps:
@@ -1160,7 +1175,7 @@ def seed_speakers(client, server, settings, files, guard, marker):
                 ensure_folder(client, snapshot + "/" + name)
                 created.add(name)
         upload_retrying(client, server, path, snapshot + "/" + relative, guard)
-    remaining = remote_speaker_gaps(client, settings)
+    remaining = remote_speaker_gaps(client, settings, root=gaps_root)
     if remaining:
         raise RuntimeNotReady(
             "The speaker model copy on UCloud is incomplete (" + ", ".join(remaining) + "). "

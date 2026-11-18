@@ -38,6 +38,25 @@ PREFIX = "runtime-preparation:"
 RECENT_ACTIVITY = 200
 _CONTROL_LOCK = threading.Lock()
 _CONTROLS = set()
+# ADR 0176 Stage 2 (disabled): journal proof only the generation module's trusted writers
+# may change on a generation-born owner. Generic/legacy writers can never inject, alter,
+# re-type or remove it; legacy-born owners can never acquire the generation-only keys.
+# The absence receipts are reserved too: name reconciliation never resolves a generation
+# POST, so no generic writer may record one. Legacy rows keep their reconcile semantics.
+GENERATION_ONLY = frozenset({"generation_folders", "generation_submission", "generation_promotion"})
+GENERATION_RESERVED = GENERATION_ONLY | {
+    "specification",
+    "owned_folder",
+    "job_id",
+    "prepared",
+    "doctor_verified",
+    "model_plan_receipt",
+    "runtime_product",
+    "runtime_compute_policy",
+    "reconciled_not_created",
+    "no_post",
+}
+_IMMUTABLE_COLUMNS = frozenset({"id", "frozen", "connection_fingerprint", "archived", "created"})
 DDL = """CREATE TABLE IF NOT EXISTS runtime_preparations (
     id TEXT PRIMARY KEY,
     connection_fingerprint TEXT NOT NULL,
@@ -296,7 +315,7 @@ def _decode(raw):
             or not isinstance(frozen.get("provider_id"), str)
             or not isinstance(frozen.get("recipe_sha256"), str)
             or not re.fullmatch(r"[a-f0-9]{64}", frozen["recipe_sha256"])
-            or journal.get("run_name") != "CBS runtime preparation " + identifier
+            or journal.get("run_name") != run_name(frozen, identifier)
             or value["state"] not in runtime_store.STATES
             or type(value["epoch"]) is not int
             or value["epoch"] < 0
@@ -346,6 +365,14 @@ def _decode(raw):
                 or not journal.get("job_id")
             ):
                 raise ValueError()
+        if "generation" in frozen:
+            # ADR 0176 Stage 2: only rows born with a generation reach this separately
+            # disabled module. Legacy rows never import it.
+            from . import runtime_generation_preparation
+
+            runtime_generation_preparation.validate_owner(value)
+        elif GENERATION_ONLY & set(journal):
+            raise ValueError()
     except (ValueError, TypeError, KeyError, RecursionError):
         raise Conflict(
             "This preparation's frozen connection evidence is invalid. Preserve it."
@@ -370,6 +397,17 @@ def unresolved(value):
         value["state"] in {"queued", "running"}
         or runtime_store._reserved(value["journal"])
         or value["journal"].get("cleanup_state") == "pending"
+        or _uncertain_folder(value["journal"])
+    )
+
+
+def _uncertain_folder(journal):
+    # A generation's unacknowledged exclusive create may have made a folder. Keep that
+    # intent visible for explicit recovery; it is never adoption or retry authority.
+    folders = journal.get("generation_folders")
+    return type(folders) is dict and any(
+        type(entry) is dict and entry.get("outcome") in {"pending", "uncertain"}
+        for entry in folders.values()
     )
 
 
@@ -393,7 +431,17 @@ def obligations(store):
 def _target(frozen):
     settings = frozen["settings"]
     setup = settings["ucloud_transcriber"]
-    return (settings["base_url"], setup["project_id"], setup["storage_path"], frozen["runtime_id"])
+    target = (
+        settings["base_url"],
+        setup["project_id"],
+        setup["storage_path"],
+        frozen["runtime_id"],
+    )
+    if "generation" in frozen:
+        # A generation owns its own folder: never the legacy root or another generation,
+        # so legacy deduplication/receipt reuse can never match it.
+        return (*target, "generation", frozen["generation"]["token"])
+    return target
 
 
 def _quarantine(db, row):
@@ -433,10 +481,16 @@ def _current(store, credentials, expected, *, model_plan=_ABSENT):
     return chosen
 
 
-def _insert(db, identity, expected, *, retry_of=None):
-    identifier, stamp = new_id(), now()
+def run_name(frozen, identifier):
+    # A second, independent birth anchor: stripping a generation from frozen alone fails.
+    prefix = "CBS runtime generation " if "generation" in frozen else "CBS runtime preparation "
+    return prefix + identifier
+
+
+def _insert(db, identity, expected, *, retry_of=None, identifier=None):
+    identifier, stamp = identifier or new_id(), now()
     frozen = {**identity, "retry_of": retry_of}
-    journal = {"run_name": "CBS runtime preparation " + identifier}
+    journal = {"run_name": run_name(frozen, identifier)}
     db.execute(
         "INSERT INTO runtime_preparations(id,connection_fingerprint,frozen,journal,message,"
         "created,updated) VALUES (?,?,?,?,?,?,?)",
@@ -661,13 +715,15 @@ def _model_inventory(client, path, deadline, *, strict=False):
     return sorted(inventory, key=lambda item: item["name"]) if inventory else None
 
 
-def _model_evidence(client, settings, model_plan, *, strict=False, deadline=None):
+def _model_evidence(client, settings, model_plan, *, strict=False, deadline=None, root=None):
     """Fresh API metadata, not remote weight hashes or physical no-follow proof.
 
     HF snapshots ordinarily contain symlinks; their reported names/kinds/sizes are only
     inventory witnesses. A prior successful pinned prefetch is separately required.
+    Absent ``root`` reads the legacy runtime; a frozen generation root is read exclusively.
     """
     deadline = time.monotonic() + MODEL_CHECK_SECONDS if deadline is None else deadline
+    base = api.frozen_runtime_root(settings, root)
     read_options = {"strict": True} if strict else {}
     evidence = {
         "snapshots": {},
@@ -677,7 +733,11 @@ def _model_evidence(client, settings, model_plan, *, strict=False, deadline=None
         "conversions": {},
     }
     for name in model_plan["models"]:
-        folder = api.model_folder(settings, name)
+        folder = (
+            api.model_folder(settings, name)
+            if root is None
+            else api.model_folder(settings, name, root=root)
+        )
         if name == "speakers":
             for relative, (size, _) in model_plan["speaker_files"].items():
                 item = (observation.metadata if strict else api.runtime_metadata)(
@@ -739,7 +799,7 @@ def _model_evidence(client, settings, model_plan, *, strict=False, deadline=None
     for language in ("danish", "english"):
         inventory = _model_inventory(
             client,
-            api.runtime_folder(settings) + "/nltk/tokenizers/punkt_tab/" + language,
+            base + "/nltk/tokenizers/punkt_tab/" + language,
             deadline,
             **read_options,
         )
@@ -874,8 +934,47 @@ def _valid_inventory(items):
     )
 
 
-def _update(db, value, *, journal=None, **fields):
+def _same(left, right):
+    """Type-strict, recursive equality of JSON values: their exact canonical stored bytes.
+
+    Python ``==`` treats ``False == 0`` and ``1 == 1.0`` as equal; stored proof does not.
+    Values that cannot be stored canonically are never the same as anything.
+    """
+    if left is _ABSENT or right is _ABSENT:
+        return left is right
+    try:
+        return runtime_store.canonical(left) == runtime_store.canonical(right)
+    except (ValueError, RecursionError):
+        return False
+
+
+def _birth(db, value, fields, journal, trusted):
+    """Anchor the stored birth identity, never the caller's possibly stale/stripped copy."""
+    if _IMMUTABLE_COLUMNS & set(fields):
+        raise Conflict("A preparation's frozen identity is immutable. Preserve its evidence.")
+    stored = _raw(db, value["id"])
+    try:
+        frozen, before = json.loads(stored["frozen"]), json.loads(stored["journal"])
+        born = "generation" in frozen
+    except (ValueError, TypeError, RecursionError):
+        raise Conflict("Preparation metadata is unverified. Preserve its evidence.") from None
+    after = {**value["journal"], **journal} if journal is not None else before
+    if not born:
+        if "generation" in value["frozen"] or GENERATION_ONLY & set(after):
+            raise Conflict("A legacy preparation cannot acquire Runtime generation evidence.")
+        return
+    completes = fields.get("state") == "completed" and stored["state"] != "completed"
+    # Type-strict: a re-typed value (False->0, 1->1.0) is a change to stored proof.
+    changed = any(
+        not _same(after.get(key, _ABSENT), before.get(key, _ABSENT)) for key in GENERATION_RESERVED
+    )
+    if not _same(value["frozen"], frozen) or (not trusted and (completes or changed)):
+        raise Conflict("Runtime generation proof can change only through its own verified writers.")
+
+
+def _update(db, value, *, journal=None, _generation_writer=False, **fields):
     _owned(value)
+    _birth(db, value, fields, journal, _generation_writer)
     if journal is not None:
         value["journal"].update(journal)
         fields["journal"] = runtime_store.canonical(value["journal"])
@@ -952,7 +1051,8 @@ def recover(store):
             )
 
 
-def begin_submission(store, identifier, epoch):
+def begin_submission(store, identifier, epoch, *, require=None):
+    """Accept one POST. A generation owner's ``require`` proves its receipts in this CAS."""
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
         value = _get(db, identifier)
@@ -964,6 +1064,9 @@ def begin_submission(store, identifier, epoch):
             raise Interrupted()
         if journal.get("job_id") or runtime_store._uncertain(journal):
             raise Conflict("Reconcile the recorded allocation before another submission.")
+        if ("generation" in value["frozen"]) != (require is not None):
+            raise Conflict("Runtime generation submission needs its own verified receipts.")
+        receipt = require(value) if require is not None else {}
         for row in db.execute(
             "SELECT id FROM runtime_preparations WHERE archived=0 AND id!=?", (identifier,)
         ):
@@ -988,7 +1091,9 @@ def begin_submission(store, identifier, epoch):
                 "submission_attempted_at": now(),
                 "reconciled_not_created": False,
                 "no_post": False,
+                **receipt,
             },
+            _generation_writer=require is not None,
         )
         return True
 
@@ -1001,12 +1106,25 @@ def _release(journal):
     return {}
 
 
+def _generation_retry(value):
+    """ADR 0176 Stage 2: only known-ID observation of the same owner, never a successor."""
+    journal = value["journal"]
+    return bool(
+        journal.get("job_id")
+        and not journal.get("stop_intent")
+        and (
+            journal.get("remote_state") not in api.TERMINAL or journal["remote_state"] == "SUCCESS"
+        )
+    )
+
+
 def card(value):
     journal, archived = value["journal"], bool(value["archived"])
     uncertain = runtime_store._uncertain(journal)
     remote_open = bool(journal.get("job_id") and journal.get("remote_state") not in api.TERMINAL)
     active = not archived and value["state"] in {"queued", "running"}
     pending = unresolved(value)
+    generation = "generation" in value["frozen"]
     return {
         "id": PREFIX + value["id"],
         "runtime_preparation_id": value["id"],
@@ -1023,8 +1141,10 @@ def card(value):
         "can_retry": not archived
         and not active
         and not uncertain
-        and value["state"] != "completed",
-        "can_reconcile": not archived and not active and uncertain,
+        and value["state"] != "completed"
+        and (not generation or _generation_retry(value)),
+        # Name-based reconciliation never resolves a generation owner in this slice.
+        "can_reconcile": not archived and not active and uncertain and not generation,
         "can_cleanup": not archived
         and not active
         and not uncertain
@@ -1270,6 +1390,18 @@ def retry(store, credentials, identifier):
                     message="Reconnecting to the same preparation allocation…",
                 )
             )
+        if "generation" in value["frozen"]:
+            # can_retry admitted only a recorded SUCCESS awaiting verification. Observe the
+            # same owner/allocation again; never create a successor or adopt a folder.
+            return card(
+                checkpoint(
+                    store,
+                    identifier,
+                    value["epoch"],
+                    state="queued",
+                    message="Verifying the same Runtime generation allocation again…",
+                )
+            )
         _current(
             store,
             credentials,
@@ -1318,6 +1450,11 @@ def _client(credentials, value):
 def reconcile(store, credentials, identifier, *, confirm_not_created=False, fingerprint=None):
     with _control(identifier):
         value = get(store, identifier, owned=True)
+        if "generation" in value["frozen"]:
+            raise Conflict(
+                "Runtime generation allocations are never reconciled by name. "
+                "Their evidence is retained for explicit recovery."
+            )
         if not card(value)["can_reconcile"]:
             raise Conflict("Only an inactive uncertain preparation can be reconciled.")
         matches, cursor = [], None
@@ -1444,6 +1581,19 @@ class Run:
             )
 
     def execute(self):
+        if "generation" in self.value["frozen"]:
+            # ADR 0176: a generation owner branches before every legacy-root idle/stamp
+            # shortcut or completion helper. Its own module refuses while disabled.
+            from . import runtime_generation_preparation
+
+            return runtime_generation_preparation.GenerationRun(self.worker, self.value).execute()
+        return self._execute()
+
+    def _legacy_only(self):
+        if "generation" in self.value["frozen"]:
+            raise Conflict("A Runtime generation owner never uses legacy runtime helpers.")
+
+    def _execute(self):
         try:
             with _client(self.worker.credentials, self.value) as (self.client, self.settings):
                 if not self.value["journal"].get("job_id"):
@@ -1492,6 +1642,7 @@ class Run:
             )
 
     def submit(self):
+        self._legacy_only()
         self.guard(submitting=True)
         if runtime_store._uncertain(self.value["journal"]):
             raise Conflict("Submission outcome is uncertain; reconcile it before retrying.")
@@ -1629,6 +1780,7 @@ class Run:
         return fresh
 
     def _verification(self, remote, deadline):
+        self._legacy_only()
         if self.value["frozen"].get("runtime_id") != api.runtime_id():
             raise observation.Refused()
         doctor = observation.read_json(
@@ -1666,12 +1818,18 @@ class Run:
             _validate_model_receipt(verified["model_plan_receipt"], self.value["frozen"])
         return verified
 
+    def _settle_success(self, remote, deadline):
+        """Legacy completion; a generation owner overrides this with its sole promotion."""
+        return self._complete_prepared(self._verification(remote, deadline), deadline)
+
     def _complete_prepared(self, verified, deadline):
         # BEGIN may wait for another writer. Read Stop/epoch only AFTER ownership of
         # that writer is obtained, so a late remote reply cannot publish Ready.
         with self.store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             fresh = _get(db, self.identifier, owned=True)
+            if "generation" in fresh["frozen"]:
+                raise Conflict("A Runtime generation owner is completed only by its promotion.")
             if (
                 fresh["epoch"] != self.epoch
                 or fresh["journal"].get("job_id") != self.value["journal"].get("job_id")
@@ -1779,9 +1937,7 @@ class Run:
                         if phase != "finished":
                             raise observation.Pending()
                         settle_deadline = terminal_at + TERMINAL_SETTLE_SECONDS
-                        if self._complete_prepared(
-                            self._verification(remote, settle_deadline), settle_deadline
-                        ):
+                        if self._settle_success(remote, settle_deadline):
                             return
                         continue  # Durable Stop won; use its actual control path.
                     self.checkpoint(
