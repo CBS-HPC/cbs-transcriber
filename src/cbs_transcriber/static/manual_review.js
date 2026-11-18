@@ -10,7 +10,26 @@ let manualReviews = null;
 const nextManualReviewButton = document.getElementById("next-uncertain");
 nextManualReviewButton.disabled = true;
 nextManualReviewButton.title =
-  "Go to the next Not checked or Needs review passage, wrapping to the beginning.";
+  "Go to the next shown Not checked or Needs review passage, wrapping to the beginning.";
+// The Show filter narrows the rendered (search-matching) passages by hiding them in place,
+// never by re-rendering, so an open draft keeps its node, caret and undo. It is view-local.
+const transcriptFilterSelect = document.getElementById("transcript-filter");
+const transcriptFilterLabels = {
+  all: "All",
+  not_checked: "Not checked",
+  needs_review: "Needs review",
+  checked: "Checked",
+  uncertain: "Uncertain",
+  missing_timing: "Missing word timing",
+};
+// Passages edited or marked since this filter was chosen stay shown, so a mark never makes
+// its own control vanish. `hidden` keeps the last decision while statuses are loading.
+const transcriptFilterState = {
+  pins: new Set(),
+  hidden: new Set(),
+  uncertain: null,
+  shown: null,
+};
 
 function currentManualReviews(view) {
   return (
@@ -27,7 +46,9 @@ function manualReviewLocked(view) {
 }
 function manualReviewPassages(view) {
   if (!view || !currentManualReviews(view)) return [];
-  return [...document.querySelectorAll("#transcript > .passage")];
+  return [...document.querySelectorAll("#transcript > .passage")].filter(
+    (passage) => !passage.hidden,
+  );
 }
 function canNavigateManualReviews(view) {
   return (
@@ -42,12 +63,14 @@ function canNavigateManualReviews(view) {
 }
 function refreshManualReviewNavigation() {
   const view = manualReviews;
+  const navigable = canNavigateManualReviews(view);
   nextManualReviewButton.disabled =
-    !canNavigateManualReviews(view) ||
+    !navigable ||
     !manualReviewPassages(view).some((passage) => {
       const row = view.rows.get(passage.dataset.segment);
       return row && row.status !== "checked";
     });
+  refreshTranscriptFilterNote(navigable && nextManualReviewButton.disabled);
   if (view && currentManualReviews(view) && view.focusId) {
     const passage = document.getElementById(`passage-${view.focusId}`);
     passage?.classList.add("review-focus");
@@ -202,6 +225,7 @@ function paintManualReviews(view, only = null) {
           return;
         const desired = select.value;
         select.value = current.rows.get(sid)?.status || "not_checked";
+        transcriptFilterState.pins.add(sid);
         saveManualReview(current, sid, desired);
       });
       row.appendChild(select);
@@ -236,7 +260,7 @@ function paintManualReviews(view, only = null) {
     }
     manualReviewControls(view, row, sid);
   });
-  refreshManualReviewNavigation();
+  applyTranscriptFilter();
 }
 async function loadManualReviews(view) {
   if (!currentManualReviews(view)) return false;
@@ -379,7 +403,7 @@ function renderManualReviews() {
     manualReviews = null;
     const progress = document.getElementById("manual-review-progress");
     if (progress) progress.hidden = true;
-    refreshManualReviewNavigation();
+    applyTranscriptFilter();
     return;
   }
   if (!manualReviews || !currentManualReviews(manualReviews)) {
@@ -410,10 +434,153 @@ function renderManualReviews() {
 }
 // Updating a draft changes no saved review state and must not redraw its editor.
 document.getElementById("transcript").addEventListener("input", (event) => {
-  const row = event.target
-    .closest("[data-segment]")
-    ?.querySelector("[data-manual-review]");
+  const passage = event.target.closest("[data-segment]");
+  if (passage) transcriptFilterState.pins.add(passage.dataset.segment);
+  const row = passage?.querySelector("[data-manual-review]");
   if (row && manualReviews && currentManualReviews(manualReviews))
     manualReviewControls(manualReviews, row, row.dataset.manualReview);
 });
+
+// Show filter. Review states use the same validated snapshot as Next to review; Uncertain
+// uses the passages flagged at the chosen Show uncertainty level and never changes marks.
+function resetTranscriptFilter() {
+  transcriptFilterSelect.value = "all";
+  transcriptFilterState.pins.clear();
+  transcriptFilterState.hidden.clear();
+}
+function transcriptUncertainty() {
+  const hints = currentHints();
+  if (!hints) return { loading: true };
+  if (!Object.keys(hints.passages || {}).length)
+    return {
+      reason: "No model uncertainty signals are available for this result.",
+    };
+  if (!document.getElementById("show-uncertainty").checked)
+    return {
+      reason: "Turn on Show uncertainty to show its flagged passages here.",
+    };
+  const share = Number(document.getElementById("uncertainty-share").value);
+  const cached = transcriptFilterState.uncertain;
+  if (cached?.hints !== hints || cached.share !== share)
+    transcriptFilterState.uncertain = {
+      hints,
+      share,
+      ids: new Set(reviewMarks(hints, share).flagged.keys()),
+    };
+  return { ids: transcriptFilterState.uncertain.ids };
+}
+// true/false, or null when the deciding data is still loading.
+function transcriptFilterMatch(value, segment, view, uncertainty) {
+  const sid = String(segment.id);
+  if (value === "missing_timing") return !segment.word_timing;
+  if (value === "uncertain")
+    return uncertainty.ids ? uncertainty.ids.has(sid) : null;
+  if (Object.hasOwn(manualReviewLabels, value)) {
+    const row = view?.ready ? view.rows.get(sid) : null;
+    return row ? row.status === value : null;
+  }
+  return true;
+}
+function applyTranscriptFilter() {
+  const label = document.getElementById("transcript-filter-label");
+  const recording = state.recording;
+  if (!recording?.active_transcript_id) {
+    label.hidden = true;
+    refreshManualReviewNavigation();
+    return;
+  }
+  label.hidden = false;
+  // Comparison regroups passages for alignment; like search, filtering is single-pane.
+  const comparing = !!state.comparison;
+  transcriptFilterSelect.disabled = comparing;
+  transcriptFilterSelect.title = comparing
+    ? "Close the comparison to filter passages."
+    : "Show only passages in one review state. Works together with search.";
+  const uncertainty = transcriptUncertainty();
+  if (transcriptFilterSelect.value === "uncertain" && uncertainty.reason)
+    resetTranscriptFilter();
+  const value = comparing ? "all" : transcriptFilterSelect.value;
+  const view =
+    manualReviews && currentManualReviews(manualReviews) ? manualReviews : null;
+  const segments = new Map(
+    recording.segments.map((segment) => [String(segment.id), segment]),
+  );
+  const editing = state.editing == null ? null : String(state.editing);
+  const { pins, hidden } = transcriptFilterState;
+  const counts = Object.fromEntries(
+    Object.keys(transcriptFilterLabels).map((key) => [key, 0]),
+  );
+  let shownCount = 0;
+  for (const passage of document
+    .getElementById("transcript")
+    .querySelectorAll(":scope > .passage")) {
+    const sid = passage.dataset.segment;
+    const segment = segments.get(sid);
+    if (!segment) continue;
+    counts.all++;
+    const status = view?.ready ? view.rows.get(sid)?.status : null;
+    if (status) counts[status]++;
+    if (uncertainty.ids?.has(sid)) counts.uncertain++;
+    if (!segment.word_timing) counts.missing_timing++;
+    let shown =
+      sid === editing || pins.has(sid)
+        ? true
+        : transcriptFilterMatch(value, segment, view, uncertainty);
+    if (shown === null) shown = !hidden.has(sid);
+    if (passage.hidden === shown) passage.hidden = !shown;
+    if (shown) {
+      shownCount++;
+      hidden.delete(sid);
+    } else hidden.add(sid);
+  }
+  const known = {
+    all: true,
+    missing_timing: true,
+    uncertain: !!uncertainty.ids,
+    not_checked: !!view?.ready,
+    needs_review: !!view?.ready,
+    checked: !!view?.ready,
+  };
+  for (const option of transcriptFilterSelect.options) {
+    const text = known[option.value]
+      ? `${transcriptFilterLabels[option.value]} (${counts[option.value]})`
+      : transcriptFilterLabels[option.value];
+    if (option.text !== text) option.text = text;
+  }
+  const uncertain = transcriptFilterSelect.querySelector('[value="uncertain"]');
+  uncertain.disabled =
+    !!uncertainty.reason || (uncertainty.loading && value !== "uncertain");
+  uncertain.title =
+    uncertainty.reason ||
+    (uncertainty.loading
+      ? "Model uncertainty signals are loading."
+      : "Passages marked Review suggested at the chosen Show uncertainty level. Model signals only suggest; they never change review marks.");
+  transcriptFilterState.shown = shownCount;
+  refreshManualReviewNavigation();
+}
+function refreshTranscriptFilterNote(nothingToReview) {
+  const note = document.getElementById("transcript-filter-note");
+  const value = transcriptFilterSelect.value;
+  let message = "";
+  if (state.recording?.active_transcript_id && !state.comparison) {
+    if (value !== "all" && transcriptFilterState.shown === 0)
+      message = "No passages match this filter.";
+    else if (value === "checked" && nothingToReview)
+      message =
+        "Next to review skips Checked passages. Choose another filter to continue reviewing.";
+    else if (value !== "all" && nothingToReview)
+      message = "No Not checked or Needs review passages are shown.";
+  }
+  if (note.textContent !== message) note.textContent = message;
+  note.hidden = !message;
+}
+transcriptFilterSelect.addEventListener("change", () => {
+  transcriptFilterState.pins.clear();
+  transcriptFilterState.hidden.clear();
+  applyTranscriptFilter();
+});
+for (const id of ["show-uncertainty", "uncertainty-share"])
+  document
+    .getElementById(id)
+    .addEventListener("change", () => applyTranscriptFilter());
 renderManualReviews();

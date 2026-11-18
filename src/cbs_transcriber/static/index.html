@@ -412,6 +412,20 @@
                   role="status"
                   hidden
                 ></div>
+                <label
+                  id="transcript-filter-label"
+                  class="transcript-filter"
+                  hidden
+                  >Show
+                  <select id="transcript-filter" aria-label="Show passages">
+                    <option value="all" selected>All</option>
+                    <option value="not_checked">Not checked</option>
+                    <option value="needs_review">Needs review</option>
+                    <option value="checked">Checked</option>
+                    <option value="uncertain">Uncertain</option>
+                    <option value="missing_timing">Missing word timing</option>
+                  </select></label
+                >
                 <button
                   id="next-uncertain"
                   class="button"
@@ -420,6 +434,12 @@
                 >
                   Next to review
                 </button>
+                <span
+                  id="transcript-filter-note"
+                  class="transcript-filter-note"
+                  role="status"
+                  hidden
+                ></span>
                 <div
                   id="uncertainty-controls"
                   class="uncertainty-controls"

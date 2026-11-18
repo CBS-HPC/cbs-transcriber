@@ -1463,6 +1463,13 @@ mark.search-match {
 .editor-options .follow {
   white-space: nowrap;
 }
+.editor-options #transcript-filter {
+  max-width: 210px;
+}
+.transcript-filter-note {
+  color: var(--muted);
+  font-size: 11px;
+}
 #vllm-model-panel {
   border: 1px solid var(--line);
   border-radius: 8px;

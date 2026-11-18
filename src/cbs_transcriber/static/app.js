@@ -3262,6 +3262,8 @@ async function openEditor() {
   $("#library-view").hidden = true;
   $("#editor-view").hidden = false;
   document.title = `${state.recording.name} · CBS Transcriber`;
+  // The Show filter belongs to one opened recording view.
+  if (typeof resetTranscriptFilter === "function") resetTranscriptFilter();
   renderEditorDetails();
   renderTranscript();
   state.media = "audio";
@@ -6172,6 +6174,7 @@ function refreshTranscriptHints() {
   if (changed.length) highlightSearch(changed, "passage-");
   if (activeWord && !activeWord.isConnected) activeWord = null;
   if (state.comparison) scheduleAlignmentLayout();
+  if (typeof applyTranscriptFilter === "function") applyTranscriptFilter();
 }
 // Rank-based: mark at most `share` percent of all items, lowest first, and only items below
 // a confidence ceiling, so a consistently confident transcript shows few or no marks.
@@ -6897,13 +6900,6 @@ function editableTimedWords(segment) {
   }
   return true;
 }
-function textPlaybackPrototypeEnabled() {
-  try {
-    return localStorage.getItem("cbs-text-playback-prototype") === "1";
-  } catch {
-    return false;
-  }
-}
 function passageEditorMarkup(segment) {
   const replay = replayWindow(segment);
   const label = replay?.fullRecording
@@ -6984,59 +6980,129 @@ function syncTextEditorScroll(editor) {
   if (content.style.transform !== transform)
     content.style.transform = transform;
 }
-function refreshTextEditorPlayback(segment, editor, textDirty = null) {
-  const enabled = textPlaybackPrototypeEnabled();
-  const input = editor.querySelector("textarea");
+// Text highlighting maps saved word timing onto the native textarea's draft. Offsets are
+// code points in the textarea's presentation (CR/CRLF become LF, as textarea values do).
+const savedTextPresentations = new WeakMap();
+function savedTextPresentation(segment) {
+  let saved = savedTextPresentations.get(segment);
+  if (saved) return saved;
+  const source = Array.from(segment.text);
+  const characters = [];
+  const offsets = new Uint32Array(source.length + 1);
+  for (let index = 0; index < source.length; index++) {
+    offsets[index] = characters.length;
+    if (source[index] === "\r" && source[index + 1] === "\n")
+      offsets[++index] = characters.length;
+    characters.push(source[index] === "\r" ? "\n" : source[index]);
+  }
+  offsets[source.length] = characters.length;
+  const words = [];
+  let cursor = 0;
+  for (const index of playbackWords(segment)) {
+    const word = segment.words[index];
+    const { char_start: start, char_end: end } = word;
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < cursor ||
+      end <= start ||
+      end > source.length ||
+      source.slice(start, end).join("") !== word.word ||
+      offsets[end] <= offsets[start]
+    )
+      continue;
+    words.push([index, offsets[start], offsets[end]]);
+    cursor = end;
+  }
+  saved = { characters, text: characters.join(""), words };
+  savedTextPresentations.set(segment, saved);
+  return saved;
+}
+// A saved word keeps its timing in a differing draft only when it is provably unchanged:
+// wholly inside the common code-point prefix (same offsets) or suffix (shifted by the length
+// change), and still separated from any edited letters. Words touching the changed middle,
+// and every new or changed word, stay unhighlighted; no time is ever assigned to them.
+function draftPlaybackWords(segment, draft) {
+  const saved = savedTextPresentation(segment);
+  const before = saved.characters;
+  const after = Array.from(draft);
+  const limit = Math.min(before.length, after.length);
+  let prefix = 0;
+  while (prefix < limit && before[prefix] === after[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < limit - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  )
+    suffix++;
+  const shift = after.length - before.length;
+  const tail = before.length - suffix;
+  const separated = (character) =>
+    character === undefined || !/[\p{L}\p{N}\p{M}]/u.test(character);
+  const words = [];
+  for (const [index, start, end] of saved.words) {
+    if (end < prefix || (end === prefix && separated(after[end])))
+      words.push([index, start, end]);
+    else if (
+      start > tail ||
+      (start === tail && separated(after[start + shift - 1]))
+    )
+      words.push([index, start + shift, end + shift]);
+  }
+  return { characters: after, words };
+}
+// One mirror per editor and draft; playback ticks only look up its cached word nodes.
+const textEditorMirrors = new WeakMap();
+function renderTextEditorMirror(segment, content, draft) {
+  const layout = draftPlaybackWords(segment, draft);
+  const fragment = document.createDocumentFragment();
+  const nodes = new Map();
+  let cursor = 0;
+  for (const [index, start, end] of layout.words) {
+    fragment.append(
+      document.createTextNode(layout.characters.slice(cursor, start).join("")),
+    );
+    const mark = document.createElement("span");
+    mark.dataset.editorWord = index;
+    mark.textContent = layout.characters.slice(start, end).join("");
+    fragment.append(mark);
+    nodes.set(index, mark);
+    cursor = end;
+  }
+  // The trailing zero-width space keeps a final empty line's height in the mirror.
+  fragment.append(
+    document.createTextNode(
+      layout.characters.slice(cursor).join("") + "\u200b",
+    ),
+  );
+  content.replaceChildren(fragment);
+  const mirror = { segment, draft, nodes };
+  textEditorMirrors.set(content, mirror);
+  if (activeTextPlaybackWord && !activeTextPlaybackWord.isConnected)
+    activeTextPlaybackWord = null;
+  return mirror;
+}
+function refreshTextEditorPlayback(segment, editor) {
   const overlay = editor.querySelector(".passage-text-overlay");
   const content = overlay.firstElementChild;
   const note = editor.querySelector("[data-text-playback-note]");
-  note.hidden = !enabled;
-  if (!enabled) {
-    overlay.hidden = true;
-    return;
-  }
-  if (!content.childNodes.length) {
-    const characters = Array.from(segment.text);
-    const fragment = document.createDocumentFragment();
-    let cursor = 0;
-    for (const index of playbackWords(segment)) {
-      const word = segment.words[index];
-      const { char_start: start, char_end: end } = word;
-      if (
-        !Number.isInteger(start) ||
-        !Number.isInteger(end) ||
-        start < cursor ||
-        end <= start ||
-        end > characters.length ||
-        characters.slice(start, end).join("") !== word.word
-      )
-        continue;
-      fragment.append(
-        document.createTextNode(characters.slice(cursor, start).join("")),
-      );
-      const mark = document.createElement("span");
-      mark.dataset.editorWord = index;
-      mark.textContent = word.word;
-      fragment.append(mark);
-      cursor = end;
-    }
-    // Textarea values normalize CR/CRLF. Normalize only the presentation copy;
-    // the saved text, draft and word map remain untouched.
-    fragment.append(
-      document.createTextNode(characters.slice(cursor).join("") + "\u200b"),
-    );
-    for (const node of fragment.childNodes)
-      node.textContent = node.textContent.replace(/\r\n?/g, "\n");
-    content.append(fragment);
-  }
-  const changed = textDirty ?? passageEditText(segment, input) !== segment.text;
-  const available = !!content.querySelector("[data-editor-word]");
-  overlay.hidden = changed || !available;
-  note.textContent = changed
-    ? "Prototype · Highlighting pauses while the draft differs from saved wording. Save or undo to follow existing word timing."
-    : available
-      ? "Prototype · Highlights use existing saved word timing; untimed words stay unhighlighted."
-      : "Prototype · Word highlighting is unavailable for this passage.";
+  // Read the textarea only; never write its value, selection, focus or scroll.
+  const draft = editor.querySelector("textarea").value;
+  let mirror = textEditorMirrors.get(content);
+  if (mirror?.segment !== segment || mirror.draft !== draft)
+    mirror = renderTextEditorMirror(segment, content, draft);
+  const saved = savedTextPresentation(segment);
+  const available = mirror.nodes.size > 0;
+  overlay.hidden = !available;
+  const message = !saved.words.length
+    ? "Word highlighting is unavailable: this passage has no reliable saved word timing."
+    : draft === saved.text
+      ? ""
+      : available
+        ? "Unsaved changes: only unchanged words are highlighted during playback."
+        : "Unsaved changes: no unchanged timed words remain to highlight.";
+  if (note.textContent !== message) note.textContent = message;
+  note.hidden = !message;
   syncTextEditorScroll(editor);
 }
 function tickTextEditorPlayback(segment, index, player) {
@@ -7052,7 +7118,8 @@ function tickTextEditorPlayback(segment, index, player) {
     !editor.querySelector('[data-editor-pane="text"]').hidden &&
     segment?.id === state.editing &&
     index >= 0
-      ? overlay.querySelector(`[data-editor-word="${index}"]`)
+      ? textEditorMirrors.get(overlay.firstElementChild)?.nodes.get(index) ||
+        null
       : null;
   if (editor && !overlay.hidden) syncTextEditorScroll(editor);
   if (word === activeTextPlaybackWord) return;
@@ -7061,10 +7128,16 @@ function tickTextEditorPlayback(segment, index, player) {
   activeTextPlaybackWord = word;
   if (word && !player.paused) followEditorPlaybackWord(word);
 }
+// Typing owns the draft's scroll position; Follow playback resumes once typing pauses.
+let lastTextDraftInput = -Infinity;
 function followEditorPlaybackWord(word) {
   const surface = word?.closest(".passage-text-surface");
   if (surface) {
-    if (!$("#follow-playback").checked) return;
+    if (
+      !$("#follow-playback").checked ||
+      performance.now() - lastTextDraftInput < 1500
+    )
+      return;
     const input = surface.querySelector("textarea");
     const box = input.getBoundingClientRect();
     const target = word.getBoundingClientRect();
@@ -7188,7 +7261,7 @@ function refreshPassageDraft(segment, editor) {
   const textarea = editor.querySelector("textarea");
   const textDirty = passageEditText(segment, textarea) !== segment.text;
   const wordDirty = timedWordDraftChanged(segment, editor);
-  refreshTextEditorPlayback(segment, editor, textDirty);
+  refreshTextEditorPlayback(segment, editor);
   state.dirty = textDirty || wordDirty;
   editVersion++;
   saved(state.dirty ? "Unsaved changes" : undefined);
@@ -7394,6 +7467,8 @@ $("#transcript").addEventListener("input", (event) => {
     return;
   const segment = segmentFromNode(event.target);
   const editor = event.target.closest(".passage-editor");
+  if (event.target.matches(".passage-text-surface textarea"))
+    lastTextDraftInput = performance.now();
   if (segment && editor) refreshPassageDraft(segment, editor);
 });
 $("#transcript").addEventListener(

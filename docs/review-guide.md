@@ -43,6 +43,14 @@ Double-click a rendered word or choose **Edit** to open **Text**. Make the chang
 **Cancel** discards the draft. Save is disabled until the wording changes. Conflicting edits
 from another window are rejected so you can review them rather than overwrite saved work.
 
+While a passage plays, **Text** highlights the spoken word inside the text box using the
+saved word timing. **Replay passage** in the editor plays only that passage. Highlighting
+never moves your cursor or selection and does not affect Undo. Once your draft differs from
+the saved text, only words you have not touched keep their highlight: an edited or newly
+typed word is not highlighted, and the app never guesses a time for it. Untimed words are
+never highlighted. With **Follow playback** on, the text box scrolls to the spoken word, but
+waits while you are typing.
+
 Text corrections save even when word timing is missing or ambiguous. Proven unchanged words
 retain their intervals; a uniquely matched replacement can retain the replaced interval.
 Added or uncertain words stay untimed, with a nonblocking explanation. Saving does not
@@ -78,6 +86,19 @@ of a person's identity. Names and edits belong to the result you are reviewing.
 Use **Not checked**, **Checked** and **Needs review** to track your listening review.
 **Next to review** cycles through unchecked/needs-review passages and works with uncertainty
 display off. Editing a checked passage makes it need review again; unrelated marks stay.
+
+**Show** limits the transcript to one group of passages, with a count for each choice:
+**All**, **Not checked**, **Needs review**, **Checked**, **Uncertain** or **Missing word
+timing**. Uncertain means the passages marked "Review suggested" at the chosen Show
+uncertainty level; it is available while Show uncertainty is on. Missing word timing means
+passages without complete word timing, including passages with no timestamps. Show works
+together with search: a passage appears only if it matches both, and the counts describe the
+passages your search finds. **Next to review** visits only the shown Not checked and Needs
+review passages, so with **Checked** it has nothing to visit. A passage you mark or edit
+stays visible until you choose a filter again, and the passage you are editing always stays
+visible with its unsaved draft. Opening another recording resets Show to All. Show is not
+available while you compare two results. Model uncertainty only suggests where to listen; it
+never sets or changes a review mark.
 
 **Show uncertainty** identifies the model's relatively weakest passages/words in this
 transcript. The 5/10/20% choices and tooltips help prioritize listening. These scores are not

@@ -5,7 +5,6 @@ from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
 from test_browser_editor_playback_follow import open_editor
-from test_browser_text_playback_prototype import enable_prototype
 
 from cbs_transcriber.transcripts import normalize_segments
 
@@ -15,7 +14,6 @@ pytestmark = pytest.mark.browser
 @pytest.mark.parametrize("width", [1440, 760, 390], ids=["desktop", "narrow", "compact"])
 def test_larger_text_keeps_wrapping_highlights_drafts_and_controls(page, local_app, width):
     page.set_viewport_size({"width": width, "height": 900})
-    enable_prototype(page)
     passage = open_editor(page, local_app)
     draft = passage.locator("textarea")
     original = draft.input_value()
@@ -52,10 +50,20 @@ def test_larger_text_keeps_wrapping_highlights_drafts_and_controls(page, local_a
     expect(draft).to_be_focused()
     assert draft.evaluate("e => [e.selectionStart, e.selectionEnd]") == [2, 5]
     draft.press("x")
-    expect(overlay).to_be_hidden()
+    # Only the edited first word loses its highlight; the mirror still wraps like the draft.
+    expect(overlay.locator('[data-editor-word="0"]')).to_have_count(0)
+    expect(overlay.locator('[data-editor-word="160"]')).to_have_class("current")
+    assert (
+        abs(
+            draft.evaluate("e => e.scrollHeight")
+            - passage.locator(".passage-text-overlay-content").evaluate("e => e.scrollHeight")
+        )
+        <= 2
+    )
     expect(passage.locator('[data-action="save-edit"]')).to_be_enabled()
     draft.press("Control+z")
     expect(draft).to_have_value(original)
+    expect(overlay.locator("[data-editor-word]")).to_have_count(200)
     expect(overlay).to_be_visible()
     expect(passage.locator('[data-action="save-edit"]')).to_be_disabled()
 
