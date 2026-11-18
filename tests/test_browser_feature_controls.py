@@ -4,17 +4,22 @@ import copy
 import json
 import time
 
-import httpx
 import pytest
 from admission_support import write_original_wav
+from browser_native_support import mock_native_runs, save_ready_native
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
 
-from cbs_transcriber import enhancement, enhancement_api, providers, runtime_compute
+from cbs_transcriber import enhancement, enhancement_api, runtime_compute
 from cbs_transcriber.transcripts import normalize_segments
 
 pytestmark = pytest.mark.browser
+
+
+# Direct OpenAI is refused (DIRECT_OPENAI_DISABLED), so the transcription model is a checked
+# native UCloud profile declaring the parametrized capability. Selected recordings share one
+# mocked native batch allocation; a single recording uses the native singleton path.
 
 
 @pytest.mark.parametrize(
@@ -37,7 +42,8 @@ def test_transcribe_controls_chain_only_missing_features(
     if capability in {"speakers", "words_speakers"}:
         requested["speaker_labels"] = True
 
-    def transcribe(*args):
+    def transcribe(settings, recording):
+        assert settings.provider_type == "ucloud" and settings.capability == capability
         calls.append("asr")
         result = {"text": "Hej CBS."}
         if capability != "json":
@@ -87,10 +93,11 @@ def test_transcribe_controls_chain_only_missing_features(
             job_id=job["id"],
         )
 
-    monkeypatch.setattr(providers, "transcribe_file", transcribe)
+    mock_native_runs(monkeypatch, transcribe)
     monkeypatch.setattr(enhancement, "run_enhancement", enhance)
     monkeypatch.setattr(enhancement, "check_runtime", lambda *a, **kw: {"ready": True})
-    store = local_app.server.config.app.state.store
+    app = local_app.server.config.app
+    store = app.state.store
     # This feature-routing fixture uses cached models and no Hugging Face token.
     # Fresh Processing settings permit downloads; keep this test's opt-out explicit.
     enhancement.save_local_settings(store, enhancement.ProcessingSettings(download_models=False))
@@ -108,29 +115,10 @@ def test_transcribe_controls_chain_only_missing_features(
         # This test uses a prepared cloud runtime; consent has separate browser coverage.
         monkeypatch.setattr(enhancement_api, "runtime_stamped", lambda *a: True)
         monkeypatch.setattr(enhancement_api, "speaker_model_available", lambda *a: True)
-        # UCloud enhancement reuses the Provider Settings connection (API only, no SSH).
-        providers.save_profile(
-            store,
-            local_app.server.config.app.state.credentials,
-            "UCloud",
-            providers.Settings(
-                provider_type="ucloud",
-                base_url="https://cloud.invalid",
-                model="large-v3",
-                ucloud_transcriber={
-                    "project_id": "synthetic-project",
-                    "storage_path": "/drive/cbs",
-                    "application": {"name": "transcriber", "version": "1.12"},
-                    "product": {
-                        "id": "gpu-nvidia-b200-1-gpu",
-                        "category": "gpu",
-                        "provider": "ucloud",
-                    },
-                },
-            ),
-            api_key="synthetic-cloud-token",
-            remember=False,
-        )
+    # UCloud enhancement reuses this same Provider Settings connection (API only, no SSH).
+    provider_id = save_ready_native(
+        store, app.state.credentials, "Synthetic " + capability, capability=capability
+    )["id"]
     project = store.create_project("Feature controls")
     recordings = [
         store.create_recording(project["id"], name)
@@ -141,19 +129,6 @@ def test_transcribe_controls_chain_only_missing_features(
         store.execute(
             "UPDATE recordings SET status='ready',duration=3 WHERE id=?", (recording["id"],)
         )
-    with httpx.Client(base_url=local_app.url, headers={"X-CBS-Request": "1"}) as client:
-        response = client.post(
-            "/api/providers",
-            json={
-                "name": "Synthetic " + capability,
-                "provider_type": "openai",
-                "base_url": "http://127.0.0.1:9/v1",
-                "model": "synthetic-model",
-                "capability": capability,
-            },
-        )
-        assert response.status_code == 201
-        provider_id = response.json()["id"]
 
     rid = recordings[0]["id"]
     errors = []
@@ -165,13 +140,13 @@ def test_transcribe_controls_chain_only_missing_features(
         pytest.fail(f"App errors: {errors}; page: {page.locator('body').inner_text()[:3000]}")
     if view == "editor":
         page.locator(f'[data-open="{rid}"]').click()
-        page.locator("#file-provider-kind").select_option("openai")
+        page.locator("#file-provider-kind").select_option("ucloud")
         provider = page.locator("#file-provider")
         controls = page.locator("#file-features")
         start = page.locator("#transcribe-one")
     else:
         page.locator("#select-all").click()
-        page.locator("#bulk-provider-kind").select_option("openai")
+        page.locator("#bulk-provider-kind").select_option("ucloud")
         provider = page.locator("#bulk-provider")
         controls = page.locator("#bulk-features")
         start = page.locator("#transcribe-selected")
@@ -245,6 +220,12 @@ def test_transcribe_controls_chain_only_missing_features(
     assert len(jobs) == expected_jobs and all(j["state"] == "completed" for j in jobs), store.all(
         "SELECT kind,state,message FROM jobs"
     )
+    batches = {
+        json.loads(job["params"]).get("native_batch_id")
+        for job in store.all("SELECT params FROM jobs WHERE kind='transcribe'")
+    }
+    # Selected recordings share one native allocation; a single recording keeps its own job.
+    assert len(batches) == 1 and (None not in batches) == (view == "selected")
     inspections = store.all("SELECT state FROM jobs WHERE kind='source-inspect'")
     assert len(inspections) == len(recordings)
     assert all(job["state"] == "completed" for job in inspections)
