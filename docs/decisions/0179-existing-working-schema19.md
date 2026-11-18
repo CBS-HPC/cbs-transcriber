@@ -3,7 +3,10 @@
 Design accepted 12 November 2026 after independent review for the user's additional backend
 work. **Implemented 17 November**: builder `1b4d566` (57 cases) and independent tester Go
 `f484571` (114 adversarial cases, 171 combined). Not loaded; real-library activation follows
-the authorized activation process. This extends [ADR 0141](0141-existing-sole-working.md),
+the authorized activation process. 18 November: fence text is read as bytes and decoded
+strictly, so invalid UTF-8 or a lone-surrogate escape is evidence rather than an aborted pass:
+unreadable failed-job settings skip that recording, unreadable owner links/rows refuse (B454).
+This extends [ADR 0141](0141-existing-sole-working.md),
 whose exact schema-18 activation hold was intentional, not an unnoticed stale constant.
 
 ## Decision

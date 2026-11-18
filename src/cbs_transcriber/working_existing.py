@@ -91,6 +91,8 @@ _BLOCKING = (
 # ADR 0179: failed transcription rows whose non-native identity must be proved in Python, as
 # native admission parses it, and every job that names a native batch owner (any state).
 # A text kind other than transcribe is never native; a non-text kind proves nothing.
+# Stored settings and links are read as bytes and decoded strictly in Python: invalid UTF-8
+# or a lone-surrogate JSON escape is unreadable evidence for that row, never an aborted pass.
 _NATIVE_JOBS = (
     "WITH j AS (SELECT id,recording_id,state,params,"
     "CASE WHEN typeof(kind)='text' THEN kind END AS kind,"
@@ -98,18 +100,21 @@ _NATIVE_JOBS = (
     "SELECT id,recording_id,"
     "state='failed' AND (kind IS NULL OR kind='transcribe') AS failed,"
     "CASE WHEN state='failed' AND kind='transcribe' AND typeof(params)='text' "
-    "AND length(CAST(params AS BLOB))<=? THEN params END AS params,"
+    "AND length(CAST(params AS BLOB))<=? THEN CAST(params AS BLOB) END AS params,"
     "json_type(p,'$.native_batch_id') IS NOT NULL AS linked,"
     "CASE WHEN json_type(p,'$.native_batch_id')='text' "
-    "THEN json_extract(p,'$.native_batch_id') END AS link FROM j "
+    "THEN CAST(json_extract(p,'$.native_batch_id') AS BLOB) END AS link FROM j "
     "WHERE (state='failed' AND (kind IS NULL OR kind='transcribe')) "
     "OR json_type(p,'$.native_batch_id') IS NOT NULL"
 )
 # Every native batch owner, its state and a bounded manifest. Larger manifests read as NULL.
+# Owner text is decoded in Python too; an undecodable owner is an opaque inventory.
 _NATIVE_OWNERS = (
-    "SELECT id,typeof(id) AS id_type,state,length(CAST(members AS BLOB)) AS members_size,"
-    "CASE WHEN typeof(members)='text' AND length(CAST(members AS BLOB))<=? THEN members END "
-    "AS members FROM native_batch_runs LIMIT ?"
+    "SELECT CAST(id AS BLOB) AS id,typeof(id) AS id_type,"
+    "CAST(state AS BLOB) AS state,typeof(state) AS state_type,"
+    "length(CAST(members AS BLOB)) AS members_size,"
+    "CASE WHEN typeof(members)='text' AND length(CAST(members AS BLOB))<=? "
+    "THEN CAST(members AS BLOB) END AS members FROM native_batch_runs LIMIT ?"
 )
 
 
@@ -196,13 +201,34 @@ def _identifier(value):
     return type(value) is str and 0 < len(value) <= 200
 
 
+def _text(value):
+    """Strictly decode stored text read as bytes; None when absent or not valid UTF-8."""
+    if not isinstance(value, bytes):
+        return None
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _owner(row):
+    """Return an owner's (id, state, claimed pairs), or refuse an opaque inventory."""
+    # Only a text state can be settled; any other stored type is read as unsettled.
+    owner_id = _text(row["id"])
+    state = _text(row["state"]) if row["state_type"] == "text" else None
+    if owner_id is None or (row["state_type"] == "text" and state is None):
+        raise NativeScopeRefused("native_evidence_unverifiable")
+    return owner_id, state, _manifest(row)
+
+
 def _manifest(row):
     """Return an owner's claimed (job, recording) pairs, or refuse an opaque inventory."""
     refused = NativeScopeRefused("native_evidence_unverifiable")
-    if row["id_type"] != "text" or not isinstance(row["members"], str):
+    text = _text(row["members"])
+    if row["id_type"] != "text" or text is None:
         raise refused
     try:
-        members = json.loads(row["members"], object_pairs_hook=_unique_object)
+        members = json.loads(text, object_pairs_hook=_unique_object)
     except (ValueError, RecursionError):
         raise refused from None
     # Native batches are created with at least two members and never change their manifest.
@@ -230,23 +256,28 @@ def _native_scope(db, deadline):
     blocked, links = set(), {}
     for row in db.execute(_NATIVE_JOBS, (NATIVE_PARAMS_BYTES,)):
         _within(deadline)
-        if row["failed"] and not _nonnative(row["params"]):
+        # Undecodable failed-job settings prove nothing, so that recording is skipped. An
+        # undecodable owner link is opaque native evidence and refuses the remaining pass.
+        if row["failed"] and not _nonnative(_text(row["params"])):
             blocked.add(row["recording_id"])
         if row["linked"]:
             if len(links) >= NATIVE_LINKS:
                 raise NativeScopeRefused("native_evidence_incomplete")
-            links[row["id"]] = (row["recording_id"], row["link"])
+            link = _text(row["link"])
+            if row["link"] is not None and link is None:
+                raise NativeScopeRefused("native_evidence_unverifiable")
+            links[row["id"]] = (row["recording_id"], link)
     owners, members, size = {}, 0, 0
     for row in db.execute(_NATIVE_OWNERS, (NATIVE_MANIFEST_BYTES, NATIVE_OWNERS + 1)):
         _within(deadline)
         if len(owners) >= NATIVE_OWNERS:
             raise NativeScopeRefused("native_evidence_incomplete")
-        pairs = _manifest(row)
+        owner_id, owner_state, pairs = _owner(row)
         members += len(pairs)
         size += row["members_size"]
         if members > NATIVE_MEMBERS or size > NATIVE_INVENTORY_BYTES:
             raise NativeScopeRefused("native_evidence_incomplete")
-        owners[row["id"]] = (row["state"] in SETTLED, pairs)
+        owners[owner_id] = (owner_state in SETTLED, pairs)
     # Job to owner: a missing, unsettled or unlisted owner never means settled.
     for job_id, (recording_id, owner_id) in links.items():
         owner = owners.get(owner_id)

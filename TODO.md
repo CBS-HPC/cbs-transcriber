@@ -57,8 +57,9 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
 - [x] **Existing sole-result Working on schema 19 (T147).** `codex/mvp-v2-existing-working`
   accepts only 18/18 and 19/19 pairs, never reads or writes review marks, and skips any
   recording with doubtful native-recovery evidence (ADR 0179). Builder `1b4d566`; independent
-  tester Go `f484571` (171 focused cases). Not loaded. Follow-up: undecodable text in old job
-  data stops the pass as `aborted: OperationalError` instead of a typed refusal (nothing written).
+  tester Go `f484571` (171 focused cases). Not loaded. Undecodable stored text no longer aborts
+  the pass (B454): unreadable failed-job settings skip that recording, unreadable owner links
+  or owner rows refuse the pass as `native_evidence_unverifiable` (`claude/v2-followups`).
 
 - [x] **CBS Runtime preparation observation stability (T143), authorized 12 November.** Reproduce and
   fix standalone transient-monitor/terminal-publication and late-Stop completion races on
