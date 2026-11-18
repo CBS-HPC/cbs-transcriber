@@ -244,11 +244,24 @@ def preparation_ui(page, local_app):
     return state
 
 
+def open_settings_at_ucloud(page):
+    # Settings opens on UCloud now that direct OpenAI is retired (ADR 0170). Choosing the
+    # already-open tab deliberately reloads its form, so a redundant click would start a
+    # second automatic readiness check.
+    page.locator("#settings-open").click()
+    expect(page.locator("#tab-ucloud")).to_have_attribute("aria-selected", "true")
+
+
+def leave_and_reopen_ucloud(page):
+    # Hugging Face loads only its own settings, so it is a neutral tab to depart through.
+    page.locator("#tab-huggingface").click()
+    page.locator("#tab-ucloud").click()
+
+
 def open_ucloud(page, local_app):
     page.goto(local_app.url)
     page.wait_for_function("() => state.providers.length > 0")
-    page.locator("#settings-open").click()
-    page.locator("#tab-ucloud").click()
+    open_settings_at_ucloud(page)
     expect(page.locator("#enhance-cloud-check")).to_be_enabled()
     expect(page.locator("#enhance-cloud-check-result")).to_contain_text("prepared")
 
@@ -287,10 +300,10 @@ def test_cloud_status_survives_provider_draft_edits_without_starting_preparation
 
     page.route("**/api/enhancement-api/status", hold)
     page.goto(local_app.url)
-    page.locator("#settings-open").click()
-    page.locator("#tab-ucloud").click()
+    open_settings_at_ucloud(page)
     page.wait_for_function("() => window.cloudStatusHeld")
     page.locator("#api-key").fill("synthetic-provider-draft")
+    assert len(held) == 1
     held[0].fulfill(
         json=rules_status(15)
         | {
@@ -316,10 +329,12 @@ def test_only_manual_unprepared_check_with_saved_consent_creates_activity(
     ui["settings"]["prepare_ucloud_models"] = consent
     ui["prepared"] = prepared
     open_ucloud(page, local_app)
-    expect(page.locator("#enhance-cloud-check-help")).to_contain_text("baseline public caches")
-    expect(page.locator("#enhance-cloud-check-help")).to_contain_text(
-        "Additional selected ASR profiles and gated speaker models"
-    )
+    # Shortened Settings copy (7cf165c): the check prepares only the base runtime and
+    # public models; other models keep their own readiness checks.
+    help_text = page.locator("#enhance-cloud-check-help")
+    expect(help_text).to_contain_text("Opening this tab only checks readiness")
+    expect(help_text).to_contain_text("download the base runtime and public models")
+    expect(help_text).to_contain_text("Other models are checked when requested")
     assert ui["checks"] == [{}] and not ui["prepares"]
     page.locator("#enhance-cloud-check").click()
     page.wait_for_function("() => !document.querySelector('#enhance-cloud-check').disabled")
@@ -434,8 +449,7 @@ def test_old_check_cannot_enable_reopened_ucloud_before_settings_load(
         page.evaluate("window.reopenedSettingsHeld = true")
 
     page.route("**/api/enhancement-settings", hold_settings)
-    page.locator("#tab-openai").click()
-    page.locator("#tab-ucloud").click()
+    leave_and_reopen_ucloud(page)
     page.wait_for_function("() => window.reopenedSettingsHeld")
     ui["pending_checks"][0].fulfill(json={"prepared": False, "runtime_id": "synthetic-base"})
     page.wait_for_function("() => window.oldReopenCheckRead === 1")
@@ -457,8 +471,7 @@ def test_departed_manual_check_cannot_prepare_a_newly_disconnected_connection(
     page.locator("#enhance-cloud-check").click()
     page.wait_for_function("() => window.preparationCheckHeld === true")
     ui["connected"] = False
-    page.locator("#tab-openai").click()
-    page.locator("#tab-ucloud").click()
+    leave_and_reopen_ucloud(page)
     expect(page.locator("#enhance-cloud-connection")).to_have_text(
         "Synthetic disconnected UCloud connection"
     )

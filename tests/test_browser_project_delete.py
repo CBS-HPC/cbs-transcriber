@@ -44,4 +44,7 @@ def test_project_settings_rows_and_name_confirmed_deletion(page, local_app):
     expect(page.locator("#delete-project-dialog")).to_be_hidden()
     assert not store.all("SELECT id FROM projects WHERE id=?", (project["id"],))
     expect(page).to_have_url(local_app.url + "/#")
-    expect(page.get_by_role("heading", name="Make room for the conversation.")).to_be_visible()
+    # With no project left, home shows the empty-library CBS brand (replaced the old hero text).
+    expect(
+        page.locator("#welcome").get_by_role("heading", name="Transcriber", exact=True)
+    ).to_be_visible()

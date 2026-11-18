@@ -269,10 +269,11 @@ def test_old_cloud_check_cannot_enable_a_newly_disconnected_connection(page, loc
     page.route("**/api/enhancement-api/status", connection)
     page.goto(local_app.url)
     watch_json_replies(page, "enhancement-api/check", "cloudReplies")
+    # Settings opens on UCloud (ADR 0170); clicking that open tab would reload it early.
     page.locator("#settings-open").click()
-    page.locator("#tab-ucloud").click()
+    expect(page.locator("#tab-ucloud")).to_have_attribute("aria-selected", "true")
     page.wait_for_function("() => window.cloudChecks === 1")
-    page.locator("#tab-openai").click()
+    page.locator("#tab-huggingface").click()
     page.locator("#tab-ucloud").click()
     expect(page.locator("#enhance-cloud-connection")).to_have_text(
         "Synthetic disconnected connection"

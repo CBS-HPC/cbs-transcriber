@@ -91,6 +91,10 @@ def test_saved_edit_reports_unavailable_automatic_word_timing(page, local_app):
     def patch(route):
         response = route.fetch()
         body = response.json()
+        # The server sends either edit-v3's partial-timing notice (V208) or edit-v1's
+        # realignment warning, never both; the UI shows the first. This synthetic reply
+        # carries only the realignment warning, as an edit-v1 save would.
+        body.pop("timing_retention_warning", None)
         body["realign_warning"] = "Automatic word timing does not support this language."
         body["snapshot_error"] = "Saved in the library database, but project outputs failed."
         route.fulfill(response=response, json=body)

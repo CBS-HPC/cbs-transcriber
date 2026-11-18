@@ -87,7 +87,8 @@ def test_native_batch_is_one_activity_using_shared_state_and_cleanup(page, local
         run_update={"cleanup_state": "trashed", "cleanup_error": None},
     )
     expect(cards).to_contain_text("moved to UCloud Trash")
-    expect(cards.get_by_role("button", name="Retry", exact=True)).to_have_count(1)
+    # A failed native batch recovers from its recorded allocation (ADR 0162).
+    expect(cards.get_by_role("button", name="Retry failed", exact=True)).to_have_count(1)
     expect(cards.locator("[data-cancel]")).to_have_count(0)
     page.locator("#activity-clear").click()
     expect(cards).to_have_count(0)

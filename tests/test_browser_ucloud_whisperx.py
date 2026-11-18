@@ -4,7 +4,7 @@ import json
 import time
 
 import pytest
-from admission_support import write_original_wav
+from admission_support import checked_connection, write_original_wav
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
@@ -22,7 +22,7 @@ def test_ucloud_whisperx_model_transcribes_after_confirmed_preparation(
     enhancement.save_local_settings(
         store, enhancement.ProcessingSettings(prepare_ucloud_models=False)
     )
-    providers.save_profile(
+    native = providers.save_profile(
         store,
         credentials,
         "UCloud",
@@ -52,6 +52,8 @@ def test_ucloud_whisperx_model_transcribes_after_confirmed_preparation(
             settings.enabled = True
             providers.save_profile(store, credentials, row["name"], settings, identifier=row["id"])
             break
+    # New-work selectors offer only an explicitly checked connection (ADR 0167).
+    checked_connection(store, credentials, native["id"])
     # No network in tests: the drive is "not prepared" and queued work is not run.
     monkeypatch.setattr(enhancement_api, "whisperx_ready", lambda *a: False)
     # This queue-only fixture retains singleton execution; batch metadata is covered separately.

@@ -4,7 +4,7 @@ import json
 import time
 
 import pytest
-from admission_support import write_original_wav
+from admission_support import checked_connection, write_original_wav
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
@@ -34,10 +34,10 @@ def test_processing_offers_standing_ucloud_preparation_consent(page, local_app, 
     expect(page.locator("#enhance-downloads")).to_be_checked()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     note = page.locator("#enhance-cloud-check-help")
-    expect(note).to_contain_text("several GB")
-    expect(note).to_contain_text("UCloud charges")
-    expect(note).to_contain_text("No recording is uploaded until ready")
-    expect(note).to_contain_text("Hugging Face token stays on this computer")
+    # Shortened Settings copy (7cf165c) keeps the size, cost, upload and token disclosures.
+    expect(note).to_contain_text("several GB and UCloud credits")
+    expect(note).to_contain_text("Recordings wait until ready")
+    expect(note).to_contain_text("your Hugging Face token stays here")
     box.uncheck()
     expect(page.locator("#enhance-cloud-save-status")).to_have_text("Saved for new jobs.")
     saved = json.loads(store.one("SELECT value FROM settings WHERE id=3")["value"])
@@ -110,7 +110,7 @@ def test_transcribe_selected_asks_once_for_the_whole_selection(page, local_app, 
     enhancement.save_local_settings(
         store, enhancement.ProcessingSettings(prepare_ucloud_models=False)
     )
-    providers.save_profile(
+    native = providers.save_profile(
         store,
         credentials,
         "UCloud",
@@ -140,6 +140,8 @@ def test_transcribe_selected_asks_once_for_the_whole_selection(page, local_app, 
             settings.enabled = True
             providers.save_profile(store, credentials, row["name"], settings, identifier=row["id"])
             break
+    # New-work selectors offer only an explicitly checked connection (ADR 0167).
+    checked_connection(store, credentials, native["id"])
     probes, accepted = [], []
 
     def states(credentials, targets, **_):
