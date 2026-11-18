@@ -25,8 +25,8 @@ broader cleanup must preserve ongoing/recoverable work and Activity evidence.
 17–18 November (Claude): T147 is implemented with independent Go; the Show filter and
 default-on Text highlighting are implemented; saving a new UCloud key reconnects
 automatically (B452). The standalone funding observer (T146) is implemented with independent
-Go (unwired). All are combined on `claude/v2-integration`, not loaded. Runtime Stage 2 (T144)
-is recorded when its independent review finishes. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
+Go (unwired). Runtime Stage 2 (T144) is implemented disabled with independent Go after three
+review defects were fixed. All are combined on `claude/v2-integration`, not loaded. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
 
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
@@ -49,6 +49,10 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   durable preparation owner, exclusive folder receipt and all accepted compute/generation
   carry before controlled live acceptance. Keep old locks/environments untouched; CPU/CUDA
   targets stay separate and promoted environments cannot receive new model downloads.
+  Stage 2 (disabled owner/folder/readiness-promotion slice) is implemented on
+  `codex/mvp-v2-runtime-protocol`: builder `e9dd23d`, independent review `229865a`, defect
+  fix `600141f` (B453); combined on `claude/v2-integration` with all switches off.
+  Admission/carry/execution/repair/capture/restore/CPU and live acceptance remain (ADR 0176).
 
 - [x] **Existing sole-result Working on schema 19 (T147).** `codex/mvp-v2-existing-working`
   accepts only 18/18 and 19/19 pairs, never reads or writes review marks, and skips any

@@ -368,6 +368,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   delayed/Auto/followup/repair/Retry paths carry it without registry recapture. CPU and CUDA
   targets/readiness remain distinct; changed models require a fresh candidate. Legacy absent
   policy keeps exact paths/receipts. Restore drops operational pointers and archives owners.
+  Protected generation proof compares type-strictly; stored owners decode from frozen data
+  only, never current version constants.
   Stage1 only validates data/paths and candidate CAS: no caller-ready promotion/capture grant.
   All activation stays disabled until owner/admission/execution/capture/restore and live gates.
   [ADR 0176](docs/decisions/0176-isolated-runtime-generation-recovery.md).
@@ -1961,7 +1963,7 @@ T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
-T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2owner/promotion designGo but implementationunstarted; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
+T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2 owner/folder/promotion slice implemented disabled e9dd23d, independent Go 229865a, D1-D3 fix 600141f (67 adversarial/84 builder/285 legacy Runtime passes); no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
 T146|x|Standalone bounded project-funding observer: unit pin verified vs upstream 2c23d295, watchdog deadline, Project/Authorization check; builder 8698d4c and independent Go dccf2f6 (259 tests); unwired, no routing/CPU activation|V221,V220,I.providers,ADR0178
 T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
 T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148
@@ -2077,3 +2079,4 @@ B449|2026-11-12|MVP Settings grouping hid a saved Runtime profile option despite
 B450|2026-11-12|The new strict preparation reader initially relied on fake full job specifications while omitting required API application/parameter inclusion flags|V218,T143; match the released SDK request contract and enforce response omission in the regression fixture before accepting identity proof
 B451|2026-11-12|Native startup accepted a merely nonempty reconciliation timestamp and completed siblings without a unique matching producer/remote-ID link|V217,T141; validate bounded timezone-aware timestamps and exact producer metadata including Trash at admission and late guards; eight positive/negative/late regressions
 B452|2026-11-12|Saving a new UCloud key in Settings (or after the first-use hand-off) stored the key without a connection check, so every UCloud model became recheck_required and the Provider/Model lists showed only "Connect a provider in Settings" after a reported save|ADR0167; Save reconnects automatically when a key is typed or a saved key is unchecked, empty lists say "Check the connection in Settings" when a key exists; rotated-key and hand-off browser regressions
+B453|2026-11-18|Disabled Runtime Stage 2 writers compared protected proof with Python == (False==0, 1==1.0), left absence receipts unreserved on generation owners and decoded stored owners against current compute/flavour/parameter constants|V219,T144,ADR0176; canonical-JSON comparison, reserved receipts, stored-shape decoding with fresh-submit refusal and an all-switch gate; six strict-xfail regressions now pass plus 13 builder cases

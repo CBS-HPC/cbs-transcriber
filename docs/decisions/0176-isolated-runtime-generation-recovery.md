@@ -103,7 +103,7 @@ schema 19 that the source remains unchanged, the restored library has no active 
 pointer, its archived owners remain inert and historical generation-bearing results verify.
 An operational registry is not restore/upload/cleanup or institutional approval authority.
 
-## Stage 2 owner/promotion design Go — implementation unstarted
+## Stage 2 owner/promotion slice — implemented disabled 18 November
 
 Independent review approved the following disabled recovery slice. Freeze the exact Terminal
 app and trusted MIG/CUDA compute before confirmation/reservation; unsupported CPU preparation
@@ -130,6 +130,24 @@ No-ID Retry after any create intent/ack, name-based generation reconciliation, s
 creation, failed-candidate supersession and environment cleanup remain refused in this slice.
 No public API/UI, active-selection capture, inference admission, portable-source changes or
 activation are included. Later carry/provenance/restore/live gates remain required.
+
+Builder `e9dd23d` (452 passed, 3 Linux-only skips). Independent review `229865a` gave Go
+for the disabled slice and No-Go for enabling until three defects were fixed: generic
+writers compared protected proof with Python `==` (`False`/`0` and `1`/`1.0` passed),
+`reconciled_not_created`/`no_post` were not reserved on generation owners, and owner
+decoding compared stored records with the current compute policy, Terminal flavours and
+script parameter, so a later version change made promoted owners unreadable and blocked
+legacy preparation. Fix `600141f` compares protected values by canonical stored JSON,
+reserves both receipts, decodes stored values by shape only and refuses an unsupported
+policy/flavour at fresh submit before any folder or POST. Every entry point now requires
+all three switches. Gate: reviewer file 67 passed (no xfail), builder files 84 passed,
+legacy Runtime suites 285 passed/3 Linux-only skips. All three switches remain `False`.
+
+Before enablement: real UCloud create-folder reply shapes (`_acknowledged` accepts items
+without `id`); a frozen record of the Terminal app's script parameter (a fresh submit still
+builds with the current name); the shared observation's loose comparison with UCloud's
+normalised specification; and failed candidates blocking their target until supersession
+exists.
 
 ## Required gates
 
