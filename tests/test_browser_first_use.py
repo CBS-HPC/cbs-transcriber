@@ -610,10 +610,18 @@ def test_key_lost_existing_connection_hands_off_without_widening_policy(
         lambda request: writes.append(request.url) if request.method in {"POST", "PUT"} else None,
     )
 
-    def refuse(*args, **kwargs):
-        raise AssertionError("Existing connection must be reviewed before discovery.")
+    reviewed = []
 
-    monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", refuse)
+    def discover(settings, key, *, compute_id=None):
+        # The existing connection is reviewed in Settings first; saving the replacement key
+        # there then rechecks it automatically (user decision, 12 November).
+        if not reviewed:
+            raise AssertionError("Existing connection must be reviewed before discovery.")
+        assert key == "replacement-synthetic-key"
+        setup = settings.ucloud_transcriber.model_dump()
+        return {"ready": True, "setup": setup, "choices": {}, "note": "Ready to save."}
+
+    monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
     expect(page.locator("#first-use-setup")).to_be_visible()
     page.locator("#first-use-ucloud-key").fill("replacement-synthetic-key")
@@ -640,6 +648,7 @@ def test_key_lost_existing_connection_hands_off_without_widening_policy(
     assert not app.state.credentials.get("ucloud-control:https://cloud.sdu.dk")
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) is None
     if not runtime_only:
+        reviewed.append(True)
         page.get_by_role("button", name="Save settings", exact=True).click()
         expect(page.locator("#settings-dialog")).to_be_hidden()
         assert store.all("SELECT * FROM providers ORDER BY id") == before
@@ -647,4 +656,12 @@ def test_key_lost_existing_connection_hands_off_without_widening_policy(
             app.state.credentials.get("ucloud-control:https://cloud.sdu.dk")
             == "replacement-synthetic-key"
         )
-        assert writes == [local_app.url + f"/api/providers/{identifier}"]
+        assert writes == [
+            local_app.url + "/api/providers/discover-ucloud",
+            local_app.url + f"/api/providers/{identifier}",
+        ]
+        assert page.evaluate(
+            "async id => (await api('/providers')).providers"
+            ".find((p) => p.id === id).connection_ready",
+            identifier,
+        )

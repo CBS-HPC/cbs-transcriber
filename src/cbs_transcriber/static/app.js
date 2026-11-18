@@ -601,8 +601,11 @@ function providerEmptyLabel() {
     (provider) => offeredProvider(provider) && provider.enabled !== false,
   );
   if (!enabled.length) return "No enabled models";
-  return enabled.some((provider) => provider.connection_ready === true)
-    ? "No approved providers"
+  if (enabled.some((provider) => provider.connection_ready === true))
+    return "No approved providers";
+  // A saved key whose connection was not (re)checked is not a missing provider.
+  return enabled.some((provider) => provider.has_key)
+    ? "Check the connection in Settings"
     : "Connect a provider in Settings";
 }
 function selectedProvider(selected) {
@@ -10175,7 +10178,18 @@ $("#settings-form").addEventListener(
     button.disabled = true;
     const key = $("#api-key").value;
     try {
-      if (state.settingsTab === "ucloud" && !nativeReady(nativeSetup())) {
+      // A changed key, or a saved connection that was never checked with its current key,
+      // is checked first: only a fresh successful check makes models usable (ADR 0167).
+      const saved = state.providers.find(
+        (p) => p.id === state.settingsProvider,
+      );
+      if (
+        state.settingsTab === "ucloud" &&
+        (!nativeReady(nativeSetup()) ||
+          (!providerConnectionCheck &&
+            (key ||
+              (saved?.has_key === true && saved.connection_ready !== true))))
+      ) {
         if (!(await connectNative())) return;
       }
       if (!sameProvider(context)) return;

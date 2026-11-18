@@ -4,7 +4,7 @@ import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
-from test_browser import provider_advanced
+from test_browser import provider_advanced, skip_first_use
 
 from cbs_transcriber import providers, ucloud_discovery
 from cbs_transcriber import ucloud_native as native
@@ -53,6 +53,8 @@ def configured(local_app, monkeypatch):
 
 def open_native(page, local_app):
     page.goto(local_app.url)
+    # Without a UCloud connection the first-use dialog opens over the page.
+    skip_first_use(page)
     page.locator("#settings-open").click()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.get_by_role("group", name="UCloud Transcriber", exact=True)).to_be_visible()
