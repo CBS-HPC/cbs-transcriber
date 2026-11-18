@@ -57,8 +57,9 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
 - [x] **Existing sole-result Working on schema 19 (T147).** `codex/mvp-v2-existing-working`
   accepts only 18/18 and 19/19 pairs, never reads or writes review marks, and skips any
   recording with doubtful native-recovery evidence (ADR 0179). Builder `1b4d566`; independent
-  tester Go `f484571` (171 focused cases). Not loaded. Follow-up: undecodable text in old job
-  data stops the pass as `aborted: OperationalError` instead of a typed refusal (nothing written).
+  tester Go `f484571` (171 focused cases). Not loaded. Undecodable stored text no longer aborts
+  the pass (B454): unreadable failed-job settings skip that recording, unreadable owner links
+  or owner rows refuse the pass as `native_evidence_unverifiable` (`claude/v2-followups`).
 
 - [x] **CBS Runtime preparation observation stability (T143), authorized 12 November.** Reproduce and
   fix standalone transient-monitor/terminal-publication and late-Stop completion races on
@@ -530,7 +531,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   User direction 12 November: one **Undo last change** whose label names the next step
   (instead of separate undo buttons), undo recorded as history, a Git-like change list with
   word-level diffs and later a branch view of results/versions with the Working marker.
-  Scope (selective reverts, Redo, reach) awaits the user's confirmation.
+  Scope (selective reverts, Redo, reach) awaits the user's confirmation; the
+  [18 November design proposal](docs/proposals/history-undo-2026-11-18.md) lists five questions.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.

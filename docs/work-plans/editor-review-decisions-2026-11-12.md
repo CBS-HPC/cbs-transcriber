@@ -41,6 +41,8 @@ discussion"). Root records them here; SPEC/TODO entries follow when each piece l
   branch-style view of results/versions with the Working marker.
 - Open: whether per-action buttons are removed or kept inside the change list for selective
   (non-latest) reverts, Redo, and how far back Undo may reach.
+- 18 November: [design proposal](../proposals/history-undo-2026-11-18.md) with recommended
+  answers to five questions; nothing is implemented until the user chooses.
 
 ## UCloud key change — decided and fixed
 
