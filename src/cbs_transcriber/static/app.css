@@ -1929,6 +1929,11 @@ select {
 .details-panel .field-note {
   font-size: 13px;
 }
+/* The empty-speakers note keeps its own line; floated, it covered Description / notes. */
+.details-panel #speakers .field-note {
+  float: none;
+  margin: 0;
+}
 .export-card {
   margin-top: 30px;
   padding: 20px 17px;

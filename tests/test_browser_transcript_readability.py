@@ -170,3 +170,23 @@ def test_actions_and_details_remain_readable_and_fit_at_smaller_widths(page, loc
       return box.left >= panel.left && box.right <= panel.right + 1;
     }""")
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+@pytest.mark.parametrize("width", [1440, 760, 390], ids=["desktop", "narrow", "compact"])
+def test_empty_speaker_note_stays_clear_of_recording_notes(page, local_app, width):
+    """At the 13px sidebar size a floated note covered Description / notes and its clicks."""
+    store = local_app.server.config.app.state.store
+    project = store.create_project("Synthetic empty speakers")
+    recording = store.create_recording(project["id"], "Synthetic.wav")
+    store.execute("UPDATE recordings SET status='ready',duration=4 WHERE id=?", (recording["id"],))
+    page.set_viewport_size({"width": width, "height": 900})
+    page.goto(local_app.url + f"/#/recordings/{recording['id']}")
+    note = page.locator(".details-panel #speakers .field-note")
+    expect(note).to_have_text("No speaker labels yet")
+    page.evaluate("document.fonts.ready")
+    summary = page.locator(".details-panel .description-notes summary")
+    note_box, summary_box = note.bounding_box(), summary.bounding_box()
+    assert note_box["y"] + note_box["height"] <= summary_box["y"] + 0.5, (note_box, summary_box)
+    # Playwright's click checks that the summary itself receives the pointer.
+    summary.click()
+    expect(page.locator("#recording-notes")).to_be_visible()
