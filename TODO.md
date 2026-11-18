@@ -531,7 +531,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   User direction 12 November: one **Undo last change** whose label names the next step
   (instead of separate undo buttons), undo recorded as history, a Git-like change list with
   word-level diffs and later a branch view of results/versions with the Working marker.
-  Scope (selective reverts, Redo, reach) awaits the user's confirmation.
+  Scope (selective reverts, Redo, reach) awaits the user's confirmation; the
+  [18 November design proposal](docs/proposals/history-undo-2026-11-18.md) lists five questions.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
