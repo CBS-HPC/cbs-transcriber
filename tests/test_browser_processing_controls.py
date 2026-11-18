@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from admission_support import checked_connection
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
@@ -97,6 +98,8 @@ def test_ucloud_native_and_cbs_models_have_distinct_groups_with_stable_values(
                 settings,
                 identifier=row["id"],
             )
+    # New-work selectors offer only an explicitly checked connection (ADR 0167).
+    checked_connection(app.state.store, app.state.credentials, saved["id"])
     project = app.state.store.create_project("Grouped choices")
     recording = app.state.store.create_recording(project["id"], "Grouped.wav")
     runtime_models = {
