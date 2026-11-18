@@ -194,7 +194,11 @@ def test_browser_pending_save_blocks_navigation_until_reply(page, local_app):
     expect(page.locator("#recording-title")).to_have_text("First")
     route, response = held.pop()
     route.fulfill(response=response)
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
+    # The untimed passage's new words have no verified timing, which the save reports.
+    expect(page.locator("#save-status")).to_have_text(
+        "Passage saved. Some words have no verified timing after this edit. "
+        "Only identifiable existing words retain their timing."
+    )
     page.evaluate("id => location.hash = '/recordings/' + id", recordings[1]["id"])
     expect(page.locator("#recording-title")).to_have_text("Second")
     expect(page.locator("#passage-0 .passage-text")).to_have_text("Second wording.")
@@ -208,6 +212,7 @@ def test_browser_reconciles_uncertain_job_without_allocating(page, local_app):
     job = store.add_job(recording["id"], "enhance", {"ucloud_run": {"submission_intent": True}})
     store.update_job(job["id"], state="failed", message="Submission outcome unknown.")
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#activity-open").click()
     expect(page.locator(f"[data-reconnect='{job['id']}']")).to_be_visible()
     card = page.locator(".job").first
@@ -373,6 +378,8 @@ def test_browser_review_modes_and_restart(page, local_app, wav_bytes):
     local_app.stop()
     local_app.start()
     page.goto(local_app.url)
+    # The restarted server listens on a new origin, whose first visit shows setup again.
+    skip_first_use(page)
     page.get_by_role("link", name="CBS Research").click()
     page.get_by_role("button", name="interview.v2", exact=True).click()
     expect(page.locator("#passage-0 .passage-text")).to_have_text("🙂 Hej København.")
@@ -1262,7 +1269,9 @@ def test_browser_native_ucloud_setup_and_transcription(page, local_app, wav_byte
 
     def check_setup(settings, key):
         checked.append((settings.ucloud_transcriber.template_job_id, key))
+        # check_setup reports readiness explicitly (ADR 0167 connection checks).
         return {
+            "ready": True,
             "application": dict(ucloud_native.MIG_APPLICATION),
             "product": dict(ucloud_native.MIG_PRODUCT),
             "parameters": [],
@@ -1313,6 +1322,7 @@ def test_browser_native_ucloud_setup_and_transcription(page, local_app, wav_byte
 
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     provider_advanced(page)
@@ -1416,6 +1426,7 @@ def test_browser_local_enhancement_keeps_source_and_saves_new_result(
 
     monkeypatch.setattr("cbs_transcriber.enhancement.run_worker", enhance)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#sidebar-create").click()
     page.locator("#name-input").fill("Local protected enhancement")
     page.locator("#project-classification").select_option("protected")
@@ -1894,9 +1905,8 @@ def test_browser_deferred_vllm_keeps_saved_results_and_frozen_jobs(page, local_a
     expect(page.locator('#file-provider-kind option[value="ucloud-vllm"]')).to_have_count(0)
     expect(page.locator(f'#file-provider option[value="{saved["id"]}"]')).to_have_count(0)
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_text(
-        ["OpenAI API", "UCloud", "Hugging Face", "Local Processing"]
-    )
+    # Direct OpenAI is retired (V212); deferred vLLM never gets its own tab back.
+    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
     expect(page.locator("#ucloud-vllm-setup")).not_to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator("#ucloud-panel")).to_contain_text("Transcriber Batch")
