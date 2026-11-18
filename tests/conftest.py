@@ -1,6 +1,8 @@
 import io
+import ipaddress
 import json
 import os
+import socket
 import wave
 from pathlib import Path
 
@@ -29,6 +31,63 @@ def loopback_testclient(monkeypatch):
         initialize(self, *args, **kwargs)
 
     monkeypatch.setattr(TestClient, "__init__", local_client)
+
+
+def _loopback(host):
+    """Only this computer's loopback names/addresses (or a passive bind) stay reachable."""
+    if host is None:
+        return True
+    if isinstance(host, bytes):
+        host = host.decode("ascii", "replace")
+    if not isinstance(host, str):
+        return False
+    host = host.strip("[]").lower()
+    if host in {"", "localhost"} or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+class ResolutionRefused(socket.gaierror):
+    """A test tried to look up a real host name; tests never reach a provider or service."""
+
+
+class ConnectionToRealHostRefused(ConnectionRefusedError):
+    """A test tried to connect to a non-loopback address."""
+
+
+def _refusal(target):
+    return f"Tests never reach a real host ({target!r}); mock the call."
+
+
+@pytest.fixture(autouse=True)
+def loopback_network_only(monkeypatch):
+    """No test may resolve or connect to a non-loopback host, even read-only or unauthenticated.
+
+    Individual tests may install stricter tripwires or register loopback-backed names.
+    """
+    resolve, by_name, connect = socket.getaddrinfo, socket.gethostbyname, socket.socket.connect
+
+    def getaddrinfo(host, *args, **kwargs):
+        if not _loopback(host):
+            raise ResolutionRefused(socket.EAI_NONAME, _refusal(host))
+        return resolve(host, *args, **kwargs)
+
+    def gethostbyname(host):
+        if not _loopback(host):
+            raise ResolutionRefused(socket.EAI_NONAME, _refusal(host))
+        return by_name(host)
+
+    def guarded_connect(self, address):
+        if isinstance(address, tuple) and not _loopback(address[0]):
+            raise ConnectionToRealHostRefused(_refusal(address[0]))
+        return connect(self, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(socket, "gethostbyname", gethostbyname)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
 
 
 class MemoryCredentials:
