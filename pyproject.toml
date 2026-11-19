@@ -19,6 +19,7 @@ dependencies = [
   "ucloud-workflow==0.1.9",
   "httpx>=0.28",
   "websockets>=15",
+  "spylls==0.1.7",
   "whisperx==3.8.6; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "torch~=2.8.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",

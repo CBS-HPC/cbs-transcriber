@@ -147,6 +147,18 @@ def isolated_library_deletions(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolated_spelling_cache(tmp_path_factory, monkeypatch):
+    """The public spelling dictionary cache is never this computer's app cache (ADR 0185)."""
+    from uuid import uuid4
+
+    from cbs_transcriber import spelling
+
+    cache = tmp_path_factory.getbasetemp() / "spelling-cache" / uuid4().hex
+    monkeypatch.setattr(spelling, "default_cache_dir", lambda: cache)
+    return cache
+
+
+@pytest.fixture(autouse=True)
 def isolated_speaker_model(tmp_path_factory, monkeypatch):
     """Never read this computer's Hugging Face cache or download a model during tests."""
     import huggingface_hub

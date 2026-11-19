@@ -38,6 +38,7 @@ DIALOG_NAMES = [
     ("collection-settings-dialog", "Collection settings"),
     ("file-settings-dialog", "File settings"),
     ("project-settings-dialog", "Project settings"),
+    ("spelling-vocabulary-dialog", "Vocabulary"),
     ("delete-project-dialog", "Delete project"),
     ("name-dialog", "New project"),
     ("language-picker-dialog", "Choose a language"),

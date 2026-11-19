@@ -858,7 +858,13 @@ def clean_name(value):
 
 
 def create_app(
-    data_dir=None, *, start_worker=True, credentials=None, project_parent=None, release=None
+    data_dir=None,
+    *,
+    start_worker=True,
+    credentials=None,
+    project_parent=None,
+    release=None,
+    spelling_cache_dir=None,
 ):
     # An unknown profile refuses startup before the library is opened (ADR 0145).
     release = release_profile.resolve(release)
@@ -872,6 +878,10 @@ def create_app(
     queue = JobQueue(store, credentials)
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
+    from .spelling import SpellingService, default_cache_dir
+
+    # Constructing the service creates no storage and starts no worker (ADR 0185).
+    spelling_service = SpellingService(store, spelling_cache_dir or default_cache_dir())
 
     def hf_cloud_plan():
         if not release.enabled("cbs_runtime"):
@@ -957,6 +967,11 @@ def create_app(
                     if cleanup_error is None:
                         cleanup_error = cleanup
                 try:
+                    spelling_service.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
+                try:
                     if processing_started:
                         queue.stop()
                 except BaseException as cleanup:
@@ -969,11 +984,18 @@ def create_app(
 
     app = FastAPI(title="CBS Transcriber", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.queue, app.state.credentials = store, queue, credentials
-    from . import change_undo_routes, passage_restore_routes, passage_review_routes
+    from . import (
+        change_undo_routes,
+        passage_restore_routes,
+        passage_review_routes,
+        spelling_routes,
+    )
 
     passage_review_routes.install(app, store)
     passage_restore_routes.install(app, store)
     change_undo_routes.install(app, store)
+    spelling_routes.install(app, spelling_service, release)
+    app.state.spelling = spelling_service
     app.state.deletions = deletion_requests
     app.state.export_tasks = export_manager
     app.state.huggingface_tasks = hf_manager

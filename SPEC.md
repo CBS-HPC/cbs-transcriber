@@ -120,6 +120,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   403 code feature_disabled (ADR 0145).
 - I.api: /api/projects, /api/recordings, /api/jobs, /api/settings; ID-based media/export.
   GET/PUT /api/local-concurrency reads and partially updates parallel local task limits.
+- I.spelling: GET/PUT /api/spelling/settings (revisioned preferences), GET /api/spelling/
+  dictionaries and DELETE /api/spelling/dictionaries/{language} (public cache status/removal),
+  GET/PUT /api/spelling/vocabulary and /api/projects/{id}/spelling/vocabulary (independently
+  revisioned private words); POST /api/recordings/{id}/spelling/check|suggest derive the
+  effective language and return UTF-16 draft ranges; POST /api/recordings/{id}/spelling/
+  dictionary is the separate explicit retrieval and carries no transcript text (ADR 0185).
 - I.providers: named provider configurations; bulk and per-recording selection; explicit
   multi-provider queue requests. Legacy /api/settings edits the default configuration.
 - I.results: per-recording saved transcripts, active result selection, independent edits,
@@ -329,6 +335,29 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V236: The `spelling` release-profile feature is on in full and hidden in MVP. MVP refuses
+  spelling preference saves, Check, Suggest and public dictionary retrieval with 403
+  feature_disabled before their handlers and hides every entry point (static data-feature
+  markup, featureOn in spelling.js), so MVP pages make no spelling requests. Existing private
+  data stays available: reads, dictionary removal, vocabulary saves that only remove words
+  (additions refused in the revision-checked writer), project-Delete cleanup and backup/restore
+  retention. catalogs/release.json is unchanged (user decision 19 November; ADR 0185).
+- V235: Private personal/project spelling vocabulary lives in settings row 13 and operational
+  preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions and live
+  project ownership; project Delete fences only that project's revision and removes its entry
+  in the same transaction. Vocabulary stays out of transcript exports and research reports.
+  Backups keep it; isolated restore retains only strictly validated data-only row 13 with live
+  owners and never operational preferences. Malformed vocabulary refuses before promotion.
+- V234: Spelling suggestions change only the current open Text draft after exact recording/
+  result/view/text/range checks; no automatic save, timing, Working or history mutation.
+  Derive the effective recording language and refuse unsupported languages without guessing;
+  Danish is check-only. Check/suggest/status never download or make outbound calls; separate
+  pinned public retrieval carries no text/credentials, preserves opt-out and needs consent when
+  automatic retrieval is off. The bounded, credential-free engine child is killed/reaped on any
+  deadline, including partial startup; one preferred suggestion is requested. Busy Check
+  retries only its exact current draft with bounded backoff; Suggest/install never retry
+  automatically. Dictionary removal preserves replaced/linked targets and refuses after
+  shutdown. Vendor spellcheck stays disabled. Not a hostile-filesystem claim (ADR 0185).
 - V228: Choosing the open Settings tab again asks before discarding entries the researcher
   typed in the UCloud form or the Hugging Face token box but did not save; without such
   entries it reloads and retries as before. Processing and separately saved controls save on
@@ -2009,6 +2038,7 @@ T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-
 T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven structural agreement, Working fence, presence rows, toolbar labels/confirmations/late-reply fences; 30 backend and 5 browser checks pass (claude/undo-last-change); hidden in MVP pending the user's choice; slices 2 and 3 in T151/T152|V224,V185,V186,I.change-undo,ADR0180
 T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions replacing the per-passage controls when the feature is on; 8 backend and 4 browser checks pass, per-passage browser tests pinned to MVP (claude/undo-last-change); hidden in MVP|V225,V224,V185,V186,I.change-list,ADR0181
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); hidden in MVP|V226,V225,I.version-graph,ADR0182
+T155|~|Local DA checking and en-GB checking/one preferred suggestion ported from the private preview into v2 (claude/spelling-hidden) with private vocabulary, bounded worker/cache and draft/timing guards; settings rows moved to 12/13; on in full, hidden/refused in MVP with reads and removals kept; scoped backend/browser/MVP checks pass; real-user, licence and platform acceptance remain|V234,V235,V236,I.spelling,ADR0185
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -2128,3 +2158,4 @@ B457|2026-11-18|The first-use dialog opens over the home page in every fresh bro
 B458|2026-11-18|The first full v2 browser run failed 20 stale cases that also failed alone: Settings now opens on UCloud and reselecting the open tab reloads it, so redundant #tab-ucloud clicks added a second automatic check or superseded a held reply; clicks on the hidden OpenAI tab timed out; unchecked synthetic UCloud saves left selectors empty; older help/label/heading/save-status texts no longer matched|ADR0170,ADR0167,ADR0162,V208; open Settings directly on UCloud and depart through Hugging Face, record explicit synthetic checks, assert the shipped copy, Retry failed, empty-library brand and partial-timing notice; test-only, original protections retained
 B459|2026-11-19|Tests used this computer's real app folder: the browser restore test registered its temporary restore targets in the real libraries.json, and Library dialog tests listed the real registry and the earlier/packaged library locations, opening the real library read-only. Found while loading the v2 preview on the real library|ADR0050,ADR0051,ADR0096; an autouse fixture gives every test a temporary home and earlier default and skips the real packaged-app scan; guard tests; Git Bash lookups and one short restore root read the real home explicitly; the two leaked registry entries were removed after a verified backup
 B460|2026-11-19|Delete project permanently did nothing when the project was shown as the home page's first project (no #/projects address, e.g. after deleting another project): the dialog's view check compared the literal address, so no request was sent and no message appeared|V93,V148; check the displayed project and view epoch instead of the address, report a stale dialog inside it, reroute home after deletion; home/#/#/ browser regression
+B464|2026-11-19|Porting the 9 November spelling preview into v2 found its settings rows 10/11 already owned by checked-provider receipts and runtime generations; unchanged, saving spelling preferences would overwrite the provider receipts, and a library with runtime generations would fail the vocabulary validator, refusing project Delete and restore|V235,ADR0185; move spelling to rows 12/13 in the service, Delete fence and repinned restore validator; regression that a vocabulary-shaped row 11 is never restored as spelling data

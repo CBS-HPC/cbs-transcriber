@@ -34,6 +34,7 @@ FEATURES = {
     "custom_providers": "Setting up a custom or UCloud vLLM provider",
     "activity_diagnostics": "Inline Activity routing details",
     "undo_last_change": "Undo last change, Redo, the History change list and branch view",
+    "spelling": "Local spelling assistance",
 }
 PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES)}
 LABEL = re.compile(r"[A-Za-z0-9 ._()+-]{1,40}")
@@ -73,6 +74,11 @@ GUARDED_ROUTES = tuple(
             rf"/api/recordings/{_ID}/transcripts/{_ID}/(?:undo|redo)-last",
             "undo_last_change",
         ),
+        # Spelling (ADR 0185): enabling/changing preferences, checks, suggestions and public
+        # dictionary retrieval. Reads, dictionary removal and vocabulary removals stay open;
+        # vocabulary additions are refused in the handler.
+        ("PUT", r"/api/spelling/settings", "spelling"),
+        ("POST", rf"/api/recordings/{_ID}/spelling/(?:check|suggest|dictionary)", "spelling"),
     )
 )
 

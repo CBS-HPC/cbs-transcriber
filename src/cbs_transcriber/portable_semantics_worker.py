@@ -16,6 +16,7 @@ import sqlite3
 import stat
 import sys
 import types
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -223,6 +224,72 @@ def integer(value, *, minimum=0):
 def identifier(value):
     if type(value) is not str or re.fullmatch(r"[a-f0-9]{32}", value) is None:
         fail()
+
+
+SPELLING_VOCABULARY = 13  # Private spelling words (ADR 0185); row 12 preferences stay stripped.
+
+
+def _spelling_vocabulary(semantic):
+    """Retain only bounded private data, never operational spelling preferences."""
+    if semantic.one(f"SELECT id FROM settings WHERE id={SPELLING_VOCABULARY}") is None:
+        return None
+    raw = semantic.text("settings", "value", "id", SPELLING_VOCABULARY, maximum=4 * 1024**2)
+    value = semantic.json(raw)
+    if (
+        type(value) is not dict
+        or set(value) != {"schema", "personal", "projects"}
+        or type(value["schema"]) is not int
+        or value["schema"] != 1
+        or type(value["projects"]) is not dict
+        or len(value["projects"]) > 1024
+    ):
+        fail()
+
+    def scope(item):
+        semantic.guard()
+        if (
+            type(item) is not dict
+            or set(item) != {"revision", "words"}
+            or type(item["revision"]) is not int
+            or not 0 <= item["revision"] < 2**63
+            or type(item["words"]) is not list
+            or len(item["words"]) > 5000
+        ):
+            fail()
+        seen = set()
+        for word in item["words"]:
+            semantic.guard()
+            if type(word) is not str or not 1 <= len(word) <= 128:
+                fail()
+            try:
+                word.encode("utf-8")
+            except UnicodeEncodeError:
+                fail()
+            for index, char in enumerate(word):
+                category = unicodedata.category(char)[0]
+                if category in {"L", "M"}:
+                    if index == 0 and category != "L":
+                        fail()
+                elif (
+                    char not in {"'", "’", "-", "‐", "‑"}
+                    or index == 0
+                    or index + 1 == len(word)
+                    or unicodedata.category(word[index - 1])[0] not in {"L", "M"}
+                    or unicodedata.category(word[index + 1])[0] != "L"
+                ):
+                    fail()
+            key = unicodedata.normalize("NFC", word).casefold()
+            if key in seen:
+                fail()
+            seen.add(key)
+
+    scope(value["personal"])
+    for project_id, words in value["projects"].items():
+        identifier(project_id)
+        if semantic.one("SELECT id FROM projects WHERE id=?", (project_id,)) is None:
+            fail()
+        scope(words)
+    return SPELLING_VOCABULARY, raw
 
 
 def _parent(path):
@@ -506,7 +573,11 @@ def prepare_working(
                 source_db, name, structure["tables"][name], codec, guard, transform
             )
         codec.LIMITS.update(rows=1_000_000, total_bytes=8 * 1024**3)
-        value = codec.digest_table("settings", [(2, default_settings)], guard=guard)
+        settings_rows = [(2, default_settings)]
+        spelling = _spelling_vocabulary(semantic)
+        if spelling is not None:
+            settings_rows.append(spelling)
+        value = codec.digest_table("settings", settings_rows, guard=guard)
         expected["settings"] = {key: value[key] for key in ("rows", "sha256")}
         if first is None:
             row = (default_id, "Unconfigured", safe_provider, request["manifest"]["created_at"])
@@ -525,7 +596,7 @@ def prepare_working(
         # including malformed caches. Immutable source DB, old jobs and receipts stay exact.
         target_db.execute("UPDATE recordings SET status='preparing',original_input=NULL")
         target_db.execute("DELETE FROM settings")
-        target_db.execute("INSERT INTO settings VALUES (?,?)", (2, default_settings))
+        target_db.executemany("INSERT INTO settings VALUES (?,?)", settings_rows)
         target_db.execute("UPDATE runtime_preparations SET archived=1")
         owners = set()
         owner_rows = sum(

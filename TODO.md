@@ -191,6 +191,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   **Parked until after MVP by the user on 10 November.** The separate preview server/tab is
   closed; its test library and unmerged, unpushed source remain. Do not resume or integrate it
   without a new request. Prioritize the core app and release/installation/documentation review.
+  On 19 November the user chose "Hidden in v2"; see Spelling integration and acceptance below.
 
 - [x] **Background export preparation implemented and verified offline:** project/recording ZIPs
   continue in Activity after Export Settings closes. Ready downloads stream without a browser
@@ -568,16 +569,21 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   NVIDIA Parakeet UCloud model (`nvidia/parakeet-tdt-0.6b-v3`) only where the catalog confirms
   the passage language, warn on identical model/language, and offer per-passage suggestions
   that start as Needs review, never automatic replacements.
-- [ ] **Spelling integration and acceptance — post-MVP, parked by user.** The local DA/en-GB preview above is implemented
-  and independently tested; integrate only after user approval. Danish suggestions remain
-  disabled after measured timeouts. Broader languages, representative quality/platform checks,
-  dictionary updates and institutional licence review remain open. Preserve recording language,
-  private vocabulary, draft/timing guards and saved opt-out. The
+- [ ] **Spelling integration and acceptance — ported to v2, hidden in MVP.** The user decided
+  "Hidden in v2" on 19 November: the local DA/en-GB preview above is re-applied to v2 (branch
+  claude/spelling-hidden, T155, [ADR 0185](docs/decisions/0185-local-passage-spelling.md))
+  behind the `spelling` release-profile feature: on in full, hidden and refused in MVP while
+  existing private vocabulary stays readable/removable. Settings rows moved to 12/13 (B464).
+  Danish suggestions remain disabled after measured timeouts. Remaining: the user's choice to
+  show it, broader languages, representative quality/platform checks, dictionary updates and
+  institutional licence review (Spylls ships an MPL-2.0 LICENSE although its metadata says MIT).
+  Preserve recording language, private vocabulary, draft/timing guards and saved opt-out. The
   [original design](docs/proposals/offline-spelling-2026-11-05.md) retains the wider future plan.
   On 12 November the user proposed underlines directly in the Text editor with on-demand
   alternatives instead of the separate spelling panel. Right-click/keyboard access is the
   recommendation; the trigger remains undecided. Preserve double-click selection, caret,
-  native Undo, timing and local-only processing; no UI integration is authorized by this proposal.
+  native Undo, timing and local-only processing; no UI integration is authorized by this proposal
+  and the hidden v2 port keeps the reviewed panel.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,

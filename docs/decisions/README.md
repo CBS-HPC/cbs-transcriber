@@ -185,5 +185,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0180 — Undo last change by exact predecessor restoration](0180-undo-last-change.md) (slice 1 implemented; hidden in the MVP profile)
 - [0181 — History change list and Revert this change](0181-history-change-list.md) (slice 2 implemented; hidden in the MVP profile)
 - [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; hidden in the MVP profile)
+- [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

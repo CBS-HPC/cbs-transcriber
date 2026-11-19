@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="/static/app.css" />
     <script src="/static/library.js" defer></script>
     <script src="/static/app.js" defer></script>
+    <script src="/static/spelling.js" defer></script>
     <script src="/static/background_exports.js" defer></script>
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
@@ -1292,6 +1293,14 @@
             </div>
           </div>
         </fieldset>
+        <button
+          type="button"
+          class="button subtle"
+          id="spelling-project-vocabulary"
+          data-feature="spelling"
+        >
+          Project vocabulary
+        </button>
         <p id="project-edit-note" role="status"></p>
         <div
           id="project-save-unconfirmed"
@@ -1335,6 +1344,40 @@
         </p>
         <button id="project-delete" type="button" class="button danger">
           Delete Project
+        </button>
+      </div>
+    </dialog>
+    <!-- Private spelling vocabulary (ADR 0185): hidden in the MVP profile. -->
+    <dialog
+      id="spelling-vocabulary-dialog"
+      aria-labelledby="spelling-vocabulary-title"
+      data-feature="spelling"
+    >
+      <div class="dialog-heading">
+        <h2 id="spelling-vocabulary-title">Vocabulary</h2>
+      </div>
+      <p class="field-note">
+        One word or name per line. These entries stay private in this library.
+      </p>
+      <label
+        >Vocabulary<textarea
+          id="spelling-vocabulary-text"
+          spellcheck="false"
+          maxlength="200000"
+          rows="10"
+        ></textarea>
+      </label>
+      <p id="spelling-vocabulary-status" class="field-note" role="status"></p>
+      <div class="dialog-actions">
+        <button type="button" class="button" id="spelling-vocabulary-cancel">
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="button primary"
+          id="spelling-vocabulary-save"
+        >
+          Save vocabulary
         </button>
       </div>
     </dialog>
@@ -2721,6 +2764,38 @@
           <button id="enhance-check" class="button" type="button">
             Check this computer again
           </button>
+          <!-- Local spelling (ADR 0185): hidden in the MVP profile. -->
+          <section id="spelling-settings" data-feature="spelling">
+            <h3 class="settings-subhead">Local spelling</h3>
+            <p class="field-note">
+              Only the open passage is checked. Text and private vocabulary stay
+              on this computer. Browser spellcheck stays off.
+            </p>
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-enabled" />Check spelling in
+              passage edits</label
+            >
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-auto-download" />Download
+              public spelling dictionaries when needed</label
+            >
+            <button type="button" class="button" id="spelling-settings-save">
+              Save spelling settings
+            </button>
+            <button
+              type="button"
+              class="button subtle"
+              id="spelling-personal-vocabulary"
+            >
+              Personal vocabulary
+            </button>
+            <p
+              id="spelling-settings-status"
+              class="field-note"
+              role="status"
+            ></p>
+            <ul id="spelling-installed" class="spelling-dictionaries"></ul>
+          </section>
           <details id="local-concurrency" class="enhance-rules">
             <summary>Parallel local tasks</summary>
             <p class="settings-note">
