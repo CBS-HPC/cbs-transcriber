@@ -329,6 +329,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V233: Proposed, not implemented. A native MIG owner may offer a full B200 only after 10 min
+  observed IN_QUEUE without RUNNING and two products reads showing the exact MIG FULL and the
+  full GPU AVAILABLE/BUSY, with verified identity, funding and 7x relation; unknown never offers.
+  One click per batch freezes consent; the queued MIG is cancelled and proven never started
+  before one full-GPU POST under a distinct run name. Never two allocations; Stop wins; restart
+  and uncertainty never auto-switch; MVP hides the offer (ADR0184). V76 is unchanged until then.
 - V228: Choosing the open Settings tab again asks before discarding entries the researcher
   typed in the UCloud form or the Hugging Face token box but did not save; without such
   entries it reloads and retries as before. Processing and separately saved controls save on
@@ -2009,6 +2015,7 @@ T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-
 T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven structural agreement, Working fence, presence rows, toolbar labels/confirmations/late-reply fences; 30 backend and 5 browser checks pass (claude/undo-last-change); hidden in MVP pending the user's choice; slices 2 and 3 in T151/T152|V224,V185,V186,I.change-undo,ADR0180
 T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions replacing the per-passage controls when the feature is on; 8 backend and 4 browser checks pass, per-passage browser tests pinned to MVP (claude/undo-last-change); hidden in MVP|V225,V224,V185,V186,I.change-list,ADR0181
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); hidden in MVP|V226,V225,I.version-graph,ADR0182
+T154|.|Proposed only: per-batch full-GPU ask when no native 1g MIG is free; design ADR0184, no code, review or live evidence; read-only live reads and user answers precede implementation|V233,V76,V217,V220,ADR0184
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
