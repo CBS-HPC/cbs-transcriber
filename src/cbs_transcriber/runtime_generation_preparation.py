@@ -8,9 +8,15 @@ and the Stage-1 candidate and active-pointer gates are all on; each stays indepe
 off. The legacy decoder and worker import this module only for a row already born with a
 generation.
 
+A failed candidate no longer blocks its target forever: ``preview_supersession`` and
+``supersede`` replace one exact, provably settled candidate with a fresh owner under a new
+fingerprint-bound confirmation. The old owner keeps every record and obligation and gains a
+permanent receipt; nothing remote is contacted, adopted, released or deleted.
+
 Not implemented (refused): namespace creation, CPU recipes, base-only generations,
-no-ID Retry or successors, name-based reconciliation, failed-candidate supersession,
-environment cleanup, active-selection capture and any public API/UI.
+no-ID Retry or successors, name-based reconciliation, superseding an active, uncertain or
+allocation-holding candidate, environment cleanup, active-selection capture and any public
+API/UI.
 """
 
 import copy
@@ -35,6 +41,11 @@ POLICY = "cbs-runtime-generation-preparation-v1"
 OPERATION_POLICY = "cbs-runtime-generation-operation-v1"
 CONFIRMATION_POLICY = "cbs-runtime-generation-confirmation-v1"
 PROMOTION_FORMAT = "cbs-runtime-generation-promotion-v1"
+SUPERSESSION_POLICY = "cbs-runtime-generation-supersession-v1"
+SUPERSESSION_FORMAT = "cbs-runtime-generation-supersession-receipt-v1"
+# A candidate owner in one of these states has no worker; "settled" also needs no recorded
+# allocation, uncertain POST or reserved capacity (runtime_store._reserved).
+SETTLED = frozenset({"failed", "cancelled", "interrupted"})
 FOLDERS = ("environment", "run")
 OUTCOMES = {"pending", "acknowledged", "conflict", "uncertain"}
 # What a finished PREPARE_ONLY supervisor leaves in a fresh root; anything else (for
@@ -94,6 +105,15 @@ _PROMOTION_KEYS = {
     "specification_sha256",
     "folders_sha256",
     "evidence_sha256",
+    "registry_revision",
+}
+_SUPERSESSION_KEYS = {"policy", "confirmation", "superseded", "evidence", "supersession_sha256"}
+_SUPERSESSION_RECEIPT_KEYS = {
+    "format",
+    "successor_owner_id",
+    "successor_token",
+    "supersession_sha256",
+    "observed_sha256",
     "registry_revision",
 }
 
@@ -255,8 +275,8 @@ def preview(store, credentials):
     confirmation, _, _, entry = _freeze(store, credentials)
     if entry["candidate"] is not None:
         raise Conflict(
-            "Another Runtime generation candidate is unresolved. Superseding it is not "
-            "implemented; its evidence is retained."
+            "Another Runtime generation candidate is unresolved. Only an explicitly confirmed "
+            "supersession of a settled candidate can replace it; its evidence is retained."
         )
     return confirmation
 
@@ -288,6 +308,20 @@ def _deduplicated(db, candidate, confirmation):
     return owner
 
 
+def _require_decodable(db):
+    # An unknown live owner cannot establish that another allocation is safe.
+    for (identifier,) in db.execute(
+        "SELECT id FROM runtime_preparations WHERE archived=0"
+    ).fetchall():
+        try:
+            preparation._get(db, identifier)
+        except preparation.Conflict:
+            raise Conflict(
+                "Resolve unverified preparation evidence in Activity "
+                "before starting another allocation."
+            ) from None
+
+
 def admit(store, credentials, confirmation, guard):
     """Insert the durable owner and its registry candidate in one writer transaction.
 
@@ -315,16 +349,7 @@ def admit(store, credentials, confirmation, guard):
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
         guard()  # BEGIN may have waited; the fence must still hold at acceptance.
-        for (identifier,) in db.execute(
-            "SELECT id FROM runtime_preparations WHERE archived=0"
-        ).fetchall():
-            try:
-                preparation._get(db, identifier)
-            except preparation.Conflict:
-                raise Conflict(
-                    "Resolve unverified preparation evidence in Activity "
-                    "before starting another allocation."
-                ) from None
+        _require_decodable(db)
         entry = generations.snapshot(db, target)
         if entry["candidate"] is not None:
             existing = _deduplicated(db, entry["candidate"], confirmation)
@@ -368,6 +393,245 @@ def admit(store, credentials, confirmation, guard):
         "prepared": False,
         "runtime_id": api.runtime_id(),
         "operation": preparation.card(value),
+        "deduplicated": False,
+    }
+
+
+def _settled(db, target, candidate):
+    """The exact candidate's own owner, provably settled and never promoted.
+
+    Settled: no worker (``SETTLED`` state) and no recorded open allocation, uncertain POST
+    or reserved capacity. An uncertain POST may be a running paid allocation and stays a
+    blocker until exact recovery exists. Uncertain/conflicting folder intents and a pending
+    run-folder cleanup concern only this owner's own random paths; they stay on it as
+    visible obligations and never block, transfer or get adopted.
+    """
+    try:
+        owner = preparation._get(db, candidate["owner_id"], owned=True)
+    except KeyError:
+        raise Conflict(
+            "The Runtime generation candidate has no owner record. Preserve its evidence."
+        ) from None
+    except preparation.Conflict:
+        raise Conflict(
+            "The Runtime generation candidate's owner is historical or unverified. "
+            "Preserve its evidence."
+        ) from None
+    generation, journal = owner["frozen"].get("generation"), owner["journal"]
+    if (
+        generation is None
+        or not preparation._same(generation["target"], target)
+        or generation["token"] != candidate["token"]
+        or generation["operation_sha256"] != candidate["operation_sha256"]
+        or not preparation._same(generation["expected_revision"], candidate["expected_revision"])
+        or not preparation._same(generation["operation"]["compute"], candidate["compute"])
+        or "generation_supersession" in journal
+        or "generation_promotion" in journal
+    ):
+        raise Conflict(
+            "The Runtime generation candidate does not match its owner. Preserve its evidence."
+        )
+    if owner["state"] not in SETTLED:
+        raise Conflict(
+            "The Runtime generation candidate is still active. Stop it and wait for its "
+            "outcome before superseding it."
+        )
+    if runtime_store._uncertain(journal):
+        raise Conflict(
+            "The Runtime generation candidate's submission outcome is uncertain. A possibly "
+            "running allocation is never superseded; its evidence is retained."
+        )
+    if runtime_store._reserved(journal):
+        raise Conflict(
+            "The Runtime generation candidate still holds a recorded allocation or capacity. "
+            "Stop it and wait for UCloud's terminal state before superseding it."
+        )
+    return owner
+
+
+def _evidence(owner):
+    """What the user confirms is retained on the superseded owner, bound to its exact row."""
+    journal = owner["journal"]
+    folders = journal.get("generation_folders") or {}
+    return {
+        "owner_id": owner["id"],
+        "state": owner["state"],
+        "job_id": journal.get("job_id"),
+        "remote_state": journal.get("remote_state"),
+        "folders": {kind: folders[kind]["outcome"] for kind in FOLDERS if kind in folders},
+        "cleanup_state": journal.get("cleanup_state"),
+        "observed_sha256": _digest(
+            {key: owner[key] for key in ("id", "epoch", "state", "journal")}
+        ),
+    }
+
+
+def _supersession(confirmation, candidate, evidence):
+    value = {
+        "policy": SUPERSESSION_POLICY,
+        "confirmation": confirmation,
+        "superseded": candidate,
+        "evidence": evidence,
+    }
+    return {**value, "supersession_sha256": _digest(value)}
+
+
+def preview_supersession(store, credentials):
+    """Freeze a fresh request plus the exact settled candidate it would replace.
+
+    Read-only, like ``preview``: nothing is created, reserved, released or adopted.
+    """
+    _require_enabled()
+    confirmation, _, _, _ = _freeze(store, credentials)
+    target = confirmation["target"]
+    with store.connection() as db:  # One read: the candidate and its owner agree.
+        entry = generations.snapshot(db, target)
+        if entry["revision"] != confirmation["expected_revision"]:
+            raise Conflict("The Runtime generation registry changed. Review it again.")
+        if entry["candidate"] is None:
+            raise Conflict(
+                "No Runtime generation candidate is unresolved. Review a fresh request instead."
+            )
+        owner = _settled(db, target, entry["candidate"])
+    return _supersession(confirmation, entry["candidate"], _evidence(owner))
+
+
+def _superseded_by(db, old, supersession):
+    """A repeated identical supersession returns its recorded successor, never a second one.
+
+    Only while its frozen request is still current: after the successor's promotion the
+    registry revision moved on, so ``supersede`` refuses the stale request before this.
+    """
+    try:
+        owner = preparation._get(db, old)
+    except (KeyError, preparation.Conflict):
+        return None
+    receipt = owner["journal"].get("generation_supersession")
+    if type(receipt) is not dict or receipt["supersession_sha256"] != supersession.get(
+        "supersession_sha256"
+    ):
+        return None
+    try:
+        return owner, preparation._get(db, receipt["successor_owner_id"])
+    except (KeyError, preparation.Conflict):
+        raise Conflict(
+            "The recorded Runtime generation successor is unverified. Preserve its evidence."
+        ) from None
+
+
+def supersede(store, credentials, supersession, guard):
+    """Replace one exact settled candidate: one writer transaction, nothing remote.
+
+    Records the old owner's permanent receipt (advancing its epoch to fence any stale
+    writer), inserts the new durable owner and swaps the registry candidate atomically.
+    The registry revision and active pointer are unchanged. The old owner keeps every
+    folder intent, allocation record and cleanup obligation; its random paths are never
+    reused, adopted, released or deleted. ``guard`` is the caller's fresh access fence.
+    """
+    _require_enabled()
+    if not callable(guard):
+        raise Conflict("Runtime generation supersession requires its fresh access guard.")
+    if (
+        type(supersession) is not dict
+        or set(supersession) != _SUPERSESSION_KEYS
+        or type(supersession["confirmation"]) is not dict
+        or set(supersession["confirmation"]) != _CONFIRMATION_KEYS
+        or type(supersession["superseded"]) is not dict
+        or type(supersession["superseded"].get("owner_id")) is not str
+        or _HEX32.fullmatch(supersession["superseded"]["owner_id"]) is None
+    ):
+        raise Conflict("Review and confirm the Runtime generation supersession again.")
+    confirmation, old = supersession["confirmation"], supersession["superseded"]["owner_id"]
+    guard()
+    fresh, chosen, model_plan, _ = _freeze(store, credentials)
+    if not preparation._same(fresh, confirmation):
+        raise Conflict("The Runtime generation request changed. Review and confirm it again.")
+    _accepted_files(model_plan)
+    guard()
+    identity = preparation._identity(chosen, model_plan=model_plan)
+    if (
+        preparation.fingerprint(chosen, model_plan=model_plan)
+        != confirmation["connection_fingerprint"]
+    ):
+        raise Conflict("The Runtime generation request changed. Review and confirm it again.")
+    target, operation = confirmation["target"], confirmation["operation"]
+    # The old owner's control slot excludes a concurrent Stop/Retry/cleanup on it.
+    with preparation._control(old), store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        guard()  # BEGIN may have waited; the fence must still hold at acceptance.
+        _require_decodable(db)
+        repeated = _superseded_by(db, old, supersession)
+        if repeated is not None:
+            retired, successor = repeated
+            return {
+                "prepared": False,
+                "runtime_id": api.runtime_id(),
+                "operation": preparation.card(successor),
+                "superseded": preparation.card(retired),
+                "deduplicated": True,
+            }
+        entry = generations.snapshot(db, target)
+        candidate = entry["candidate"]
+        if (
+            entry["revision"] != confirmation["expected_revision"]
+            or candidate is None
+            or not preparation._same(candidate, supersession["superseded"])
+        ):
+            raise Conflict("The Runtime generation candidate changed. Review it again.")
+        owner = _settled(db, target, candidate)
+        if not preparation._same(
+            _supersession(confirmation, candidate, _evidence(owner)), supersession
+        ):
+            raise Conflict("The superseded Runtime generation changed. Review it again.")
+        identifier, token = new_id(), secrets.token_hex(16)
+        generation = {
+            "policy": POLICY,
+            "target": target,
+            "token": token,
+            "owner_id": identifier,
+            "expected_revision": confirmation["expected_revision"],
+            "operation": operation,
+            "operation_sha256": confirmation["operation_sha256"],
+            "confirmation_sha256": confirmation["confirmation_sha256"],
+        }
+        value = preparation._insert(
+            db,
+            {**identity, "generation": generation},
+            confirmation["connection_fingerprint"],
+            identifier=identifier,
+        )
+        retired = preparation._update(
+            db,
+            owner,
+            epoch=owner["epoch"] + 1,
+            message="Superseded by a newer Runtime generation request. Its evidence and "
+            "obligations are retained.",
+            journal={
+                "generation_supersession": {
+                    "format": SUPERSESSION_FORMAT,
+                    "successor_owner_id": identifier,
+                    "successor_token": token,
+                    "supersession_sha256": supersession["supersession_sha256"],
+                    "observed_sha256": supersession["evidence"]["observed_sha256"],
+                    "registry_revision": entry["revision"],
+                }
+            },
+            _generation_writer=True,
+        )
+        generations.supersede_candidate(
+            db,
+            target,
+            superseded=candidate,
+            owner_id=identifier,
+            token=token,
+            operation_sha256=confirmation["operation_sha256"],
+            compute=operation["compute"],
+        )
+    return {
+        "prepared": False,
+        "runtime_id": api.runtime_id(),
+        "operation": preparation.card(value),
+        "superseded": preparation.card(retired),
         "deduplicated": False,
     }
 
@@ -553,6 +817,24 @@ def validate_owner(value):
         or journal.get("remote_state") != "SUCCESS"
     ):
         _bad()
+    if "generation_supersession" in journal:
+        # Permanently settled: any later write that would requeue, reserve or promote this
+        # owner fails decoding and rolls back with it.
+        receipt = journal["generation_supersession"]
+        if (
+            type(receipt) is not dict
+            or set(receipt) != _SUPERSESSION_RECEIPT_KEYS
+            or receipt["format"] != SUPERSESSION_FORMAT
+            or _hex(receipt["successor_owner_id"], _HEX32) == identifier
+            or _hex(receipt["successor_token"], _HEX32) == generation["token"]
+            or _hex(receipt["supersession_sha256"], _HEX64) is None
+            or _hex(receipt["observed_sha256"], _HEX64) is None
+            or not preparation._same(receipt["registry_revision"], generation["expected_revision"])
+            or value["state"] not in SETTLED
+            or promotion is not None
+            or runtime_store._reserved(journal)
+        ):
+            _bad()
 
 
 def _write(store, identifier, epoch, change, *, drain=False):
@@ -886,6 +1168,8 @@ def verify_and_promote(store, owner, epoch, client, deadline, *, stopping=None):
     if value["state"] == "completed":
         return True  # Repeated acknowledgment; decoding validated its promotion receipt.
     journal, frozen = value["journal"], value["frozen"]
+    if "generation_supersession" in journal:
+        raise Conflict("A superseded Runtime generation is never promoted. Preserve its evidence.")
     if journal.get("stop_intent"):
         return False
     settings, generation, root = _owner(value)

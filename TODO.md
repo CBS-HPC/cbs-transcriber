@@ -71,6 +71,13 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   Stage 2 (disabled owner/folder/readiness-promotion slice) is implemented on
   `codex/mvp-v2-runtime-protocol`: builder `e9dd23d`, independent review `229865a`, defect
   fix `600141f` (B453); combined on `claude/v2-integration` with all switches off.
+  - [x] Disabled supersession of a settled failed candidate (`claude/runtime-supersession`,
+    19 November, synthetic only). Independent review is still required before enablement.
+  - [ ] Strict comparison with UCloud's normalised specification:
+    [designed](docs/proposals/runtime-strict-specification-comparison-2026-11-19.md);
+    needs authorized real UCloud job replies.
+  - [ ] Real create-folder reply shapes and a frozen Terminal script-parameter record
+    (both need real UCloud evidence and the user's authorization).
   Admission/carry/execution/repair/capture/restore/CPU and live acceptance remain (ADR 0176).
 
 - [x] **Existing sole-result Working on schema 19 (T147).** `codex/mvp-v2-existing-working`

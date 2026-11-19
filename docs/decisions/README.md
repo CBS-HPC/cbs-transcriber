@@ -2,7 +2,7 @@
 
 - [0128 — Reversible library list visibility](0128-library-list-visibility.md) (proposed)
 - [0144 — Permanent deletion of an inactive library](0144-permanent-library-deletion.md) (proposed)
-- [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stage 1 verified separately; activation held)
+- [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stages 1–2 and settled-candidate supersession; activation held)
 - [0177 — Funding-based CPU fallback](0177-funding-based-compute-fallback.md) (agreed; not implemented)
 - [0178 — Bounded project-funding observations](0178-bounded-project-funding-observation.md) (conditional design Go; unimplemented)
 

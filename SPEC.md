@@ -370,6 +370,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   policy keeps exact paths/receipts. Restore drops operational pointers and archives owners.
   Protected generation proof compares type-strictly; stored owners decode from frozen data
   only, never current version constants.
+  A settled failed candidate is replaced only by explicit fingerprint-bound supersession:
+  one writer inserts the new owner, records the old owner's permanent receipt and swaps the
+  exact candidate, without revision/pointer change, remote action or released obligations.
+  Active, stop-pending, allocation-holding or uncertain-POST candidates keep blocking.
   Stage1 only validates data/paths and candidate CAS: no caller-ready promotion/capture grant.
   All activation stays disabled until owner/admission/execution/capture/restore and live gates.
   [ADR 0176](docs/decisions/0176-isolated-runtime-generation-recovery.md).
@@ -1966,7 +1970,7 @@ T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
-T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2 owner/folder/promotion slice implemented disabled e9dd23d, independent Go 229865a, D1-D3 fix 600141f (67 adversarial/84 builder/285 legacy Runtime passes); no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
+T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2 owner/folder/promotion slice implemented disabled e9dd23d, independent Go 229865a, D1-D3 fix 600141f (67 adversarial/84 builder/285 legacy Runtime passes); disabled settled-candidate supersession added 19 November (claude/runtime-supersession, synthetic only, review pending); strict normalised-specification comparison designed (proposal), needs real UCloud replies; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
 T146|x|Standalone bounded project-funding observer: unit pin verified vs upstream 2c23d295, watchdog deadline, Project/Authorization check; builder 8698d4c and independent Go dccf2f6 (259 tests); unwired, no routing/CPU activation|V221,V220,I.providers,ADR0178
 T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
 T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148

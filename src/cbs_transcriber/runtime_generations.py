@@ -5,7 +5,9 @@ readiness nor execution authority. Active-selection capture and remote operation
 deliberately do not exist here. The private, separately disabled active-pointer writer is
 the registry half of the Stage-2 owner promotion; only
 ``runtime_generation_preparation.verify_and_promote`` may call it, inside the same writer
-transaction as the owner's completion. Callers own their SQLite transaction.
+transaction as the owner's completion. Likewise only ``runtime_generation_preparation.
+supersede`` may replace a settled candidate, inside the transaction that records the old
+owner's supersession receipt. Callers own their SQLite transaction.
 """
 
 import copy
@@ -376,6 +378,52 @@ def reserve_candidate(db, target, *, expected_revision, owner_id, token, operati
         changed = db.execute(
             "UPDATE settings SET value=? WHERE id=? AND value=?", (encoded, SETTING, previous)
         ).rowcount
+    if changed != 1:
+        _refuse()
+    return snapshot(db, base)
+
+
+def supersede_candidate(db, target, *, superseded, owner_id, token, operation_sha256, compute):
+    """Disabled: replace one exact settled candidate with a fresh one at the same revision.
+
+    Only ``runtime_generation_preparation.supersede`` may call it, inside the same writer
+    transaction that records the superseded owner's permanent receipt and inserts the new
+    owner. ``superseded`` must equal the stored candidate exactly (canonical JSON, so a
+    re-typed or stale expectation refuses). The revision does not advance (only promotion
+    advances it), the active pointer is untouched and nothing is deleted or released here.
+    """
+    if not CANDIDATE_RESERVATION_ENABLED:
+        raise Conflict("Runtime generation candidate supersession is disabled.")
+    if not db.in_transaction:
+        raise Conflict("Runtime generation supersession requires a writer transaction.")
+    base = validate_target(target)
+    registry, previous = _registry(db)
+    entry = registry["targets"].get(base["target_sha256"])
+    if (
+        entry is None
+        or previous is None
+        or entry["candidate"] is None
+        or _encoded(entry["candidate"]) != _encoded(superseded)
+    ):
+        _refuse()
+    candidate = {
+        "owner_id": owner_id,
+        "token": token,
+        "expected_revision": entry["revision"],
+        "operation_sha256": operation_sha256,
+        "compute": validate_compute(compute),
+    }
+    _candidate(candidate, base, entry["revision"])
+    if candidate["token"] == superseded["token"] or candidate["owner_id"] == superseded["owner_id"]:
+        _refuse()
+    entry["candidate"] = candidate
+    _validate_registry(registry)
+    encoded = _encoded(registry)
+    if len(encoded.encode("utf-8")) > MAX_BYTES:
+        _refuse()
+    changed = db.execute(
+        "UPDATE settings SET value=? WHERE id=? AND value=?", (encoded, SETTING, previous)
+    ).rowcount
     if changed != 1:
         _refuse()
     return snapshot(db, base)

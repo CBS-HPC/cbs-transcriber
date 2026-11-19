@@ -43,7 +43,14 @@ _CONTROLS = set()
 # re-type or remove it; legacy-born owners can never acquire the generation-only keys.
 # The absence receipts are reserved too: name reconciliation never resolves a generation
 # POST, so no generic writer may record one. Legacy rows keep their reconcile semantics.
-GENERATION_ONLY = frozenset({"generation_folders", "generation_submission", "generation_promotion"})
+GENERATION_ONLY = frozenset(
+    {
+        "generation_folders",
+        "generation_submission",
+        "generation_promotion",
+        "generation_supersession",
+    }
+)
 GENERATION_RESERVED = GENERATION_ONLY | {
     "specification",
     "owned_folder",
@@ -970,6 +977,10 @@ def _birth(db, value, fields, journal, trusted):
     )
     if not _same(value["frozen"], frozen) or (not trusted and (completes or changed)):
         raise Conflict("Runtime generation proof can change only through its own verified writers.")
+    receipt = before.get("generation_supersession", _ABSENT)
+    if receipt is not _ABSENT and not _same(after.get("generation_supersession", _ABSENT), receipt):
+        # Not even a trusted writer alters or removes a supersession receipt.
+        raise Conflict("A Runtime generation supersession receipt is permanent. Preserve it.")
 
 
 def _update(db, value, *, journal=None, _generation_writer=False, **fields):
@@ -1107,10 +1118,14 @@ def _release(journal):
 
 
 def _generation_retry(value):
-    """ADR 0176 Stage 2: only known-ID observation of the same owner, never a successor."""
+    """ADR 0176 Stage 2: only known-ID observation of the same owner, never a successor.
+
+    A superseded owner is permanently settled: it is never observed toward promotion again.
+    """
     journal = value["journal"]
     return bool(
         journal.get("job_id")
+        and "generation_supersession" not in journal
         and not journal.get("stop_intent")
         and (
             journal.get("remote_state") not in api.TERMINAL or journal["remote_state"] == "SUCCESS"

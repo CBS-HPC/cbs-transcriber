@@ -252,8 +252,12 @@ def test_every_privileged_writer_and_frozen_root_has_an_exact_reviewed_call_site
     assert where(lambda c, kw, n: c == "reserve_candidate") == [
         (slice_, "admit", "reserve_candidate")
     ]
+    assert where(lambda c, kw, n: c == "supersede_candidate") == [
+        (slice_, "supersede", "supersede_candidate")
+    ]
     assert where(lambda c, kw, n: c == "_insert" and "identifier" in kw) == [
-        (slice_, "admit", "_insert")
+        (slice_, "admit", "_insert"),
+        (slice_, "supersede", "_insert"),
     ]
     assert where(lambda c, kw, n: c == "validate_owner") == [
         ("runtime_preparation.py", "_decode", "validate_owner")
@@ -266,6 +270,7 @@ def test_every_privileged_writer_and_frozen_root_has_an_exact_reviewed_call_site
     ]
     assert where(lambda c, kw, n: "_generation_writer" in kw) == [
         (slice_, "_write", "_update"),
+        (slice_, "supersede", "_update"),
         (slice_, "verify_and_promote", "_update"),
         ("runtime_preparation.py", "begin_submission", "_update"),
     ]
@@ -317,7 +322,13 @@ def test_every_privileged_writer_and_frozen_root_has_an_exact_reviewed_call_site
         )
     ]
     assert dynamic == []
-    for function in (subject.verify_and_promote, generations._publish_active, subject.admit):
+    for function in (
+        subject.verify_and_promote,
+        generations._publish_active,
+        generations.supersede_candidate,
+        subject.admit,
+        subject.supersede,
+    ):
         kinds = {item.kind for item in inspect.signature(function).parameters.values()}
         assert not kinds & {inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL}
     assert list(inspect.signature(subject.verify_and_promote).parameters) == [
@@ -339,6 +350,8 @@ def test_no_route_or_static_asset_names_the_slice(plain):
         "generation_promotion",
         "generation_folders",
         "generation_submission",
+        "generation_supersession",
+        "preview_supersession",
         "CBS runtime generation",
         "verify_and_promote",
     )

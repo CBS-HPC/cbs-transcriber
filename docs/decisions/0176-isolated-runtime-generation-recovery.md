@@ -127,7 +127,8 @@ refuse generation removal, frozen/fingerprint downgrade and injected Ready/spec/
 
 Known-ID recovery, including terminal SUCCESS awaiting verification, observes the same owner.
 No-ID Retry after any create intent/ack, name-based generation reconciliation, successor
-creation, failed-candidate supersession and environment cleanup remain refused in this slice.
+creation and environment cleanup remain refused in this slice. Supersession of a settled
+failed candidate was added separately on 19 November (below).
 No public API/UI, active-selection capture, inference admission, portable-source changes or
 activation are included. Later carry/provenance/restore/live gates remain required.
 
@@ -143,11 +144,56 @@ policy/flavour at fresh submit before any folder or POST. Every entry point now 
 all three switches. Gate: reviewer file 67 passed (no xfail), builder files 84 passed,
 legacy Runtime suites 285 passed/3 Linux-only skips. All three switches remain `False`.
 
-Before enablement: real UCloud create-folder reply shapes (`_acknowledged` accepts items
-without `id`); a frozen record of the Terminal app's script parameter (a fresh submit still
-builds with the current name); the shared observation's loose comparison with UCloud's
-normalised specification; and failed candidates blocking their target until supersession
-exists.
+Before enablement, three gaps remain:
+
+- real UCloud create-folder reply shapes (`_acknowledged` accepts items without `id`);
+- a frozen record of the Terminal app's script parameter (a fresh submit still builds with
+  the current name);
+- the shared observation's loose comparison with UCloud's normalised specification. The
+  strict canonical replacement and the exact real-reply evidence it needs are in the
+  [design note](../proposals/runtime-strict-specification-comparison-2026-11-19.md).
+
+The fourth gap, failed candidates blocking their target forever, now has the disabled
+supersession rule below. Independent review of that rule is also required before enablement.
+
+## Failed-candidate supersession — implemented disabled 19 November
+
+A failed candidate no longer blocks its target forever. The user explicitly replaces it with
+a fresh generation request. That supersession is a separate authority from fresh admission,
+Retry and reconciliation:
+
+- **Eligibility: settled only.** The exact registry candidate must decode to its own
+  non-archived generation owner, matching it by target, token, operation, compute and
+  expected revision. The owner must be in `failed`, `cancelled` or `interrupted`, never
+  promoted or already superseded, and hold no recorded open allocation, uncertain POST or
+  reserved capacity (`runtime_store._reserved`).
+- **What still blocks.** Queued, running, stop-pending and allocation-holding candidates are
+  refused; Stop comes first. An uncertain POST may be a running paid allocation, so it keeps
+  blocking its target until exact recovery exists. A missing, mismatched, archived or
+  undecodable owner refuses.
+- **What does not block.** Uncertain or conflicting folder intents and a pending run-folder
+  cleanup concern only that owner's random paths. They stay on it as visible obligations and
+  are never adopted, transferred, retried or released.
+- **Consent.** `preview_supersession` (read-only, like `preview`) seals the fresh generation
+  confirmation, the exact candidate and the retained evidence: the owner's state, job,
+  remote state, folder outcomes, cleanup state and a digest of its exact row. `supersede`
+  re-freezes everything outside the writer and again inside one `BEGIN IMMEDIATE` writer,
+  under the old owner's control slot. Any type-strict difference refuses. A repeated
+  identical supersession returns its recorded successor only while its frozen request is
+  still current; it never creates a second successor.
+- **One atomic writer.** The same transaction inserts the new durable owner (new ID and
+  token, same expected revision), records the old owner's receipt (successor, supersession
+  and observed digests, registry revision) with its epoch advanced to fence stale writers,
+  and lets `runtime_generations.supersede_candidate` swap the exact candidate by registry
+  CAS. The revision and active pointer do not change; only promotion advances them. Nothing
+  remote is contacted, created, released or deleted.
+- **The receipt is permanent.** `generation_supersession` is generation-only proof. Generic
+  writers can never write it, and not even a trusted writer may alter or remove it. The
+  decoder keeps a superseded owner settled: any write that would requeue, run, reserve or
+  promote it fails decoding and rolls back. Retry and promotion refuse it, while cleanup of
+  its own run folder stays available and never touches either generation root.
+
+No public API/UI is added, and the slice's three switches still gate every entry point.
 
 ## Required gates
 
