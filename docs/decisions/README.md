@@ -5,6 +5,7 @@
 - [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stage 1 verified separately; activation held)
 - [0177 — Funding-based CPU fallback](0177-funding-based-compute-fallback.md) (agreed; not implemented)
 - [0178 — Bounded project-funding observations](0178-bounded-project-funding-observation.md) (conditional design Go; unimplemented)
+- [0184 — Ask before a full GPU when no native 1g MIG is free](0184-native-full-gpu-ask.md) (proposed design with the user's decisions; not implemented, no live evidence)
 
 Accepted architecture decisions. New decisions get the next number; supersede an old
 record explicitly rather than rewriting its historical rationale.
