@@ -26,7 +26,8 @@ LANES = {
 # Native UCloud Transcriber: the lane starts its maximum number of batch workers; the saved
 # "batches at once" limit gates new claims (ADR 0183). Upload speed depends on the network, not
 # this computer's processors, so neither limit follows the CPU count.
-NATIVE_SETTING = 12  # 9 is local concurrency; 10 checked providers; 11 runtime generations.
+# 9 local concurrency; 10 checked providers; 11 runtime generations; 12/13 spelling (ADR 0185).
+NATIVE_SETTING = 14
 NATIVE_WORKERS = 4
 NATIVE_UPLOADS_MAX = 8
 NATIVE_DEFAULTS = {"uploads": 4, "batches": 2}
