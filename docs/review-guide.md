@@ -79,6 +79,18 @@ unavailable; use the exact earlier version in History instead. Consecutive delet
 restoring newest first when placement anchors have changed. Split halves have their own
 restore baselines.
 
+Post-MVP (hidden in the MVP profile): **Undo last …** beside **Versions** undoes the newest
+saved change in this result, one step per click, back to its start. Its label names the step
+("Undo last text edit", "Undo last merge", "Undo last added word timing" …) and its tooltip
+gives the version, time and passage. Every saved content change counts, including added word
+timing, Apply safe updates, conflict decisions and version restores; three or more changed
+passages or a version restore ask first. **Redo …** brings back what you just undid until you
+make another change. Both add new versions, so History keeps everything. Review marks,
+Working choices and notes are not undone; a Checked mark becomes valid again when Undo
+restores its exact passage. Save or cancel an open draft first; typing undo inside the text
+box stays with the browser. If another window saved meanwhile, the newest change is shown
+and nothing is undone.
+
 ## Speakers and manual review
 
 Unnamed voices display as Speaker_01, Speaker_02, and so on within each result. Rename a

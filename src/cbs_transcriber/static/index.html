@@ -29,6 +29,7 @@
     <script src="/static/background_exports.js" defer></script>
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
+    <script src="/static/change_steps.js" defer></script>
     <script src="/static/conflict_review.js" defer></script>
     <script src="/static/portable.js" defer></script>
   </head>
@@ -303,6 +304,25 @@
                   title="This result's saved versions, and the recording's other transcriptions and Trash"
                 >
                   Versions
+                </button>
+              </div>
+              <!-- Undo last change / Redo (ADR 0180), directly under Versions. -->
+              <div class="change-steps" data-feature="undo_last_change">
+                <button
+                  id="undo-last"
+                  class="button change-step"
+                  type="button"
+                  disabled
+                >
+                  ↶ Undo
+                </button>
+                <button
+                  id="redo-last"
+                  class="button change-step"
+                  type="button"
+                  disabled
+                >
+                  ↷ Redo
                 </button>
               </div>
               <p id="working-version-status" class="field-note"></p>

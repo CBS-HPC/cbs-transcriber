@@ -147,6 +147,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
+- I.change-undo: the same merge-undo-options reply carries `head_version_id` plus `undo` and
+  `redo` blocks (action, version, counts, confirm, or an unavailable message) when the
+  `undo_last_change` feature is on. POST transcripts/{rid}/undo-last and redo-last bind
+  revision, head version, the offered step and the Working choice; 409 when stale (ADR 0180).
 - I.native-batch: one explicit selected-file request groups identical native model/connection
   settings into one UCloud allocation with a unique input directory and per-file outputs/results.
   Retain local per-recording identities and durable shared-run ownership/recovery.
@@ -319,6 +323,14 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V224: Undo last change re-saves the exact predecessor of the newest content change (hash
+  differs from its predecessor) and Redo the exact version the newest Undo removed, both as
+  appended change_undo/change_redo versions; history is never rewritten. A newer save refuses
+  (409) and the browser shows the new newest change. Every saved content change counts; review
+  marks, Working choices and notes are never undone. Structural steps must agree with the
+  proven merge/split/delete inverses; Redo ends at the next other change; reach is the
+  result's start within 500 versions. Undo/Redo rows are passage-presence rows in the deleted
+  passage scan. No global Ctrl+Z (user decisions 19 November; ADR 0180).
 - V223: The Show filter is view-local: it resets when a recording is opened and survives
   re-renders. It hides rendered passages in place, never hides the passage being edited and
   keeps passages edited or marked since the filter was chosen until the next choice. Review
@@ -1968,6 +1980,7 @@ T146|x|Standalone bounded project-funding observer: unit pin verified vs upstrea
 T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
 T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148
 T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-pause Follow; prototype gate removed; Chromium/Windows browser checks only|V210,V188,I.transcript
+T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven structural agreement, Working fence, presence rows, toolbar labels/confirmations/late-reply fences; 30 backend and 5 browser checks pass (claude/undo-last-change); hidden in MVP pending the user's choice; slice 2 change list/diff/Revert this change and slice 3 branch view open|V224,V185,V186,I.change-undo,ADR0180
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results

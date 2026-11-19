@@ -57,6 +57,8 @@
 | Source alignment-fit invalidation | A passage marker suppressing old creation-time alignment word scores after applied timing replacement/adoption, including omitted words; recognition confidence and raw source evidence remain. |
 | Passage / segment | A stretch of transcript with optional start/end times and a speaker label. |
 | Manual passage review | User progress (Not checked, Checked or Needs review) bound to exact saved passage content, independent of uncertainty hints and Working versions. |
+| Change (undo step) | A saved version whose content differs from its predecessor, made by the researcher or applied at their request; no-change saves, Trash/Restore markers, review marks, Working choices and notes are not changes (ADR 0180). |
+| Undo last change / Redo | Appending the exact predecessor of the newest change (Undo) or the exact version the newest Undo removed (Redo) as a new version; history is never rewritten. |
 | Current word mapping | Word offsets and intervals still belonging to the present text; independent of complete coverage and whether a researcher has edited words. |
 | Passage merge | An explicit adjacent join, retaining source text/timing and recording the chosen speaker and prior version. |
 | Passage split | A Unicode text-boundary edit using real word intervals or a deliberate passage audio position; untimed halves remain untimed. |

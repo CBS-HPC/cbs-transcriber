@@ -125,7 +125,8 @@ html[data-off~="wording_adoption"] [data-feature~="wording_adoption"],
 html[data-off~="cloud_backup"]
   [data-feature~="cloud_backup"]:not([data-feature-recovery]),
 html[data-off~="restore_ui"] [data-feature~="restore_ui"],
-html[data-off~="custom_providers"] [data-feature~="custom_providers"] {
+html[data-off~="custom_providers"] [data-feature~="custom_providers"],
+html[data-off~="undo_last_change"] [data-feature~="undo_last_change"] {
   display: none !important;
 }
 .activity-details {
@@ -1191,6 +1192,21 @@ html.busy * {
 #history-open {
   height: 35px;
   min-height: 35px;
+}
+/* Undo last change / Redo (ADR 0180): a compact row under Versions, never widening it. */
+.result-controls > .change-steps {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.change-steps .change-step {
+  max-width: 240px;
+  min-height: 28px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #results-dialog .field-note {
   float: none;

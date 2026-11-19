@@ -33,6 +33,7 @@ FEATURES = {
     "restore_ui": "Restoring a backup",
     "custom_providers": "Setting up a custom or UCloud vLLM provider",
     "activity_diagnostics": "Inline Activity routing details",
+    "undo_last_change": "Undo last change and Redo",
 }
 PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES)}
 LABEL = re.compile(r"[A-Za-z0-9 ._()+-]{1,40}")
@@ -67,6 +68,11 @@ GUARDED_ROUTES = tuple(
         ("PUT", r"/api/library/portable-retention", "cloud_backup"),
         ("POST", r"/api/library/portable-retention/(?:preview|apply)", "cloud_backup"),
         ("POST", r"/api/library/portable-restore", "restore_ui"),
+        (
+            "POST",
+            rf"/api/recordings/{_ID}/transcripts/{_ID}/(?:undo|redo)-last",
+            "undo_last_change",
+        ),
     )
 )
 

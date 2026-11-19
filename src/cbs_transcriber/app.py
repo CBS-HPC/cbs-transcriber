@@ -969,10 +969,11 @@ def create_app(
 
     app = FastAPI(title="CBS Transcriber", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.queue, app.state.credentials = store, queue, credentials
-    from . import passage_restore_routes, passage_review_routes
+    from . import change_undo_routes, passage_restore_routes, passage_review_routes
 
     passage_review_routes.install(app, store)
     passage_restore_routes.install(app, store)
+    change_undo_routes.install(app, store)
     app.state.deletions = deletion_requests
     app.state.export_tasks = export_manager
     app.state.huggingface_tasks = hf_manager
@@ -2388,7 +2389,12 @@ def create_app(
         from . import passage_undo
 
         try:
-            return passage_undo.options(store, identifier, result_id)
+            return passage_undo.options(
+                store,
+                identifier,
+                result_id,
+                steps=app.state.profile.enabled("undo_last_change"),
+            )
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
 

@@ -1,8 +1,10 @@
 # History, Undo last change and change list — design proposal, 18 November 2026
 
-Status: proposal only. It answers topic 4 of
+Status: accepted 19 November 2026 with every recommended answer; slice 1 (section 6) is
+implemented as [ADR 0180](../decisions/0180-undo-last-change.md), hidden in the MVP profile.
+It answers topic 4 of
 [editor-review-decisions-2026-11-12](../work-plans/editor-review-decisions-2026-11-12.md)
-and TODO "Track and roll back manual edits". Nothing here is implemented or authorized.
+and TODO "Track and roll back manual edits". Slices 2 and 3 are not implemented yet.
 
 ## In short (for researchers)
 

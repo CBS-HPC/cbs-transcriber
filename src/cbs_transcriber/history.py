@@ -30,6 +30,9 @@ EDIT_ACTIONS = {
     "result_conflict_review",
     "wording_adopt",
     "timing_realign",
+    # Undo last change / Redo (ADR 0180): server-recorded exact predecessor restorations.
+    "change_undo",
+    "change_redo",
 }
 EDIT_CONTEXT = {
     "segment_id",

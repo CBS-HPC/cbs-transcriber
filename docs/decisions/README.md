@@ -182,5 +182,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0174 — Native startup reconnection](0174-native-startup-reconnection.md)
 - [0175 — Runtime preparation observation recovery](0175-runtime-preparation-observation-recovery.md)
 - [0179 — Existing sole-result Working on schema 19](0179-existing-working-schema19.md) (design Go; unimplemented)
+- [0180 — Undo last change by exact predecessor restoration](0180-undo-last-change.md) (slice 1 implemented; hidden in the MVP profile)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

@@ -812,7 +812,7 @@ function manualTranscriptEdit(path, options) {
         path,
       )) ||
     (method === "POST" &&
-      /^\/recordings\/[^/]+\/(?:segments\/[^/]+\/(?:merge|undo-merge|undo-split|split(?:-v2)?|delete|restore)|transcripts\/[^/]+\/(?:merge|conflicts|wording-adopt|versions\/[^/]+\/restore))$/u.test(
+      /^\/recordings\/[^/]+\/(?:segments\/[^/]+\/(?:merge|undo-merge|undo-split|split(?:-v2)?|delete|restore)|transcripts\/[^/]+\/(?:merge|conflicts|wording-adopt|undo-last|redo-last|versions\/[^/]+\/restore))$/u.test(
         path,
       ))
   );
@@ -834,6 +834,8 @@ function manualEditTarget(path, method, body = {}) {
     body.direction ?? null,
     body.fingerprint ?? null,
     body.delete_version_id ?? null,
+    // Undo/Redo last change: the exact offered step (ADR 0180).
+    body.version_id ?? null,
   ]);
 }
 async function workingEditChoice(target, fresh = false, preview = null) {
@@ -4229,7 +4231,11 @@ function historyAction(action) {
       ? "merged enhancement"
       : action === "wording_adopt"
         ? "adopted comparison wording"
-        : String(action).replaceAll("_", " ");
+        : action === "change_undo"
+          ? "undo last change"
+          : action === "change_redo"
+            ? "redo"
+            : String(action).replaceAll("_", " ");
 }
 function historyActor(kind) {
   return kind === "local_user"
@@ -6773,6 +6779,7 @@ function refreshMergeUndoOptions() {
     $("#merge-undo-check-error").hidden = true;
     if (typeof renderDeletedPassages === "function")
       renderDeletedPassages(null);
+    if (typeof renderChangeSteps === "function") renderChangeSteps();
     return;
   }
   const epoch = viewEpoch;
@@ -6831,6 +6838,7 @@ function refreshMergeUndoOptions() {
   }
   if (typeof renderDeletedPassages === "function")
     renderDeletedPassages(mergeUndoOptions.response);
+  if (typeof renderChangeSteps === "function") renderChangeSteps();
   if (!mergeUndoOptions.ids || !mergeUndoOptions.splitIds || structureLocked())
     return;
   for (const passage of $("#transcript").querySelectorAll("[data-segment]")) {
