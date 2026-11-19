@@ -32,17 +32,24 @@ discussion"). Root records them here; SPEC/TODO entries follow when each piece l
   wording as a per-passage suggestion, never an automatic replacement; changed passages start
   as Needs review and carry a visible re-transcribed tag that never implies approval.
 
-## 4. History and rollback — direction agreed, scope pending
+## 4. History and rollback — decided 19 November
 
 - The user prefers one **Undo last change** over separate Undo split / Undo merge / Restore
   buttons. Its label names the next step (for example "Undo text edit", then "Undo merge"),
   walking back through this result's history; undo itself is recorded, never erasing history.
 - The user wants changes visualised like Git: a change list with word-level diffs, and a
   branch-style view of results/versions with the Working marker.
-- Open: whether per-action buttons are removed or kept inside the change list for selective
-  (non-latest) reverts, Redo, and how far back Undo may reach.
 - 18 November: [design proposal](../proposals/history-undo-2026-11-18.md) with recommended
-  answers to five questions; nothing is implemented until the user chooses.
+  answers to five questions.
+- 19 November, the user chose every recommended answer:
+  1. Older merges, splits and deletions are reverted from the History change list ("Revert
+     this change"); the per-passage buttons and the Deleted passages section then go away
+     (slice 2; they stay until the change list can offer the same reverts).
+  2. One **Redo**, available until the next other change.
+  3. Undo reaches back to the result's start, one step per click, within the 500-version bound.
+  4. Every saved content change counts, including added word timing, Apply safe updates,
+     conflict decisions, wording adoption and version restore.
+  5. Review marks stay outside Undo; they keep following the passage text (ADR 0148).
 
 ## UCloud key change — decided and fixed
 
