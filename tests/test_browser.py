@@ -117,6 +117,14 @@ def page(request):
         browser.close()
 
 
+def deny_protected(store, provider_id):
+    """A saved Protected denial, as the API or an older library can record it."""
+    store.execute(
+        "UPDATE providers SET value=json_set(value,'$.approved_for',json('[]')) WHERE id=?",
+        (provider_id,),
+    )
+
+
 def skip_first_use(page):
     """Dismiss the visible setup dialog as a user, before unrelated home-page actions."""
     page.wait_for_function("() => firstUse.ready")
@@ -1158,12 +1166,19 @@ def test_browser_provider_tabs_project_storage_and_policy(
     screenshot = Path("test-results/provider-settings.png")
     screenshot.parent.mkdir(exist_ok=True)
     page.screenshot(path=str(screenshot))
-    # New UCloud configurations default to Protected; this revokes the edited model only.
+    # New UCloud configurations default to Protected. While allowed, the box is hidden
+    # (user decision 19 November); a saved denial still applies to that model only.
     provider_advanced(page)
-    expect(page.locator('[name="approved-for"][value="protected"]')).to_be_checked()
-    page.locator('[name="approved-for"][value="protected"]').uncheck()
-    page.get_by_role("button", name="Save settings").click()
+    approval = page.locator('[name="approved-for"][value="protected"]')
+    expect(approval).to_be_checked()
+    expect(approval).to_be_hidden()
+    expect(page.locator("#provider-policy-summary")).to_have_text(
+        "Allowed for Standard and Protected projects."
+    )
+    deny_protected(app.state.store, page.locator("#settings-provider").input_value())
+    page.get_by_role("button", name="Close settings").click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
+    page.reload()
     page.locator("#sidebar-create").click()
     page.locator("#name-input").fill("Protected research")
     page.locator("#project-classification").select_option("protected")
@@ -1224,10 +1239,19 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator("#settings-provider")).to_have_value(turbo["id"])
     provider_advanced(page)
-    page.locator('[name="approved-for"][value="protected"]').uncheck()
-    page.get_by_role("button", name="Save settings").click()
-    expect(page.locator("#settings-dialog")).not_to_be_visible()
+    expect(approval).to_be_hidden()
+    page.get_by_role("button", name="Close settings").click()
+    deny_protected(app.state.store, turbo["id"])
+    page.reload()
     expect(page.locator("#bulk-provider")).to_contain_text("No approved providers")
+    # A connection saved as not allowed shows its box again, so the choice can be undone.
+    page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
+    provider_advanced(page)
+    expect(approval).to_be_visible()
+    expect(approval).not_to_be_checked()
+    expect(page.locator("#provider-policy-summary")).to_contain_text("Not allowed")
+    page.get_by_role("button", name="Close settings").click()
     page.locator("#select-all").click()
     expect(page.locator("#transcribe-selected")).to_be_disabled()
     assert (moved_folder / "project.json").exists()

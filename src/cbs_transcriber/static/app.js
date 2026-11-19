@@ -1738,7 +1738,7 @@ $("#browse-project-storage").addEventListener(
   }),
 );
 const PROJECT_SETTINGS_NOTE =
-  "Save to apply changes. A new parent folder moves this project's files. Protected projects use approved providers only.";
+  "Save to apply changes. A new parent folder moves this project's files. Protected projects use only connections allowed for Protected data.";
 let projectForm = null;
 const savingProjects = new Set(),
   savingProjectNotes = new Set(),
@@ -8961,6 +8961,26 @@ for (const event of ["input", "change"])
     },
     true,
   );
+// Choosing the open Settings tab again reloads it (also the retry after a load error), so
+// it first asks before discarding entries typed but not saved (user decision 19 November).
+// Processing and the two controls above save on change and never hold unsaved entries.
+let settingsUnsaved = false;
+for (const type of ["input", "change"])
+  $("#settings-form").addEventListener(
+    type,
+    (event) => {
+      if (
+        !event.isTrusted ||
+        $("#processing-panel").contains(event.target) ||
+        ["enhance-prepare-ucloud", "runtime-max-allocations"].includes(
+          event.target.id,
+        )
+      )
+        return;
+      settingsUnsaved = true;
+    },
+    true,
+  );
 $("#settings-form").addEventListener(
   "invalid",
   (event) => {
@@ -9186,8 +9206,9 @@ function providerSummary() {
     state.settingsTab === "ucloud-vllm" && !$("#base-url").value
       ? "Awaiting deployment · Saving starts no hosting job or model download."
       : capability;
-  $("#provider-policy-summary").textContent =
-    `Protected projects: ${$('[name="approved-for"]').checked ? "Allowed" : "Not allowed"}. Change in Advanced settings.`;
+  $("#provider-policy-summary").textContent = $(".provider-approvals").hidden
+    ? "Allowed for Standard and Protected projects."
+    : `Protected projects: ${$('[name="approved-for"]').checked ? "Allowed" : "Not allowed"}. Change in Advanced settings.`;
 }
 $('[name="approved-for"]').addEventListener("change", providerSummary);
 let hfVersion = 0,
@@ -9288,6 +9309,7 @@ async function showHuggingFaceTab() {
   $("#hf-panel").hidden = false;
   $("#hf-panel").disabled = true;
   $("#hf-settings-token").value = "";
+  settingsUnsaved = false;
   $("#hf-settings-result").textContent = "Loading…";
   const context = providerContext();
   const status = await api("/huggingface-settings").catch((error) => {
@@ -9321,7 +9343,10 @@ async function hfRequest(button, path, method) {
       },
     });
     if (version !== hfVersion || state.settingsTab !== "huggingface") return;
-    if (method === "PUT") $("#hf-settings-token").value = "";
+    if (method === "PUT") {
+      $("#hf-settings-token").value = "";
+      settingsUnsaved = false;
+    }
     renderHfStatus(status);
     if (status.preparation_task) await pollJobs().catch(() => {});
   } catch (error) {
@@ -9470,6 +9495,7 @@ async function showProcessingTab() {
   providerFormVersion++;
   $("#provider-error").hidden = true;
   state.settingsTab = "processing";
+  settingsUnsaved = false;
   document.querySelectorAll("[data-provider-tab]").forEach((button) => {
     const selected = button.dataset.providerTab === "processing";
     button.setAttribute("aria-selected", String(selected));
@@ -9772,7 +9798,19 @@ function switchProviderTab(tab) {
 document.querySelectorAll("[data-provider-tab]").forEach((button) => {
   button.addEventListener(
     "click",
-    handle(() => switchProviderTab(button.dataset.providerTab)),
+    handle(() => {
+      const tab =
+        button.dataset.providerTab === "openai"
+          ? "ucloud"
+          : button.dataset.providerTab;
+      if (
+        tab === state.settingsTab &&
+        settingsUnsaved &&
+        !confirm("Discard your unsaved changes on this tab and reload it?")
+      )
+        return;
+      return switchProviderTab(button.dataset.providerTab);
+    }),
   );
   button.addEventListener("keydown", (event) => {
     const tabs = [...document.querySelectorAll("[data-provider-tab]")].filter(
@@ -9858,6 +9896,13 @@ function fillProvider(settings) {
   document.querySelectorAll('[name="approved-for"]').forEach((input) => {
     input.checked = (settings.approved_for || []).includes(input.value);
   });
+  // UCloud may serve Standard and Protected projects (user decision 19 November). Its saved
+  // approval stays enforced; the box shows only for a connection saved as not allowed, so
+  // that choice can be undone.
+  $(".provider-approvals").hidden =
+    providerTab(settings) === "ucloud" &&
+    (settings.approved_for || []).includes("protected");
+  settingsUnsaved = false;
   capabilityHelp();
   providerSummary();
   $("#delete-provider").disabled = !settings.id;

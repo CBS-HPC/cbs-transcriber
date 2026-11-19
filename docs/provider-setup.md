@@ -66,8 +66,9 @@ real comparative inference and CBS licence acceptance remain separate. See
 ## Language, protected data and keys
 
 Choose Standard or Protected when creating a project. Protected projects offer only models
-explicitly allowed in provider **Advanced settings**. New UCloud connections default to
-allowed; OpenAI defaults to blocked. Saved choices are retained. This is your recorded
+allowed for Protected data. New UCloud connections are allowed, and post-MVP Settings no
+longer shows that box for them; a connection saved as not allowed shows it in **Advanced
+settings** so it can be allowed again. Saved choices are retained. This is your recorded
 permission, not CBS institutional certification. Revoking permission can block work not yet
 uploaded; it cannot recall accepted uploads. Classification changes wait for active work to stop.
 

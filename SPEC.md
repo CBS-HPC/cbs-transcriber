@@ -329,6 +329,14 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V228: Choosing the open Settings tab again asks before discarding entries the researcher
+  typed in the UCloud form or the Hugging Face token box but did not save; without such
+  entries it reloads and retries as before. Processing and separately saved controls save on
+  change and never ask. Programmatic reloads (late replies, Forget key) are unchanged.
+- V227: v2 Settings hides the UCloud "Allowed for Protected projects" box while the saved
+  connection is allowed (the default); a connection saved as not allowed shows it so the
+  choice can be undone. Saved approvals stay enforced unchanged; no approval is rewritten
+  (user decision 19 November).
 - V226: The branch view is metadata only and bounded; it draws a branch point or merge edge
   only from verified same-recording references and shows unknown sources as gaps. Its actions
   are the existing review/compare selectors (with their draft guards) and the fingerprinted

@@ -35,12 +35,12 @@ journeys built on retired direct OpenAI moved onto a checked native UCloud model
 Settings/runtime/consent cases updated (B458). Tests can no longer reach a real host
 (B456). After these fixes the full browser suite passed on `claude/v2-integration`
 (668 passed); `test_release_profile` fails on this branch only because it packages the MVP
-profile. Settings design findings, unchanged: Protected approval is per model but the form
-does not name the model it edits; choosing the open tab again reloads its form, re-runs the
-UCloud check and drops unsaved entries. That reload is also the tab-error Retry and the
-late Forget-key reply fence, so changing it needs an explicit Retry/discard design first.
-The UCloud form always saves the words_speakers capability, so narrower native profiles
-exist only through the API or legacy saves.
+profile. Settings design findings, decided by the user 19 November (`claude/settings-findings`):
+the Protected approval box is hidden for UCloud, which may serve both classifications, and
+shows only for a connection saved as not allowed so it can be undone (V227); choosing the
+open tab again first asks before discarding unsaved UCloud or Hugging Face entries, while a
+clean tab still reloads and retries as before (V228); always saving words_speakers for UCloud
+is correct because the Transcriber app always identifies speakers (closed, no change).
 
 19 November (Claude): `claude/v2-integration` is loaded on the user's real library after a
 verified backup. Preview feedback fixed on `claude/v2-preview-fixes`: setup returns on each
@@ -673,6 +673,19 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   [Service proposal](docs/cbs-deployment-proposal.md).
 
 ## Planned later or explicitly deferred
+
+- [ ] **Possible later version: UCloud speaker-count options — undecided.** The Transcriber
+  app accepts minimum/maximum speaker counts (and speaker merging). Offering them in Settings
+  or per request is an idea for a later version only; the user has not decided it.
+
+- [ ] **Native UCloud batches: earlier uploads, upload/batch limits and full-GPU choice —
+  decided 19 November.** Upload each file as soon as its own original inspection passes,
+  dropping failed files with their own outcome; only the UCloud submission waits for every
+  member. Settings → UCloud gets "Files uploaded at once per batch" (1–8, default 4; upload
+  speed depends on the network, not CPU cores) and "UCloud Transcriber batches at once" (1–4,
+  default 2). When no 1g MIG is free, Activity asks per batch whether to use a full GPU,
+  stating its higher credit use; nothing switches without that click (amends ADR 0124).
+  Detecting "no MIG free" needs UCloud capacity or queue evidence before activation.
 
 - [x] **Post-MVP branch README simplification and uninstall guide.** The short main guide
   links focused install/review/export/provider/storage/development guides retaining unique detail.
