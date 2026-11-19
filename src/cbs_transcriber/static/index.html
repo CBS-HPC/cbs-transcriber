@@ -3231,6 +3231,42 @@
           </fieldset>
           <details id="provider-advanced">
             <summary>Advanced settings</summary>
+            <div id="native-limits-panel" hidden>
+              <div class="form-columns">
+                <label
+                  >Files uploaded at once per batch<input
+                    id="native-upload-limit"
+                    form="native-limits-form"
+                    type="number"
+                    min="1"
+                    max="8"
+                    step="1"
+                    value="4"
+                    required
+                    disabled
+                    aria-describedby="native-limits-note native-limits-status"
+                /></label>
+                <label
+                  >UCloud Transcriber batches at once<input
+                    id="native-batch-limit"
+                    form="native-limits-form"
+                    type="number"
+                    min="1"
+                    max="4"
+                    step="1"
+                    value="2"
+                    required
+                    disabled
+                    aria-describedby="native-limits-note native-limits-status"
+                /></label>
+              </div>
+              <p id="native-limits-note" class="field-note">
+                Upload speed depends on your network, not this computer's
+                processors. A single-file run counts as one batch. Changes apply
+                to new batches; running batches keep their limits and continue.
+              </p>
+              <p id="native-limits-status" class="field-note" role="status"></p>
+            </div>
             <div id="runtime-capacity-panel" data-feature="cbs_runtime" hidden>
               <label
                 >Simultaneous UCloud runtime allocations<input
@@ -3269,6 +3305,7 @@
         </fieldset>
       </form>
       <form id="runtime-capacity-form" hidden></form>
+      <form id="native-limits-form" hidden></form>
       <form id="local-concurrency-form" hidden></form>
     </dialog>
     <input

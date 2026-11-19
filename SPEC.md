@@ -167,6 +167,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Frozen transcriber/1.12 batches may preserve finished members after fresh exact processed
   observations and two identical valid reads. Unknown references wait for terminal. Existing
   raw uses terminal recovery; early saves never authorize remote cleanup (ADR 0155).
+  GET/PUT /api/native-batches/settings reads/partially saves {uploads 1–8, batches 1–4};
+  the status adds defaults, maxima and the applied batch limit (ADR 0183).
 - I.enhance-api: new UCloud enhancements reuse the Provider Settings UCloud connection and
   API-only job/file operations. No new SSH setup or separate control token. Existing frozen SSH
   runs retain their original recovery path. Runtime/models must remain explicit and validated;
@@ -329,6 +331,28 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V232: An early native selection seals in the transaction that settles its last file: terminal
+  files are resolved and recorded as `dropped_members` beside `membership_sealed`. A sealed or
+  submitted batch admits no file; dropped files never get `native_batch_id`, an upload, a
+  submission descriptor or a result requirement for cleanup/release, and are skipped by deletion
+  scope and startup reconnection (which requires the seal and binds it). Older batches without
+  `native_group` count as sealed and are unchanged (ADR 0183).
+- V231: A selection of two or more native files admits each file as soon as its own original
+  inspection passes; its first admitted file creates the one batch whose manifest is the whole
+  selection, found by the selection digest under the writer transaction (two refuse). Uploads of
+  joined files start at once; only the submission waits until every file is uploaded or dropped.
+  A failed inspection drops only that file with its own outcome. Stop/shutdown before submission
+  stops the batch; later files join it stopped and Retry resumes once. One survivor known at its
+  admission keeps the single-file path. Exactly one owner, no automatic resubmission (ADR 0183).
+- V230: Settings → UCloud saves "Files uploaded at once per batch" (1–8, default 4) and "UCloud
+  Transcriber batches at once" (1–4, default 2) on change, separately from the connection form
+  and its unsaved-entry check. The native lane starts four workers; the batch limit gates new
+  claims under the claim lock and never stops running work; a batch keeps the upload limit it
+  started with; downloads stay at four (ADR 0183).
+- V229: Activity's native batch sentence uses plain words, never raw UCloud states: queued time
+  only from this app's own recorded first observation of that state, "files reported done" from
+  exact log events and "saved" only from local results; log times are this app's read times in
+  local time. Finished or failed batches carry no batch-level log note (ADR 0183).
 - V228: Choosing the open Settings tab again asks before discarding entries the researcher
   typed in the UCloud form or the Hugging Face token box but did not save; without such
   entries it reloads and retries as before. Processing and separately saved controls save on
@@ -616,7 +640,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   PATCH requires the active live result, current recording revision, passage hash and review-row CAS.
   Preserve marks in complete backup/restore; reject malformed or orphan review rows. UI acknowledgments
   remain view/revision fenced and cannot replace drafts or silently mark unsaved wording Checked.
-- V187: Native batch uploads/downloads use at most four in-flight file transfers per batch.
+- V187: Native batch downloads use at most four in-flight file transfers per batch; uploads use
+  the batch's starting Settings → UCloud limit (V230, default four).
   Network tasks own separate control/transfer clients; the coordinator alone merges durable upload,
   output/capture and result receipts. Bound completed output bytes by the transfer window. On error,
   cancellation or shutdown stop admission and drain accepted tasks before releasing the library lease;
@@ -962,7 +987,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   within 2..8, inspection = CPUs/2 within 2..4, API 6, admission 2). Limits gate new claims
   only and apply without restart;
   lowering one never stops running work. Every job is claimed exactly once; native UCloud
-  Transcriber keeps its own two-worker lane; cancellation targets the correct worker, all share
+  Transcriber keeps its own lane, limited by Settings → UCloud (V230); cancellation targets the correct worker, all share
   the library lease through drain, and queued preparation is labelled as waiting rather than
   active conversion. Idle workers of one lane coalesce database polls (ADR 0146).
 - V23: NVivo Windows export has rectangular Timespan/Speaker/Content rows; Mac export uses
@@ -1570,7 +1595,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V142: whole-file HTTP admission is metadata-only and atomically freezes selected intents,
   source ownership, settings/options/features/consent and exact enhancement history. Background
   inspection/materialization holds the library lease and drains bounded lanes; never reserve
-  unready remote membership. One native selected-set barrier creates one owner, while API and
+  unready remote membership. One native selection creates one owner (early admission, V231), while API and
   Runtime members may become ready independently. Preserve append-only sibling ASR and current
   Protected/source/endpoint checks without retargeting or broadening consent. Epoch/phase-bound
   actions cannot become Stop after materialization. Recover only proved local work; corrupt
@@ -2009,6 +2034,7 @@ T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-
 T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven structural agreement, Working fence, presence rows, toolbar labels/confirmations/late-reply fences; 30 backend and 5 browser checks pass (claude/undo-last-change); hidden in MVP pending the user's choice; slices 2 and 3 in T151/T152|V224,V185,V186,I.change-undo,ADR0180
 T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions replacing the per-passage controls when the feature is on; 8 backend and 4 browser checks pass, per-passage browser tests pinned to MVP (claude/undo-last-change); hidden in MVP|V225,V224,V185,V186,I.change-list,ADR0181
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); hidden in MVP|V226,V225,I.version-graph,ADR0182
+T153|~|Native batches: plain Activity status, Settings → UCloud upload/batch limits and per-file early uploads with sealed single-owner submission; synthetic mocked checks pass (claude/native-batch); live UCloud timing/throughput and the full-GPU choice remain|V229,V230,V231,V232,V22,V142,V187,I.native-batch,ADR0183
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -2128,3 +2154,6 @@ B457|2026-11-18|The first-use dialog opens over the home page in every fresh bro
 B458|2026-11-18|The first full v2 browser run failed 20 stale cases that also failed alone: Settings now opens on UCloud and reselecting the open tab reloads it, so redundant #tab-ucloud clicks added a second automatic check or superseded a held reply; clicks on the hidden OpenAI tab timed out; unchecked synthetic UCloud saves left selectors empty; older help/label/heading/save-status texts no longer matched|ADR0170,ADR0167,ADR0162,V208; open Settings directly on UCloud and depart through Hugging Face, record explicit synthetic checks, assert the shipped copy, Retry failed, empty-library brand and partial-timing notice; test-only, original protections retained
 B459|2026-11-19|Tests used this computer's real app folder: the browser restore test registered its temporary restore targets in the real libraries.json, and Library dialog tests listed the real registry and the earlier/packaged library locations, opening the real library read-only. Found while loading the v2 preview on the real library|ADR0050,ADR0051,ADR0096; an autouse fixture gives every test a temporary home and earlier default and skips the real packaged-app scan; guard tests; Git Bash lookups and one short restore root read the real home explicitly; the two leaked registry entries were removed after a verified backup
 B460|2026-11-19|Delete project permanently did nothing when the project was shown as the home page's first project (no #/projects address, e.g. after deleting another project): the dialog's view check compared the literal address, so no request was sent and no message appeared|V93,V148; check the displayed project and view epoch instead of the address, report a stale dialog inside it, reroute home after deletion; home/#/#/ browser regression
+B461|2026-11-19|Activity's native batch card showed raw UCloud states ("UCloud batch · RUNNING", "IN_QUEUE") and kept a batch-level "Last log: model loading reported · log timestamp … (timezone unspecified)" note even after files had finished|V229,T153,ADR0183; compose a plain sentence on each read (queued time only from the app's own recorded first observation, "reported done" from exact log events, "saved" from local results, local read times), drop the batch-level log note; log/polling/transfer regressions updated
+B462|2026-11-19|A native selection uploaded nothing until every file's original inspection and preflight had settled, so one slow inspection held up every upload of the batch|V231,V232,T153,ADR0183; admit each file on its own, create the one batch at the first admitted file, upload joined files at once and seal before the only submission; early-upload, drop, stop/shutdown/Retry, concurrent-admission and startup tests
+B463|2026-11-19|Design hazard found while implementing B462: batch-wide claim/finish writes iterated the whole manifest, which in an early selection still names files that are input intents; a Stop or claim would have overwritten their admission state (queued/running/failed) and corrupted their phase-bound evidence|V231,V232,T153; claim and finish change only rows carrying this batch's native_batch_id; dropped files are skipped by cleanup, release, deletion scope and startup reconnection; the stop/shutdown test keeps the late file waiting while its batch is stopped

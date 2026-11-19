@@ -204,7 +204,8 @@ def test_live_style_502_and_timeout_reconnect_to_the_same_job_then_import_withou
     queue.process(claimed["id"])
     assert waits == [2, 5, 10, 30, 30, 5, 2]
     assert stages.count(native_batch.RECONNECTING) == 6
-    assert "UCloud batch · RUNNING" in stages
+    assert native_batch.RUNNING_REMOTE in stages  # Plain wording, not the raw state (V229).
+    assert not any("RUNNING" in stage for stage in stages)
     assert len(identifiers) == 8 and set(identifiers) == {"remote-job"}
     assert len(batch_remote.submissions) == 1
     assert not [r for r in batch_remote.calls if r.url.path == "/api/jobs/terminate"]

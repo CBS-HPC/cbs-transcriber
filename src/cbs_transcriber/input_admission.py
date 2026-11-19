@@ -19,7 +19,7 @@ from .catalog import whisperx_model
 from .enhancement import EnhancementOptions
 from .features import FeatureRequest, effective_features, prepare_followups
 from .history import decode_payload, encode_payload
-from .store import new_id, now
+from .store import Store, new_id, now
 from .transcripts import MAX_TRANSCRIPT_BYTES
 
 # Intent version 2 choices record preparation-consent provenance (ADR 0098); version 1
@@ -815,6 +815,8 @@ def cancel(store, job_id, *, epoch, phase):
         elif intent["phase"] == "materializing":
             intent["cancel_requested"] = True
         _write(db, job, intent)
+        if intent["phase"] == "terminal":
+            _settle_group(db, intent["native_group"])
     return store.job(job_id)
 
 
@@ -826,18 +828,26 @@ def claim(store):
         # _claim_ready returns None for every cohort containing it (or refuses the evidence).
         # Skip it before full validation, so large batches waiting on inspection do not
         # re-parse every intent under the write lock on each poll (ADR 0146).
+        # Terminal files of an early native selection need no token: the transaction that
+        # gives a selection's last file its outcome settles it (ADR 0183).
         rows = db.execute(
             "SELECT id FROM jobs WHERE json_type("
             "CASE WHEN json_valid(params) THEN params ELSE 'null' END,"
             "'$.input_intent') IS NOT NULL AND "
             "(state='queued' OR (state IN ('failed','cancelled') AND "
             "json_extract(CASE WHEN json_valid(params) THEN params ELSE 'null' END,"
-            "'$.input_intent.native_group.resolved')=0)) AND NOT ("
+            "'$.input_intent.native_group.resolved')=0 AND "
+            "json_array_length(CASE WHEN json_valid(params) THEN params ELSE 'null' END,"
+            "'$.input_intent.native_group.job_ids')<2)) AND NOT ("
             "json_extract(CASE WHEN json_valid(params) THEN params ELSE 'null' END,"
             "'$.input_intent.phase') IS 'waiting' AND EXISTS (SELECT 1 FROM recordings r "
             "WHERE r.id=jobs.recording_id AND json_valid(r.original_input) AND "
             "json_extract(r.original_input,'$.state') IN ('pending','running'))) "
-            "ORDER BY created,id"
+            # Drop already failed files first, so a survivor known to be the only one keeps
+            # the single-file path instead of opening a one-member batch (ADR 0183).
+            "ORDER BY CASE WHEN EXISTS (SELECT 1 FROM recordings r WHERE r.id=jobs.recording_id "
+            "AND json_valid(r.original_input) AND "
+            "json_extract(r.original_input,'$.state')='error') THEN 0 ELSE 1 END,created,id"
         ).fetchall()
         seen = set()
         for row in rows:
@@ -850,7 +860,7 @@ def claim(store):
             db.execute("SAVEPOINT input_claim")
             try:
                 job = _load(db, row["id"])
-                cohort = _cohort(db, job)
+                cohort = _unit(db, job)
                 seen.update(member["id"] for member in cohort)
                 token = _claim_ready(db, cohort)
             except (ValueError, TypeError, KeyError):
@@ -863,6 +873,145 @@ def claim(store):
             if token is not None:
                 return token
     return None
+
+
+def _early(group):
+    """A selection of two or more native files admits each file on its own (ADR 0183).
+
+    Its one shared batch exists from the first admitted file; later files join it, failed
+    files are dropped with their own outcome, and only the UCloud submission waits for all."""
+    return group is not None and len(group["job_ids"]) >= 2
+
+
+def _unit(db, job, *, verify=True):
+    """The jobs one admission token prepares together.
+
+    A claim verifies an early selection's membership once; the token's own later checks
+    (`verify=False`) need not reload every sibling for each file."""
+    group = job["intent"]["native_group"]
+    if _early(group):
+        if group["resolved"]:
+            raise StaleInput(
+                "This native selection is already resolved. "
+                "Select a new request for excluded files."
+            )
+        # The same membership proof as a whole cohort: every file still being admitted must
+        # share this request, project, provider and allocation; admitted files carry the
+        # selection digest in their receipts. The batch rechecks identity when files join.
+        accepted = job["intent"]["accepted"]
+        if (
+            job["kind"] != "transcribe"
+            or accepted["provider"] is None
+            or accepted["provider"]["settings"]["provider_type"] != "ucloud"
+        ):
+            _invalid()
+        if not verify:
+            return [job]
+        for identifier, row in _group_rows(db, group).items():
+            if row["intent"] is None or identifier == job["id"]:
+                continue
+            other = _load(db, identifier)
+            intent = other["intent"]
+            if (
+                intent["native_group"] != group
+                or intent["request_id"] != job["intent"]["request_id"]
+                or intent["project_id"] != job["intent"]["project_id"]
+                or intent["accepted"]["provider"] != accepted["provider"]
+                or _native_allocation_key(intent["accepted"]) != _native_allocation_key(accepted)
+                or other["kind"] != "transcribe"
+            ):
+                _invalid()
+        return [job]
+    return _cohort(db, job)
+
+
+def _group_rows(db, group):
+    """Marker rows for every selected file, without parsing whole job parameters."""
+    placeholders = ",".join("?" for _ in group["job_ids"])
+    rows = db.execute(
+        f"SELECT id,recording_id,json_type({_SAFE_PARAMS},'$.input_intent') AS intent,"
+        f"json_extract({_SAFE_PARAMS},'$.input_intent.phase') AS phase,"
+        f"json_extract({_SAFE_PARAMS},'$.input_intent.native_group.sha256') AS intent_group,"
+        f"json_extract({_SAFE_PARAMS},'$.input_acceptance.native_group.sha256') AS accepted_group "
+        f"FROM jobs WHERE id IN ({placeholders})",
+        group["job_ids"],
+    ).fetchall()
+    found = {row["id"]: row for row in rows}
+    for row in rows:
+        if (row["intent"] is not None and row["intent_group"] != group["sha256"]) or (
+            row["intent"] is None and row["accepted_group"] != group["sha256"]
+        ):
+            _invalid()
+    return found
+
+
+def _settle_group(db, group):
+    """Resolve an early native selection once every file has an outcome (ADR 0183).
+
+    Terminal files become resolved, and the selection's batch (when one file was admitted)
+    records them as dropped and seals its membership in the same transaction. Only then may
+    that batch submit. Returns whether the selection is settled."""
+    if not _early(group):
+        return False
+    found = _group_rows(db, group)
+    dropped = []
+    for identifier in group["job_ids"]:
+        row = found.get(identifier)
+        if row is None:
+            # A file whose outcome was final before its recording was deleted.
+            dropped.append(identifier)
+        elif row["intent"] is not None:
+            if row["phase"] != "terminal":
+                return False
+            dropped.append(identifier)
+    for identifier in dropped:
+        if identifier not in found:
+            continue
+        member = _load(db, identifier)
+        if not member["intent"]["native_group"]["resolved"]:
+            member["intent"]["native_group"]["resolved"] = True
+            _write(db, member, member["intent"])
+    Store._seal_native_batch(db, group, dropped)
+    return True
+
+
+def _group_has_batch(store, group):
+    if not _early(group):
+        return False
+    with store.connection() as db:
+        return Store._native_group_batch(db, group) is not None
+
+
+def settle(store):
+    """Startup pass: settle early selections left all-terminal by an older version."""
+    query = (
+        f"SELECT id FROM jobs WHERE state IN ('failed','cancelled') AND "
+        f"json_extract({_SAFE_PARAMS},'$.input_intent.native_group.resolved')=0 AND "
+        f"json_array_length({_SAFE_PARAMS},'$.input_intent.native_group.job_ids')>=2 "
+        "ORDER BY created,id"
+    )
+    if not store.all(query):
+        return 0
+    original_inspection._lease(store)
+    settled = 0
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        rows = db.execute(query).fetchall()
+        seen = set()
+        for row in rows:
+            from . import restored_owners
+
+            if row["id"] in seen or restored_owners.is_restored(db, "job", row["id"]):
+                continue
+            db.execute("SAVEPOINT input_settle")
+            try:
+                group = _load(db, row["id"])["intent"]["native_group"]
+                seen.update(group["job_ids"])
+                settled += _settle_group(db, group)
+            except (ValueError, TypeError, KeyError):
+                db.execute("ROLLBACK TO input_settle")
+            db.execute("RELEASE input_settle")
+    return settled
 
 
 def _cohort(db, job):
@@ -916,6 +1065,10 @@ def _claim_ready(db, cohort):
                 intent["phase"] = "materializing"
                 token["receipts"][job["id"]] = copy.deepcopy(cache["receipt"])
             _write(db, job, intent)
+            if intent["phase"] == "terminal" and _early(intent["native_group"]):
+                # A failed inspection drops only this file (ADR 0183); no token is needed.
+                _settle_group(db, intent["native_group"])
+                return None
         token["jobs"].append(
             {
                 "id": job["id"],
@@ -971,7 +1124,7 @@ def _current(db, token):
                 raise StaleInput("Original inspection changed during preparation.")
         jobs.append(job)
     if len({job["id"] for job in jobs}) != len(jobs) or {
-        job["id"] for job in _cohort(db, jobs[0])
+        job["id"] for job in _unit(db, jobs[0], verify=False)
     } != {job["id"] for job in jobs}:
         _invalid()
     return jobs
@@ -1157,6 +1310,8 @@ def recover(store, *, job_ids=None):
             else:
                 intent["phase"] = "waiting"
             _write(db, job, intent)
+            if intent["phase"] == "terminal":
+                _settle_group(db, intent["native_group"])
             recovered += 1
         return recovered
 
@@ -1214,8 +1369,19 @@ def projection(store, job_id, *, connection=None):
         intent = job["intent"]
         cache = original_inspection._load(db, job["recording_id"])
         group = intent["native_group"]
-        waiting = 0
-        if group and not group["resolved"]:
+        waiting, batch_id = 0, None
+        if _early(group):
+            # Admitted files may already be uploading in the selection's batch (ADR 0183).
+            batch_id = Store._native_group_batch(db, group)
+            if not group["resolved"]:
+                for member in _group_rows(db, group).values():
+                    if member["intent"] is not None and member["phase"] != "terminal":
+                        source = original_inspection._load(db, member["recording_id"])
+                        waiting += source is not None and source["state"] in {
+                            "pending",
+                            "running",
+                        }
+        elif group and not group["resolved"]:
             for member in _cohort(db, job):
                 if member["intent"]["phase"] != "terminal":
                     source = original_inspection._load(db, member["recording_id"])
@@ -1255,6 +1421,7 @@ def projection(store, job_id, *, connection=None):
             "native_group_waiting": waiting,
             # An unresolved selection still owes one shared allocation decision (V162).
             "native_group_resolved": not group or bool(group["resolved"]),
+            "native_batch_id": batch_id,
             "can_cancel": intent["phase"] != "terminal" and not intent["cancel_requested"],
             "can_retry": intent["phase"] == "terminal"
             and not (group and group["resolved"] and _group_materialized(db, group))
@@ -1827,6 +1994,11 @@ def prepare(store, credentials, token, cancel=None):
                                 _canonical(provider["settings"]),
                                 _canonical(policy),
                             )
+                            if _group_has_batch(store, intent["native_group"]):
+                                # Its first admitted file verified this exact frozen
+                                # allocation before any upload; later files join that
+                                # one allocation (ADR 0183), as a whole cohort once did.
+                                checked_allocations.add(cache_key)
                             if cache_key not in checked_allocations:
                                 effective = providers.Settings.model_validate(
                                     native_allocation.effective(
@@ -2193,24 +2365,59 @@ def materialize(store, token, outcomes):
                 continue
             params["input_acceptance"] = _acceptance(job, member)
             selected.append((job["id"], job["recording_id"], job["kind"], params))
-        store._group_native_jobs(db, selected)
+        # Early native files join their selection's one batch as soon as they are admitted
+        # (ADR 0183). A selection whose other files all failed before any batch existed
+        # keeps the earlier rule: one survivor runs as a single-file allocation.
+        joining, ordinary = {}, []
+        for entry in selected:
+            group = entry[3]["input_acceptance"]["native_group"]
+            if _early(group):
+                joining.setdefault(group["sha256"], (group, []))[1].append(entry)
+            else:
+                ordinary.append(entry)
+        states = {}
+        for group, entries in joining.values():
+            found = _group_rows(db, group)
+            admitted = {entry[0] for entry in entries}
+            others_open = any(
+                identifier not in admitted
+                and identifier in found
+                and found[identifier]["intent"] is not None
+                and found[identifier]["phase"] != "terminal"
+                for identifier in group["job_ids"]
+            )
+            if others_open or store._native_group_batch(db, group) is not None:
+                for identifier, recording_id, _, params in entries:
+                    states[identifier] = store._attach_native_member(
+                        db, identifier, recording_id, params, group
+                    )
+            else:
+                ordinary.extend(entries)
+        store._group_native_jobs(db, ordinary)
         for identifier, recording_id, kind, params in selected:
             recording = db.execute(
                 "SELECT * FROM recordings WHERE id=?", (recording_id,)
             ).fetchone()
             runtime_store.attach(db, recording, identifier, kind, params)
             if params["input_acceptance"]["native_group"] is not None:
+                # The member's own receipt: its admission outcome is final.
                 params["input_acceptance"]["native_group"]["resolved"] = True
+            state, message = states.get(identifier, ("queued", "Prepared; queued for processing."))
             db.execute(
-                "UPDATE jobs SET params=?,state='queued',progress=0,"
-                "message='Prepared; queued for processing.',updated=? WHERE id=?",
-                (_canonical(params), now(), identifier),
+                "UPDATE jobs SET params=?,state=?,progress=0,message=?,updated=? WHERE id=?",
+                (_canonical(params), state, message, now(), identifier),
             )
+        groups = {}
         for job in jobs:
+            group = job["intent"]["native_group"]
+            if _early(group):
+                groups[group["sha256"]] = group
             if job["id"] in failures:
                 intent = job["intent"]
                 _terminal(intent, failures[job["id"]])
-                if intent["native_group"] is not None:
+                if intent["native_group"] is not None and not _early(intent["native_group"]):
                     intent["native_group"]["resolved"] = True
                 _write(db, job, intent)
+        for group in groups.values():
+            _settle_group(db, group)
     return [store.job(job["id"]) for job in jobs]

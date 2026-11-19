@@ -34,6 +34,10 @@ JOURNAL_IDENTITY = (
     "output_language",
     "output_application",
     "artifact_submission_sha256",
+    # Early selections (ADR 0183): files dropped before the sealed submission. Absent on
+    # older batches, which therefore keep their exact earlier identity.
+    "membership_sealed",
+    "dropped_members",
 )
 NOTICE = "Reconnecting to the same UCloud job; saved results are kept."
 REFUSED = (
@@ -175,6 +179,19 @@ def _observe(db, kind, identifier, *, allow_stop=False):
         members = json.loads(owner["members"])
         if not isinstance(members, list) or not 2 <= len(members) <= MAX_MEMBERS:
             raise ValueError(REFUSED)
+        # Files dropped before an early selection's sealed submission never joined the
+        # allocation (ADR 0183); a submitted early batch must carry its exact seal.
+        dropped = run.get("dropped_members", [])
+        if "native_group" in params and run.get("membership_sealed") is not True:
+            raise ValueError(REFUSED)
+        if (
+            not isinstance(dropped, list)
+            or not all(isinstance(item, str) for item in dropped)
+            or len(set(dropped)) != len(dropped)
+            or not set(dropped) < {m.get("job_id") for m in members if isinstance(m, dict)}
+        ):
+            raise ValueError(REFUSED)
+        members = [m for m in members if not isinstance(m, dict) or m["job_id"] not in dropped]
     jobs, identities, seen, project_id = [], [], set(), owner.get("project_id")
     for member in members:
         if (

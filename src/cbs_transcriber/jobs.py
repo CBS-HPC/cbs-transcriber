@@ -710,6 +710,8 @@ class JobQueue:
                 local_concurrency.LANES[lane][0]: count
                 for lane, count in local_concurrency.effective(concurrency).items()
             }
+            # Settings → UCloud "batches at once" gates native claims the same way (ADR 0183).
+            self.lane_limits["transcribe-native"] = local_concurrency.native_saved(store).batches
             maximum = {kind: limit for kind, limit in local_concurrency.LANES.values()}
             self.workers.extend(
                 JobQueue(store, credentials, kind=worker_kind, lock=self.lock)
@@ -749,6 +751,12 @@ class JobQueue:
                     input_admission.recover(self.store, job_ids=[row["id"]])
             except (ValueError, KeyError):
                 pass  # Preserve invalid proof; do not strand healthy siblings behind it.
+        try:
+            # Early native selections settle when their last file has an outcome; settle
+            # any that an earlier version left with only terminal files (ADR 0183).
+            input_admission.settle(self.store)
+        except (ValueError, KeyError, sqlite3.Error):
+            pass
         self.native_reconnect.update(
             self.store.recover_jobs(native_startup_lifecycle=self.native_lifecycle)
         )
@@ -842,6 +850,21 @@ class JobQueue:
     def lane_limit_settings(self):
         limits = self.coordinator.lane_limits
         return {lane: limits.get(kind) for lane, (kind, _) in local_concurrency.LANES.items()}
+
+    def set_native_batch_limit(self, batches):
+        """Apply Settings → UCloud "batches at once" to new native claims (ADR 0183).
+
+        Running native batches and single-file runs continue when the limit is lowered."""
+        coordinator = self.coordinator
+        if type(batches) is not int or not 1 <= batches <= local_concurrency.NATIVE_WORKERS:
+            raise ValueError("Choose between one and four UCloud Transcriber batches at once.")
+        with coordinator.lock:
+            coordinator.lane_limits["transcribe-native"] = batches
+        coordinator.notify()
+        return batches
+
+    def native_batch_limit(self):
+        return self.coordinator.lane_limits.get("transcribe-native")
 
     def _claimed(self):
         return bool(self.active_id or self.active_batch_id or self.active_ids)

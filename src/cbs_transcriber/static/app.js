@@ -8945,17 +8945,19 @@ function sameProvider(context) {
     context.tab === state.settingsTab
   );
 }
+// Settings → UCloud controls that save on change through their own endpoints.
+const SEPARATELY_SAVED_SETTINGS = [
+  "enhance-prepare-ucloud",
+  "runtime-max-allocations",
+  "native-upload-limit",
+  "native-batch-limit",
+];
 for (const event of ["input", "change"])
   $("#settings-form").addEventListener(
     event,
     (event) => {
       // These controls save separately and must not invalidate provider drafts.
-      if (
-        ["enhance-prepare-ucloud", "runtime-max-allocations"].includes(
-          event.target.id,
-        )
-      )
-        return;
+      if (SEPARATELY_SAVED_SETTINGS.includes(event.target.id)) return;
       providerFormVersion++;
       $("#provider-error").hidden = true;
     },
@@ -8963,7 +8965,8 @@ for (const event of ["input", "change"])
   );
 // Choosing the open Settings tab again reloads it (also the retry after a load error), so
 // it first asks before discarding entries typed but not saved (user decision 19 November).
-// Processing and the two controls above save on change and never hold unsaved entries.
+// Processing and the separately saved controls above save on change and never hold
+// unsaved entries.
 let settingsUnsaved = false;
 for (const type of ["input", "change"])
   $("#settings-form").addEventListener(
@@ -8972,9 +8975,7 @@ for (const type of ["input", "change"])
       if (
         !event.isTrusted ||
         $("#processing-panel").contains(event.target) ||
-        ["enhance-prepare-ucloud", "runtime-max-allocations"].includes(
-          event.target.id,
-        )
+        SEPARATELY_SAVED_SETTINGS.includes(event.target.id)
       )
         return;
       settingsUnsaved = true;
@@ -9075,6 +9076,16 @@ function showProviderTab(tab) {
   $("#runtime-preparation-panel").disabled = !runtime;
   $("#runtime-capacity-panel").hidden = !runtime;
   if (!runtime) $("#runtime-max-allocations").disabled = true;
+  // Native Transcriber limits (ADR 0183) belong to the UCloud tab in every profile.
+  $("#native-limits-panel").hidden = tab !== "ucloud";
+  if (tab !== "ucloud")
+    for (const id of ["#native-upload-limit", "#native-batch-limit"])
+      $(id).disabled = true;
+  else
+    queueMicrotask(() => {
+      if ($("#settings-dialog").open && state.settingsTab === "ucloud")
+        loadNativeLimits().catch(() => {});
+    });
   if (runtime) {
     $("#enhance-cloud-check").disabled = true;
     $("#enhance-prepare-ucloud").disabled = true;
@@ -9784,6 +9795,95 @@ $("#runtime-max-allocations").addEventListener("keydown", (event) => {
   event.preventDefault();
   event.currentTarget.blur();
 });
+// Settings → UCloud native Transcriber limits (ADR 0183): saved on change, separately from
+// the connection form; a running batch keeps the limits it started with.
+let nativeLimits = null,
+  nativeLimitsViewVersion = 0,
+  nativeLimitsSaveVersion = 0,
+  nativeLimitsSaveTail = Promise.resolve();
+const NATIVE_LIMIT_FIELDS = {
+  "native-upload-limit": { key: "uploads", max: 8 },
+  "native-batch-limit": { key: "batches", max: 4 },
+};
+function sameNativeLimitsView(version) {
+  return (
+    $("#settings-dialog").open &&
+    state.settingsTab === "ucloud" &&
+    nativeLimitsViewVersion === version
+  );
+}
+function renderNativeLimits() {
+  for (const [id, field] of Object.entries(NATIVE_LIMIT_FIELDS)) {
+    const input = $(`#${id}`);
+    if (nativeLimits) input.value = nativeLimits[field.key];
+    input.disabled = nativeLimits === null;
+  }
+}
+async function loadNativeLimits() {
+  const version = ++nativeLimitsViewVersion,
+    status = $("#native-limits-status");
+  for (const id of Object.keys(NATIVE_LIMIT_FIELDS))
+    $(`#${id}`).disabled = true;
+  status.textContent = "Loading UCloud limits…";
+  await nativeLimitsSaveTail.catch(() => {});
+  if (!sameNativeLimitsView(version)) return;
+  const saved = await api("/native-batches/settings", {
+    background: true,
+  }).catch(() => null);
+  if (!sameNativeLimitsView(version)) return;
+  nativeLimits = saved
+    ? { uploads: saved.uploads, batches: saved.batches }
+    : null;
+  renderNativeLimits();
+  status.textContent = nativeLimits
+    ? ""
+    : "The UCloud limits could not be loaded. Reopen UCloud settings to try again.";
+}
+for (const [id, field] of Object.entries(NATIVE_LIMIT_FIELDS)) {
+  $(`#${id}`).addEventListener(
+    "change",
+    handle(async () => {
+      const input = $(`#${id}`),
+        status = $("#native-limits-status");
+      if (nativeLimits === null || !input.checkValidity()) {
+        status.textContent = `Choose a whole number from 1 to ${field.max}.`;
+        return;
+      }
+      const version = ++nativeLimitsSaveVersion,
+        context = nativeLimitsViewVersion,
+        value = Number(input.value);
+      const current = () =>
+        version === nativeLimitsSaveVersion && sameNativeLimitsView(context);
+      input.disabled = true;
+      status.textContent = "Saving UCloud limits…";
+      const save = nativeLimitsSaveTail
+        .catch(() => {})
+        .then(() =>
+          api("/native-batches/settings", {
+            method: "PUT",
+            body: { [field.key]: value },
+          }),
+        );
+      nativeLimitsSaveTail = save;
+      try {
+        const saved = await save;
+        if (!current()) return;
+        nativeLimits = { uploads: saved.uploads, batches: saved.batches };
+        status.textContent = "Saved. Running batches keep their limits.";
+      } catch (error) {
+        if (!current()) return;
+        status.textContent = error.message;
+      } finally {
+        if (current()) renderNativeLimits();
+      }
+    }),
+  );
+  $(`#${id}`).addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.currentTarget.blur();
+  });
+}
 function switchProviderTab(tab) {
   if (tab === "huggingface") return showHuggingFaceTab();
   if (tab === "processing") return showProcessingTab();
@@ -11278,7 +11378,7 @@ function inputPreparationCard(job) {
       !inspection &&
       input.native_group_size > 1 &&
       ["waiting", "materializing"].includes(input.phase)
-        ? `<p class="field-note">${h(input.native_group_waiting)} of ${h(input.native_group_size)} originals are still being prepared before this selection can start together.</p>`
+        ? nativeSelectionNote(input)
         : "";
   const provider =
     !inspection && (job.provider_name || job.model)
@@ -11572,6 +11672,10 @@ function activityRemoteMember(job) {
     )
   );
 }
+// ADR 0183: files of a native selection upload as soon as their own inspection passes.
+function nativeSelectionNote(input) {
+  return `<p class="field-note">${h(input.native_group_waiting)} of ${h(input.native_group_size)} originals are still being inspected. Files that pass upload to the shared UCloud batch straight away; it is submitted once every file is uploaded or excluded.</p>`;
+}
 function workflowRequestCard(job, expanded) {
   const group = job.activity_group,
     members = group.members,
@@ -11662,9 +11766,7 @@ function inputRequestCard(job, expanded) {
         member.input_preparation.native_group_size > 1 &&
         ["waiting", "materializing"].includes(member.input_preparation.phase),
     )?.input_preparation,
-    note = selection
-      ? `<p class="field-note">${h(selection.native_group_waiting)} of ${h(selection.native_group_size)} originals are still being prepared before this selection can start together.</p>`
-      : "",
+    note = selection ? nativeSelectionNote(selection) : "",
     // Until one confirmation covers every sibling, the first eligible file's
     // frozen token is the group's single Prepare action.
     eligible = members.find(

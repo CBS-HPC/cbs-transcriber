@@ -365,13 +365,15 @@ class Deletions:
                 ):
                     continue
                 deleted = (
-                    native_batch.deleted_members(self.store, batch)
+                    native_batch.deleted_members(self.store, batch) | native_batch.dropped(batch)
                     if key == "native_batch_id"
                     else runtime_store.deleted_members(self.store, batch)
                 )
                 for job_id, recording_id in members:
                     if job_id in deleted:
-                        allowed.add(job_id)  # Immutable shared Stop scope still includes it.
+                        # Immutable shared Stop scope still includes it; a file dropped from
+                        # an early selection never joined the allocation (ADR 0183).
+                        allowed.add(job_id)
                         continue
                     affected.add(recording_id)
                     if job_id not in allowed:

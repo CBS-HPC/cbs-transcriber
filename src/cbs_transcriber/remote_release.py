@@ -108,7 +108,9 @@ def native_impact(store, batch_id, deleting):
     created = bool(run.get("owned_folder") or run.get("root_created"))
     if not (created or uncertain or live or batch["state"] == "running"):
         return None
-    gone = native_batch.deleted_members(store, batch)
+    # Dropped files and files still being admitted have no upload to keep the folder for:
+    # this Delete stops the shared allocation, which cancels their admission (ADR 0183).
+    gone = native_batch.deleted_members(store, batch) | native_batch.not_joined(store, batch)
     others = [m for m in batch["members"] if m["job_id"] not in set(deleting) | gone]
     saved = all(
         store.all(
@@ -435,7 +437,7 @@ def _auto_native(store, credentials, identifier):
         run = batch["params"]["ucloud_run"]
     if run.get("cleanup_state") != "pending":
         return None
-    gone = native_batch.deleted_members(store, batch)
+    gone = native_batch.deleted_members(store, batch) | native_batch.dropped(batch)
     if not all(
         store.all("SELECT id FROM transcript_results WHERE job_id=?", (m["job_id"],))
         for m in batch["members"]

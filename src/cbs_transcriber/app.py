@@ -3170,6 +3170,21 @@ def create_app(
             queue.set_lane_limits(local_concurrency.save(store, body))
         return local_concurrency.status(store, queue)
 
+    @app.get("/api/native-batches/settings")
+    def native_batch_settings():
+        """Settings → UCloud: Transcriber batches at once and uploads per batch (ADR 0183)."""
+        return local_concurrency.native_status(store, queue)
+
+    @app.put("/api/native-batches/settings")
+    def update_native_batch_settings(body: local_concurrency.NativeLimits):
+        # Omitted fields keep their saved value. New native claims follow the batch limit at
+        # once and lowering it never stops running work; a running batch keeps the upload
+        # limit it started with. The claim lock orders saves with the applied limit.
+        with queue.lock:
+            saved = local_concurrency.native_save(store, body)
+            queue.set_native_batch_limit(saved.batches)
+        return local_concurrency.native_status(store, queue)
+
     @app.get("/api/local-runtime")
     def local_runtime():
         """Provider Settings → Processing: the last check of this computer, never a new one."""

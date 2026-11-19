@@ -79,12 +79,23 @@ they do not allocate compute or upload research recordings.
 
 Select the recordings, Provider **UCloud** and the desired **(Transcriber)** model. Compatible
 members of one selection share a unique `cbs-batch-<batch-id>` folder and one native allocation,
-with separate local results. Different model/connection selections remain separate. The immutable
-originals are uploaded, then the native job starts. Upload negotiation supports WebSocket V2 and legacy chunked HTTP.
+with separate local results. Different model/connection selections remain separate. Each
+immutable original is uploaded as soon as its own original inspection passes; the native job is
+submitted once every selected file is uploaded or excluded. A file whose inspection fails is
+excluded with its own reason and is never uploaded (ADR 0183). Upload negotiation supports WebSocket V2 and legacy chunked HTTP.
 The uploaded file's reported size is checked before submission. Session tokens/URLs are
 transient, and control-plane credentials are never forwarded to transfer endpoints.
 
-Activity shows native state and **Open UCloud job**. One unambiguous original JSON output is
+**Settings → UCloud → Advanced settings** sets **Files uploaded at once per batch** (1–8,
+default 4; upload speed depends on your network, not this computer's processors) and **UCloud
+Transcriber batches at once** (1–4, default 2; a single-file run counts as one). Both save on
+change. Running batches continue with the limits they started with.
+
+Activity shows plain progress, for example "Waiting in UCloud's queue for a GPU · 12 min" (time
+since this app first saw the queued state), "Transcribing on UCloud · 5 of 12 files reported
+done · last log 14:05" and the number of transcripts actually saved. Log notes are observations
+only: "reported done" is not a saved transcript. Each file is listed with its stage, including
+files still being inspected and excluded files, and **Open UCloud job**. One unambiguous original JSON output is
 downloaded after success, preserved locally and normalized through the existing importer.
 Word timing and speaker labels are available when the returned JSON supplies them. Existing
 reviewed results and their active selection are preserved.
@@ -121,7 +132,7 @@ reviewed results and their active selection are preserved.
   [verified on 28 October](verification-2026-10-28-native-recovery.md), preserving earlier research
   versions. This does not validate every UCloud project/application version.
 
-Independent selections may run concurrently. Within one native selection, the application
+Independent selections may run concurrently, up to **UCloud Transcriber batches at once**. Within one native selection, the application
 processes the shared input set; the local app does not impose native part parallelism.
 
 The app does not require an HF token for this native provider: model access and diarization
