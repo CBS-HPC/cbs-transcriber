@@ -36,8 +36,9 @@ def test_packaged_supervisor_renders_every_token_for_both_protocols(tmp_path, ba
 
     bash = shutil.which("bash")
     if not bash or "system32" in bash.lower():
+        # The real home: conftest gives Path.home() a temporary folder (B459).
         candidates = (
-            Path.home() / "AppData/Local/Programs/Git/bin/bash.exe",
+            Path(os.path.expanduser("~")) / "AppData/Local/Programs/Git/bin/bash.exe",
             Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe",
         )
         bash = next((str(candidate) for candidate in candidates if candidate.is_file()), None)

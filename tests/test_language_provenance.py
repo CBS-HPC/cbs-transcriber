@@ -1,5 +1,6 @@
 """Mocked native output keeps a frozen language choice across retry and restore."""
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -64,9 +65,12 @@ def test_result_job_keeps_recording_scope_through_retry_and_portable_restore(
     saved = portable_capture.capture_library(
         store, client.app.state.queue, tmp_path / "packages", gate=portable_capture.CaptureGate()
     )
-    with tempfile.TemporaryDirectory(prefix="cbs-lang-", dir=Path.home()) as short_root:
+    # A short temporary root for Windows path limits, in the real home: conftest gives
+    # Path.home() a long temporary folder (B459). The library registry stays temporary.
+    home = Path(os.path.expanduser("~"))
+    with tempfile.TemporaryDirectory(prefix="cbs-lang-", dir=home) as short_root:
         root = Path(short_root).resolve()
-        assert root.parent == Path.home().resolve()
+        assert root.parent == home.resolve()
         target = root / "restored"
         portable_restore.restore_library(
             saved["folder"], expected_commit_sha256=saved["commit_sha256"], target=target

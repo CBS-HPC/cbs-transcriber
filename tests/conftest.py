@@ -101,6 +101,39 @@ class MemoryCredentials:
         self.keys[base_url] = value
 
 
+# Captured before any test can change it; the browser driver needs the real value.
+REAL_LOCAL_APP_DATA = os.environ.get("LOCALAPPDATA")
+
+
+@pytest.fixture(autouse=True)
+def isolated_app_folder(tmp_path_factory, monkeypatch):
+    """No test reads or writes this computer's app folder or earlier library locations.
+
+    The library registry, hidden-library list and default Library/Projects folders live under
+    Path.home(), so each test gets its own temporary home. The earlier platformdirs default is
+    temporary too, and the packaged-app scan skips the real LOCALAPPDATA (Playwright needs that
+    variable) unless a test points it at its own folder. Tests may install their own home.
+    """
+    from uuid import uuid4
+
+    from cbs_transcriber import libraries, storage
+
+    home = tmp_path_factory.getbasetemp() / "home" / uuid4().hex
+    legacy = home / "legacy-app-data" / "CBS Transcriber"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(storage, "legacy_library_root", lambda: legacy)
+    monkeypatch.setattr(libraries, "legacy_library_root", lambda: legacy)
+    scan = libraries.redirected_roots
+
+    def redirected_roots():
+        if os.environ.get("LOCALAPPDATA") == REAL_LOCAL_APP_DATA:
+            return []
+        return scan()
+
+    monkeypatch.setattr(libraries, "redirected_roots", redirected_roots)
+    return home
+
+
 @pytest.fixture(autouse=True)
 def isolated_library_deletions(tmp_path_factory, monkeypatch):
     """Library-deletion reservations never read or write this computer's app folder."""
