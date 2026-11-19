@@ -11,7 +11,13 @@ from test_browser import local_app as local_app
 from test_browser import page as page
 
 from cbs_transcriber.catalog import provider_catalog
-from cbs_transcriber.providers import Settings, default_provider_id, profile, save_profile
+from cbs_transcriber.providers import (
+    Settings,
+    credential_scope,
+    default_provider_id,
+    profile,
+    save_profile,
+)
 from cbs_transcriber.store import new_id, now
 from cbs_transcriber.transcripts import normalize_segments
 from cbs_transcriber.ucloud_native import COMPUTE_ID, MIG_PRODUCT
@@ -41,7 +47,7 @@ def native_account(monkeypatch):
     return calls
 
 
-def test_first_use_skip_survives_reload_and_project_creation(page, local_app):
+def test_first_use_skip_lasts_for_the_page_while_no_ucloud_key_is_saved(page, local_app):
     requests = []
     page.on("request", lambda request: requests.append((request.method, request.url)))
     page.goto(local_app.url)
@@ -71,8 +77,10 @@ def test_first_use_skip_survives_reload_and_project_creation(page, local_app):
     expect(page.locator("#first-use-hf-token")).to_have_value("")
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) == "1"
     assert not any(method in {"POST", "PUT"} for method, _ in requests)
+    # No UCloud key is saved, so setup returns on the next load (user decision, 19 November).
     page.reload()
-    expect(form).to_be_hidden()
+    expect(form).to_be_visible()
+    assert not any(method in {"POST", "PUT"} for method, _ in requests)
     create_project(page, "After skipping setup")
     expect(page.locator("#project-title")).to_have_text("After skipping setup")
     page.locator("#settings-open").click()
@@ -117,8 +125,9 @@ def test_setup_modal_dismisses_without_writes_and_restores_focus(page, local_app
     expect(page.locator("#settings-open")).to_be_focused()
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) == "1"
     assert not writes
+    # Without a saved UCloud key the dismissal lasts only for this page.
     page.reload()
-    expect(dialog).to_be_hidden()
+    expect(dialog).to_have_js_property("open", True)
 
 
 def test_ucloud_key_highlight_distinguishes_saved_key_and_changed_endpoint(
@@ -333,6 +342,65 @@ def test_existing_structural_ucloud_setup_suppresses_first_use_without_a_check_r
     expect(page.locator("#first-use-setup")).to_be_hidden()
     expect(page.locator("#welcome")).to_be_visible()
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) is None
+
+
+def existing_ucloud(store, *, complete=True):
+    """A saved UCloud connection row; no key is stored."""
+    setup = {
+        "project_id": "p",
+        "storage_path": "/drive/cbs",
+        "application": {"name": "transcriber", "version": "1.12"},
+    }
+    if complete:
+        setup["product"] = dict(MIG_PRODUCT)
+    settings = Settings(
+        provider_type="ucloud",
+        base_url="https://cloud.sdu.dk",
+        model="large-v3",
+        ucloud_transcriber=setup,
+    )
+    store.execute(
+        "INSERT INTO providers(id,name,value,created) VALUES (?,?,?,?)",
+        (new_id(), "Existing UCloud", settings.model_dump_json(), now()),
+    )
+    return settings
+
+
+def test_returning_browser_without_a_saved_ucloud_key_sees_setup_on_every_load(page, local_app):
+    """19 November: a browser that once chose Skip is offered setup again while no key is saved."""
+    app = local_app.server.config.app
+    settings = existing_ucloud(app.state.store)
+    page.add_init_script(f"try {{ localStorage.setItem('{MARKER}', '1'); }} catch {{}}")
+    page.goto(local_app.url)
+    form = page.locator("#first-use-setup")
+    expect(form).to_be_visible()
+    expect(page.locator("#first-use-ucloud-key")).to_have_class("credential-missing")
+    page.locator("#first-use-skip").click()
+    expect(form).to_be_hidden()
+    page.reload()
+    expect(form).to_be_visible()
+    page.locator("#first-use-skip").click()
+    expect(form).to_be_hidden()
+    # Once a key is saved, the complete connection suppresses setup on later loads.
+    app.state.credentials.set(credential_scope(settings), "synthetic-ucloud-key", False)
+    page.reload()
+    page.wait_for_function("() => firstUse.ready")
+    expect(form).to_be_hidden()
+
+
+def test_skip_lasts_across_reloads_once_a_ucloud_key_is_saved(page, local_app):
+    app = local_app.server.config.app
+    settings = existing_ucloud(app.state.store, complete=False)
+    app.state.credentials.set(credential_scope(settings), "synthetic-ucloud-key", False)
+    page.goto(local_app.url)
+    form = page.locator("#first-use-setup")
+    # An incomplete connection still offers setup until it is skipped.
+    expect(form).to_be_visible()
+    page.locator("#first-use-skip").click()
+    expect(form).to_be_hidden()
+    page.reload()
+    page.wait_for_function("() => firstUse.ready")
+    expect(form).to_be_hidden()
 
 
 def test_unavailable_browser_storage_still_allows_skipping(page, local_app):

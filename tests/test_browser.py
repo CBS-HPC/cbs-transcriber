@@ -33,8 +33,16 @@ pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 FIRST_USE_COMPLETED = "cbs-first-use-completed-v1"
 # Unrelated journeys start as a returning browser that already chose Skip in first-use
-# setup (ADR 0171). Modules marked first_use keep a fresh browser profile.
-RETURNING_BROWSER = f"try {{ localStorage.setItem('{FIRST_USE_COMPLETED}', '1'); }} catch {{}}"
+# setup (ADR 0171). Without a saved UCloud key the setup returns on every load, which such a
+# user dismisses each time, so its modal never opens here. Modules marked first_use keep a
+# fresh browser profile and the real dialog.
+RETURNING_BROWSER = (
+    f"try {{ localStorage.setItem('{FIRST_USE_COMPLETED}', '1'); }} catch {{}}\n"
+    "{ const show = HTMLDialogElement.prototype.showModal;\n"
+    "  HTMLDialogElement.prototype.showModal = function () {\n"
+    "    if (this.id !== 'first-use-dialog') return show.call(this);\n"
+    "  }; }"
+)
 
 
 class LocalApp:

@@ -7,7 +7,9 @@ import pytest
 from playwright.sync_api import expect
 from test_browser import page as page
 
-pytestmark = pytest.mark.browser
+# A fresh profile: the returning-browser fixture keeps #first-use-dialog closed, and this
+# inventory opens every dialog, including that one, on synthetic markup.
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 STATIC = Path(__file__).resolve().parents[1] / "src/cbs_transcriber/static"
 
 

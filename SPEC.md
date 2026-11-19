@@ -427,6 +427,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Existing setup and later Settings remain usable; storage-unavailable fallback is graceful.
   Existing visible UCloud profiles hand off to their exact Settings context; automatic fresh
   duplicates cannot bypass disabled-model or Protected-denial choices.
+  The marker applies only while a visible UCloud profile has a saved key: without one the
+  setup returns on every page load and Skip/Close last for that page (user decision,
+  19 November). The empty home page also offers a centred Create a project button.
 - V211: Fresh verified timing requests freeze the host-only invalidation policy at their exact
   source/role acceptance boundary (ADR 0169); missing policy stays byte-exact legacy, unknown
   policy refuses and mutation cannot remove/retarget it. Applied/replaced passages and changed
@@ -2085,3 +2088,4 @@ B455|2026-11-18|The T140 13px sidebar text kept the global right float on the ed
 B456|2026-11-18|Reopening a connected UCloud Settings tab ran a read-only Runtime check against the configured host, so browser tests could send a synthetic token to the real UCloud server; no suite-wide network guard existed|Tests never call a service; an autouse guard refuses non-loopback name lookups and connections in every test; guard tests
 B457|2026-11-18|The first-use dialog opens over the home page in every fresh browser profile; about 95 older browser tests never dismissed it and timed out clicking Activity, Settings or Library, and the dialog inventory omitted it. The v2 preview ran only selected browser gates|T135,V213; the shared page fixture starts as a returning browser (the marker Skip sets) unless a module is marked first_use; fixture/app key contract test and dialog inventory entry; run the full browser suite before a preview
 B458|2026-11-18|The first full v2 browser run failed 20 stale cases that also failed alone: Settings now opens on UCloud and reselecting the open tab reloads it, so redundant #tab-ucloud clicks added a second automatic check or superseded a held reply; clicks on the hidden OpenAI tab timed out; unchecked synthetic UCloud saves left selectors empty; older help/label/heading/save-status texts no longer matched|ADR0170,ADR0167,ADR0162,V208; open Settings directly on UCloud and depart through Hugging Face, record explicit synthetic checks, assert the shipped copy, Retry failed, empty-library brand and partial-timing notice; test-only, original protections retained
+B460|2026-11-19|Delete project permanently did nothing when the project was shown as the home page's first project (no #/projects address, e.g. after deleting another project): the dialog's view check compared the literal address, so no request was sent and no message appeared|V93,V148; check the displayed project and view epoch instead of the address, report a stale dialog inside it, reroute home after deletion; home/#/#/ browser regression

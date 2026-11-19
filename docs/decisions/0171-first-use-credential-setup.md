@@ -19,6 +19,16 @@ Use the same pale-yellow missing-credential decoration for UCloud and HF: no sav
 credential and no draft. A blank input retaining a stored key stays normal; typing removes
 the missing decoration without implying validity or a successful connection check.
 
+## 19 November amendment: no saved UCloud key
+
+The user asked that a reload show the key panel whenever no UCloud API key is saved. The
+completion marker now applies only while a visible UCloud profile has a saved key. Without
+one, setup returns on every page load, also for a browser that once chose Skip, and
+Skip/Close/Escape last for that page. An existing profile without a key keeps the exact
+Settings handoff. Saving a key ends the reminder; the marker is still never credential or
+admission authority. The empty home page also gets a centred Create a project button, the
+same action as the sidebar's.
+
 ## Decision
 
 Offer a compact first-use form on the home page: password fields for the UCloud API key and

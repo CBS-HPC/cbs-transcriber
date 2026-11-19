@@ -42,6 +42,11 @@ late Forget-key reply fence, so changing it needs an explicit Retry/discard desi
 The UCloud form always saves the words_speakers capability, so narrower native profiles
 exist only through the API or legacy saves.
 
+19 November (Claude): `claude/v2-integration` is loaded on the user's real library after a
+verified backup. Preview feedback fixed on `claude/v2-preview-fixes`: setup returns on each
+load while no UCloud key is saved (ADR 0171 amendment), a centred Create a project button on
+the empty home page, and project deletion from the home page (B460).
+
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
 It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime

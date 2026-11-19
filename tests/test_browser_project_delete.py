@@ -48,3 +48,31 @@ def test_project_settings_rows_and_name_confirmed_deletion(page, local_app):
     expect(
         page.locator("#welcome").get_by_role("heading", name="Transcriber", exact=True)
     ).to_be_visible()
+
+
+def delete_open_project(page, name):
+    open_project_settings(page)
+    page.locator("#project-delete").click()
+    page.locator("#delete-project-confirm").fill(name)
+    page.locator("#delete-project-submit").click()
+    expect(page.locator("#delete-project-dialog")).to_be_hidden()
+
+
+@pytest.mark.parametrize("address", ["", "/#", "/#/"])
+def test_project_shown_on_the_home_page_can_be_deleted(page, local_app, address):
+    """B460: after one deletion the home page shows the next project without its address."""
+    store = local_app.server.config.app.state.store
+    first = store.create_project("First study")
+    second = store.create_project("Second study")
+    page.goto(local_app.url + f"/#/projects/{first['id']}")
+    delete_open_project(page, "First study")
+    expect(page.locator("#project-title")).to_have_text("Second study")
+    page.goto(local_app.url + address)
+    expect(page.locator("#project-title")).to_have_text("Second study")
+    assert f"#/projects/{second['id']}" not in page.url
+    delete_open_project(page, "Second study")
+    assert not store.all("SELECT id FROM projects")
+    expect(page.locator("#project-title")).to_have_text("")
+    expect(
+        page.locator("#welcome").get_by_role("heading", name="Transcriber", exact=True)
+    ).to_be_visible()
