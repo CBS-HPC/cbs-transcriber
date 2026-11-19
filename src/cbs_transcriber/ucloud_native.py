@@ -1038,9 +1038,10 @@ def run_transcription(worker, job, recording, settings, key, *, reconnect=None):
                         raise ValueError(
                             "UCloud monitoring timed out. Retry to check the same job."
                         )
-                    store.update_job(
-                        identifier, message="UCloud job · " + str(state or "waiting"), progress=0.4
-                    )
+                    from .native_batch import remote_message
+
+                    # Plain wording (ADR 0183); the raw state stays in the run journal.
+                    store.update_job(identifier, message=remote_message(state), progress=0.4)
                     worker.cancel_event.wait(5)
                 guard()
                 phase = "download"

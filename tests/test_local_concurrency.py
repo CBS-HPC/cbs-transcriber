@@ -137,7 +137,8 @@ def test_queue_layout_keeps_fixed_lanes_and_starts_each_lane_maximum():
     assert kinds[:2] == ["transcribe-api", "transcribe-api"]
     for lane, (kind, maximum) in local_concurrency.LANES.items():
         assert kinds.count(kind) == maximum, lane
-    assert kinds.count("transcribe-native") == local_concurrency.NATIVE_WORKERS == 2
+    # The native lane starts its maximum; Settings → UCloud gates claims (ADR 0183).
+    assert kinds.count("transcribe-native") == local_concurrency.NATIVE_WORKERS == 4
     assert kinds.count("enhance") == kinds.count("enhance-remote") == 1
     assert kinds.count("runtime-prepare") == 1 and kinds.count("runtime-batch") == 4
     assert kinds[-1] == "runtime-batch"

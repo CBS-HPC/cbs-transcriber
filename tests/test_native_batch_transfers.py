@@ -271,8 +271,8 @@ def test_failed_capture_keeps_other_import_and_retry_does_not_backfill_observati
 @pytest.mark.parametrize(
     ("state", "message"),
     [
-        ("RUNNING", "Processing on UCloud · shared batch"),
-        ("IN_QUEUE", "Waiting for UCloud allocation"),
+        ("RUNNING", "Transcribing on UCloud (shared batch)"),
+        ("IN_QUEUE", "Waiting in UCloud's queue for a GPU"),
     ],
 )
 def test_reconnect_reconciles_stale_upload_labels_even_when_remote_state_is_unchanged(
