@@ -46,6 +46,10 @@ exist only through the API or legacy saves.
 verified backup. Preview feedback fixed on `claude/v2-preview-fixes`: setup returns on each
 load while no UCloud key is saved (ADR 0171 amendment), a centred Create a project button on
 the empty home page, and project deletion from the home page (B460).
+On `claude/funding-wakeup` (not merged) the unwired funding observer's deadline wake-up no
+longer relies on a Windows-only socket close: it first shuts each connection down through its
+own duplicate descriptor, which also reaches a stalled TLS handshake (ADR 0178 amendment,
+B461). Windows-verified (272 funding tests); Linux only by a stdlib probe; macOS pending.
 
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).

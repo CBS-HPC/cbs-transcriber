@@ -4,7 +4,7 @@
 - [0144 — Permanent deletion of an inactive library](0144-permanent-library-deletion.md) (proposed)
 - [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stage 1 verified separately; activation held)
 - [0177 — Funding-based CPU fallback](0177-funding-based-compute-fallback.md) (agreed; not implemented)
-- [0178 — Bounded project-funding observations](0178-bounded-project-funding-observation.md) (conditional design Go; unimplemented)
+- [0178 — Bounded project-funding observations](0178-bounded-project-funding-observation.md) (implemented, unwired; cross-platform wake-up amended 19 November)
 
 Accepted architecture decisions. New decisions get the next number; supersede an old
 record explicitly rather than rewriting its historical rationale.
