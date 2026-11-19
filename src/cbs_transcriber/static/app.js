@@ -128,10 +128,18 @@ function completedNativeSetup(provider) {
     nativeReady(provider.ucloud_transcriber || {})
   );
 }
+function ucloudKeySaved() {
+  return state.providers.some(
+    (provider) => visibleProvider(provider) && provider.has_key,
+  );
+}
 function firstUseCompleted() {
-  if (firstUse.retainSaveOutcome) return firstUse.done;
+  if (firstUse.retainSaveOutcome || firstUse.done) return firstUse.done;
+  // Without a saved UCloud key the setup returns on every load; Skip then lasts only for
+  // this page (user decision, 19 November). The marker applies once a key is saved.
+  if (!ucloudKeySaved()) return false;
   try {
-    firstUse.done ||= localStorage.getItem(FIRST_USE_MARKER) === "1";
+    firstUse.done = localStorage.getItem(FIRST_USE_MARKER) === "1";
   } catch {
     // Browser storage can be disabled; completion still lasts for this page.
   }
@@ -1716,6 +1724,7 @@ async function createProject() {
   location.hash = `/projects/${project.id}`;
 }
 $("#sidebar-create").addEventListener("click", handle(createProject));
+$("#welcome-create").addEventListener("click", handle(createProject));
 $("#browse-project-storage").addEventListener(
   "click",
   handle(async (event) => {
@@ -2970,7 +2979,13 @@ $("#project-settings-open").addEventListener(
 let projectDeleteContext = null;
 $("#project-delete").addEventListener("click", () => {
   if (!state.project) return;
-  projectDeleteContext = { id: state.project.id, name: state.project.name };
+  // Bound to the view that opened it: the project's own address or the home page's first
+  // project (B460). Every navigation runs route(), which advances viewEpoch and closes it.
+  projectDeleteContext = {
+    id: state.project.id,
+    name: state.project.name,
+    epoch: viewEpoch,
+  };
   $("#project-settings-dialog").close();
   $("#delete-project-name").textContent = state.project.name;
   $("#delete-project-confirm").value = "";
@@ -2998,15 +3013,18 @@ $("#delete-project-form").addEventListener(
     )
       return;
     const button = $("#delete-project-submit");
-    const epoch = viewEpoch;
+    const epoch = project.epoch;
     const sameDialog = () =>
       projectDeleteContext === project &&
       dialog.dataset.project === project.id &&
       dialog.open;
-    const current = () =>
-      epoch === viewEpoch &&
-      location.hash === `#/projects/${project.id}` &&
-      sameDialog();
+    const current = () => epoch === viewEpoch && sameDialog();
+    if (!current()) {
+      $("#delete-project-error").textContent =
+        "This project is no longer open. Close this dialog and open the project again.";
+      $("#delete-project-error").hidden = false;
+      return;
+    }
     button.disabled = true;
     $("#delete-project-error").hidden = true;
     try {
@@ -3034,10 +3052,10 @@ $("#delete-project-form").addEventListener(
       }
     }
     dialog.close();
-    await refreshProjects();
-    if (epoch !== viewEpoch || location.hash !== `#/projects/${project.id}`)
-      return;
-    location.hash = "";
+    // A newer poll read can supersede this refresh; the home view below needs the new list.
+    while (!(await refreshProjects())) if (epoch !== viewEpoch) return;
+    if (epoch !== viewEpoch) return;
+    if (location.hash) location.hash = "";
     await route();
   }),
 );

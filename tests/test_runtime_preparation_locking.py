@@ -19,7 +19,9 @@ from cbs_transcriber import providers
 def bash_executable():
     candidates = [shutil.which("bash")]
     if os.name == "nt":
-        candidates.append(str(Path.home() / "AppData/Local/Programs/Git/bin/bash.exe"))
+        # The real home: conftest gives Path.home() a temporary folder (B459).
+        home = Path(os.path.expanduser("~"))
+        candidates.append(str(home / "AppData/Local/Programs/Git/bin/bash.exe"))
         candidates.append("C:/Program Files/Git/bin/bash.exe")
     return next(
         (
