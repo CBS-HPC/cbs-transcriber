@@ -47,6 +47,4 @@ def test_centred_button_creates_a_project_like_the_sidebar(local_app, page):
     expect(page.locator("#project-title")).to_have_text("From the home page")
     expect(page.locator("#welcome")).to_be_hidden()
     store = local_app.server.config.app.state.store
-    assert [row["name"] for row in store.all("SELECT name FROM projects")] == [
-        "From the home page"
-    ]
+    assert [row["name"] for row in store.all("SELECT name FROM projects")] == ["From the home page"]
