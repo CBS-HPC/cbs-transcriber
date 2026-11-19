@@ -679,13 +679,17 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   or per request is an idea for a later version only; the user has not decided it.
 
 - [ ] **Native UCloud batches: earlier uploads, upload/batch limits and full-GPU choice —
-  decided 19 November.** Upload each file as soon as its own original inspection passes,
-  dropping failed files with their own outcome; only the UCloud submission waits for every
-  member. Settings → UCloud gets "Files uploaded at once per batch" (1–8, default 4; upload
-  speed depends on the network, not CPU cores) and "UCloud Transcriber batches at once" (1–4,
-  default 2). When no 1g MIG is free, Activity asks per batch whether to use a full GPU,
-  stating its higher credit use; nothing switches without that click (amends ADR 0124).
-  Detecting "no MIG free" needs UCloud capacity or queue evidence before activation.
+  decided 19 November.** Done on `claude/native-batch` (T153, ADR 0183; synthetic mocked
+  checks only): each file uploads as soon as its own original inspection passes, failed files
+  are dropped with their own outcome and only the UCloud submission waits for every file;
+  Settings → UCloud has "Files uploaded at once per batch" (1–8, default 4; upload speed
+  depends on the network, not CPU cores) and "UCloud Transcriber batches at once" (1–4,
+  default 2); Activity's batch card uses plain wording ("Waiting in UCloud's queue for a GPU ·
+  12 min", "Transcribing on UCloud · 5 of 12 files reported done · last log 14:05").
+  Remaining: a live UCloud batch run, and the full-GPU choice — when no 1g MIG is free,
+  Activity asks per batch whether to use a full GPU, stating its higher credit use; nothing
+  switches without that click (amends ADR 0124). Detecting "no MIG free" needs UCloud capacity
+  or queue evidence before activation.
 
 - [x] **Post-MVP branch README simplification and uninstall guide.** The short main guide
   links focused install/review/export/provider/storage/development guides retaining unique detail.

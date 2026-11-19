@@ -308,29 +308,29 @@ def test_v142_native_prepare_clones_only_failed_consent_members_not_materialized
         accepted = input_admission.accept(store, choices)
         for row in rows:
             inspect(store, row, wav_bytes)
-        token = input_admission.claim(store)
         source = store.job(accepted[2]["id"])["params"]["input_intent"]
-        params = {
-            "settings": provider["settings"],
-            "provider_id": provider["id"],
-            "provider_name": provider["name"],
-            "revision": source["baseline"]["revision"],
-            "audio_input": token["receipts"][accepted[2]["id"]],
-            "audio_transport": "original",
-            "requested_features": effective_features(
-                providers.Settings.model_validate(provider["settings"]), FeatureRequest()
-            ).model_dump(),
-        }
-        results = input_admission.materialize(
-            store,
-            token,
-            {
-                accepted[0]["id"]: {"error": "needs_confirmation"},
-                accepted[1]["id"]: {"error": "needs_confirmation"},
-                accepted[2]["id"]: {"params": params},
-            },
-        )
-        old = results[0]
+        # Each file of a native selection is admitted on its own (ADR 0183).
+        while token := input_admission.claim(store):
+            (member,) = token["jobs"]
+            if member["id"] != accepted[2]["id"]:
+                outcome = {"error": "needs_confirmation"}
+            else:
+                outcome = {
+                    "params": {
+                        "settings": provider["settings"],
+                        "provider_id": provider["id"],
+                        "provider_name": provider["name"],
+                        "revision": source["baseline"]["revision"],
+                        "audio_input": token["receipts"][accepted[2]["id"]],
+                        "audio_transport": "original",
+                        "requested_features": effective_features(
+                            providers.Settings.model_validate(provider["settings"]),
+                            FeatureRequest(),
+                        ).model_dump(),
+                    }
+                }
+            input_admission.materialize(store, token, {member["id"]: outcome})
+        old = store.job(accepted[0]["id"])
         materialized = store.one("SELECT * FROM jobs WHERE id=?", (accepted[2]["id"],))
         preview = input_admission.projection(store, old["id"])["prepare_preview"]
         assert preview["count"] == 2

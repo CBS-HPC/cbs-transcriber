@@ -287,9 +287,12 @@ def test_accepted_native_choice_is_frozen_across_preference_change(
         put_raw(store, provider["id"], payload)
         for row in rows:
             inspect(store, row, wav_bytes)
-        token = input_admission.claim(store)
-        outcomes = input_admission.prepare(store, credentials, token)
-        result = input_admission.materialize(store, token, outcomes)
+        # Each file is admitted on its own; the second joins the batch the first file's
+        # verified allocation created, without another metadata read (ADR 0183).
+        while token := input_admission.claim(store):
+            outcomes = input_admission.prepare(store, credentials, token)
+            input_admission.materialize(store, token, outcomes)
+        result = [store.job(job["id"]) for job in jobs]
     assert len(result) == 2
     assert all(j["params"]["settings"] == provider["settings"] for j in result)
     assert calls == ([] if legacy else [native.MIG_PRODUCT["id"]])
@@ -358,6 +361,9 @@ def test_admission_cohorts_separate_legacy_mig_and_full_and_reject_forged_member
             store.execute("UPDATE jobs SET params=? WHERE id=?", (json.dumps(raw), identifier))
         with store.connection() as db, pytest.raises(ValueError):
             input_admission._cohort(db, input_admission._load(db, forged_ids[0]))
+        # Per-file early admission (ADR 0183) applies the same membership proof.
+        with store.connection() as db, pytest.raises(ValueError):
+            input_admission._unit(db, input_admission._load(db, forged_ids[0]))
 
 
 @pytest.mark.parametrize("failure", ["unavailable", "changed-reference"])

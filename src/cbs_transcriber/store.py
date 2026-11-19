@@ -3458,6 +3458,146 @@ class Store:
             )
 
     @staticmethod
+    def _native_group_batch(db, group):
+        """The one batch of an early native selection (ADR 0183), or None before its first file."""
+        rows = db.execute(
+            "SELECT id FROM native_batch_runs WHERE json_extract(CASE WHEN json_valid(params) "
+            "THEN params END,'$.native_group.sha256')=? LIMIT 2",
+            (group["sha256"],),
+        ).fetchall()
+        if len(rows) > 1:
+            raise ValueError("A native selection cannot own two UCloud batches.")
+        return rows[0]["id"] if rows else None
+
+    @staticmethod
+    def _attach_native_member(db, identifier, recording_id, params, group):
+        """Join an admitted file to its selection's one batch, creating it for the first file.
+
+        The manifest is the complete selection from the start and never changes; files that
+        later fail are recorded as dropped when the selection settles. A sealed or submitted
+        batch admits nobody, so a selection never gains a second allocation (ADR 0183).
+        Returns the job state and message that match the batch's current state."""
+        from . import native_allocation, restored_owners
+
+        batch_id = Store._native_group_batch(db, group)
+        settings = params.get("settings", {})
+        if settings.get("provider_type") != "ucloud":
+            raise ValueError("Only native UCloud Transcriber files join a native batch.")
+        native_allocation.validate(params)
+        identity = {
+            "settings": params["settings"],
+            "provider_id": params.get("provider_id"),
+            "provider_name": params["provider_name"],
+            **(
+                {"native_allocation": params["native_allocation"]}
+                if "native_allocation" in params
+                else {}
+            ),
+        }
+        selection = {"job_ids": list(group["job_ids"]), "sha256": group["sha256"]}
+        if batch_id is None:
+            batch_id = new_id()
+            restored_owners.require_owned(db, "native_batch", batch_id)
+            project_id, manifest = None, []
+            for member_id in group["job_ids"]:
+                row = db.execute(
+                    "SELECT j.recording_id,r.project_id,r.filename FROM jobs j "
+                    "JOIN recordings r ON r.id=j.recording_id WHERE j.id=?",
+                    (member_id,),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("A selected file is missing; its selection cannot start.")
+                if project_id not in (None, row["project_id"]):
+                    raise ValueError("A native batch cannot span research projects.")
+                project_id = row["project_id"]
+                suffix = Path(row["filename"]).suffix.lower()
+                if not suffix or len(suffix) > 12 or not suffix[1:].isalnum():
+                    raise ValueError("The recording needs a supported filename extension.")
+                manifest.append(
+                    {
+                        "job_id": member_id,
+                        "recording_id": row["recording_id"],
+                        "filename": member_id + suffix,
+                    }
+                )
+            if len({member["recording_id"] for member in manifest}) != len(manifest):
+                raise ValueError("A native batch cannot contain the same recording twice.")
+            db.execute(
+                "INSERT INTO native_batch_runs(id,project_id,params,members,created,updated) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    batch_id,
+                    project_id,
+                    json.dumps({**identity, "native_group": selection, "ucloud_run": {}}),
+                    json.dumps(manifest),
+                    now(),
+                    now(),
+                ),
+            )
+        batch = Store._native_batch(
+            db.execute("SELECT * FROM native_batch_runs WHERE id=?", (batch_id,)).fetchone()
+        )
+        restored_owners.require_owned(db, "native_batch", batch_id)
+        run = batch["params"].get("ucloud_run", {})
+        if (
+            batch["params"].get("native_group") != selection
+            or any(batch["params"].get(key) != value for key, value in identity.items())
+            or ("native_allocation" in batch["params"]) != ("native_allocation" in identity)
+            or not any(
+                member["job_id"] == identifier and member["recording_id"] == recording_id
+                for member in batch["members"]
+            )
+        ):
+            raise ValueError("The UCloud batch's frozen selection disagrees.")
+        if (
+            run.get("membership_sealed")
+            or run.get("job_id")
+            or run.get("submission_attempted")
+            or run.get("submission_intent")
+            or run.get("release_decision")
+            or batch["state"] == "completed"
+        ):
+            raise ValueError("This UCloud batch no longer admits files. Start a new request.")
+        params["native_batch_id"] = batch_id
+        if batch["state"] == "running":
+            return "running", "Waiting to upload"
+        if batch["state"] == "queued":
+            return "queued", "Prepared; queued for processing."
+        # A stopped batch keeps this file with it; Retry resumes the whole selection.
+        return batch["state"], batch["message"] or "Stopped. Retry the UCloud batch."
+
+    @staticmethod
+    def _seal_native_batch(db, group, dropped):
+        """Every file has an outcome: record the dropped files and allow the submission."""
+        from . import restored_owners
+
+        batch_id = Store._native_group_batch(db, group)
+        if batch_id is None:
+            return None
+        restored_owners.require_owned(db, "native_batch", batch_id)
+        batch = Store._native_batch(
+            db.execute("SELECT * FROM native_batch_runs WHERE id=?", (batch_id,)).fetchone()
+        )
+        run = batch["params"]["ucloud_run"]
+        listed = run.get("deleted_members") or []
+        if not isinstance(listed, list) or not all(isinstance(item, str) for item in listed):
+            raise ValueError("The UCloud batch's deleted-member receipt is malformed.")
+        manifest = {member["job_id"] for member in batch["members"]}
+        dropped = sorted(set(dropped) - set(listed))
+        if not set(dropped) <= manifest:
+            raise ValueError("A dropped file does not belong to this UCloud batch.")
+        if run.get("membership_sealed"):
+            if run.get("dropped_members") != dropped:
+                raise ValueError("The sealed UCloud batch membership changed.")
+            return batch_id
+        run.update(membership_sealed=True, dropped_members=dropped)
+        db.execute(
+            "UPDATE native_batch_runs SET params=?,updated=? WHERE id=?",
+            (json.dumps(batch["params"]), now(), batch_id),
+        )
+        return batch_id
+
+    @staticmethod
     def _native_batch(row):
         if row is None:
             raise KeyError("Unknown UCloud batch.")
@@ -3522,19 +3662,29 @@ class Store:
             "updated=? WHERE id=?",
             (now(), batch_id),
         )
-        deleted = native_batch._deleted(db, batch)
+        deleted = native_batch._deleted(db, batch) | native_batch.dropped(batch)
         for member in batch["members"]:
             if member["job_id"] in deleted:
                 continue
+            # Files of an early selection still being admitted are not members yet (ADR 0183).
             updated = db.execute(
                 "UPDATE jobs SET state='running',message='Starting UCloud batch…',updated=? "
-                "WHERE id=? AND state='queued'",
-                (now(), member["job_id"]),
+                "WHERE id=? AND state='queued' AND json_extract(CASE WHEN json_valid(params) "
+                "THEN params END,'$.native_batch_id')=?",
+                (now(), member["job_id"], batch_id),
             ).rowcount
             if not updated:
                 state = db.execute(
-                    "SELECT state FROM jobs WHERE id=?", (member["job_id"],)
+                    "SELECT state,json_type(CASE WHEN json_valid(params) THEN params END,"
+                    "'$.input_intent') AS intent FROM jobs WHERE id=?",
+                    (member["job_id"],),
                 ).fetchone()
+                if (
+                    state is not None
+                    and state["intent"] is not None
+                    and "native_group" in (batch["params"])
+                ):
+                    continue
                 if state is None or state[0] != "completed":
                     error = ValueError("The UCloud batch member state changed. Retry the batch.")
                     error.batch_id = batch_id
@@ -3637,9 +3787,13 @@ class Store:
             )
             for member in batch["members"]:
                 # Successful imports and their follow-ups are never reverted by a sibling failure.
+                # Files of an early selection that are not admitted yet keep their own
+                # preparation state (ADR 0183); only actual members follow the batch.
                 db.execute(
-                    "UPDATE jobs SET state=?,message=?,updated=? WHERE id=? AND state!='completed'",
-                    (state, message, now(), member["job_id"]),
+                    "UPDATE jobs SET state=?,message=?,updated=? WHERE id=? AND state!='completed' "
+                    "AND json_extract(CASE WHEN json_valid(params) THEN params END,"
+                    "'$.native_batch_id')=?",
+                    (state, message, now(), member["job_id"], identifier),
                 )
             db.execute(
                 "UPDATE native_batch_runs SET state=?,message=?,progress=?,updated=? WHERE id=?",

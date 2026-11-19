@@ -29,6 +29,8 @@ LOG_READ_SECONDS = 3
 LOG_BYTES = 64 * 1024
 LOG_JSON_BYTES = 16 * 1024
 LOG_MEMBER_LIMIT = 64
+# How often an early batch rechecks for newly admitted files while others are inspected.
+ADMISSION_POLL_SECONDS = 1
 RECONNECTING = "Temporary UCloud connection problem · reconnecting to the same allocation"
 MONITOR_INTERRUPTED = (
     "UCloud monitoring time limit reached. The recorded allocation may "
@@ -204,7 +206,8 @@ def plain_status(batch, member_rows, log_progress, *, current=None):
     Log observations may say a file was reported done; they never count as saved."""
     run = batch["params"].get("ucloud_run", {})
     message = batch["message"]
-    total = len(batch["members"])
+    excluded = dropped(batch) | {row.get("job_id") for row in member_rows if row.get("excluded")}
+    total = len(batch["members"]) - len(excluded)
     saved_ids = {
         row.get("job_id")
         for row in member_rows
@@ -220,10 +223,15 @@ def plain_status(batch, member_rows, log_progress, *, current=None):
     state = run.get("remote_state")
     if not run.get("job_id"):
         uploaded = run.get("uploaded", [])
+        # Early selections (ADR 0183): files still being inspected join before submission.
+        inspecting = sum(1 for row in member_rows if row.get("preparing"))
+        waiting = f" · {inspecting} still being inspected" if inspecting else ""
         if batch["state"] == "running" and isinstance(uploaded, list) and run.get("root_created"):
-            if len(uploaded) >= total:
+            if len(uploaded) >= total and not inspecting:
                 return "All files uploaded · submitting the batch to UCloud"
-            return f"Uploading files to UCloud · {len(uploaded)} of {total} uploaded"
+            return f"Uploading files to UCloud · {len(uploaded)} of {total} uploaded" + waiting
+        if inspecting:
+            return f"Waiting to upload · {inspecting} of {total} files still being inspected"
         return message
     if state == "RUNNING":
         parts = [RUNNING_REMOTE]
@@ -497,9 +505,56 @@ def deleted_members(store, batch):
         return _deleted(db, batch)
 
 
+def dropped(batch):
+    """Files of an early selection that never joined its allocation (ADR 0183)."""
+    listed = batch["params"].get("ucloud_run", {}).get("dropped_members") or []
+    if not isinstance(listed, list) or not all(isinstance(item, str) for item in listed):
+        raise ValueError("The UCloud batch's dropped-file receipt is malformed.")
+    return set(listed)
+
+
+def early(batch):
+    """A batch created by its selection's first admitted file (ADR 0183)."""
+    return "native_group" in batch["params"]
+
+
+def sealed(batch):
+    """Every file has an outcome. Older batches were created complete."""
+    return (
+        not early(batch) or batch["params"].get("ucloud_run", {}).get("membership_sealed") is True
+    )
+
+
+def _joined(db, batch):
+    """Manifest files that are actual members: admitted with this batch's identity."""
+    identifiers = [member["job_id"] for member in batch["members"]]
+    rows = db.execute(
+        "SELECT id FROM jobs WHERE id IN ("
+        + ",".join("?" for _ in identifiers)
+        + ") AND json_type(CASE WHEN json_valid(params) THEN params END,'$.input_intent') IS NULL "
+        "AND json_extract(CASE WHEN json_valid(params) THEN params END,'$.native_batch_id')=?",
+        (*identifiers, batch["id"]),
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
+def not_joined(store, batch):
+    """Dropped files and files still being admitted; none of them has uploaded anything."""
+    if not early(batch):
+        return set()
+    with store.connection() as db:
+        joined = _joined(db, batch)
+    return {member["job_id"] for member in batch["members"]} - joined
+
+
 def _surviving_members(store, batch):
-    deleted = deleted_members(store, batch)
-    return [member for member in batch["members"] if member["job_id"] not in deleted]
+    deleted = deleted_members(store, batch) | dropped(batch)
+    members = [member for member in batch["members"] if member["job_id"] not in deleted]
+    if not early(batch):
+        return members
+    with store.connection() as db:
+        joined = _joined(db, batch)
+    return [member for member in members if member["job_id"] in joined]
 
 
 def _deleted_list(run, job_ids):
@@ -597,8 +652,13 @@ def retained_activity(store):
                 continue
         batch = store.native_batch(row["id"])
         members = [member["job_id"] for member in batch["members"]]
+        # Dropped or unadmitted files of an early selection do not show this allocation.
         if not unresolved(batch) or store.all(
-            "SELECT id FROM jobs WHERE id IN (" + ",".join("?" for _ in members) + ")", members
+            "SELECT id FROM jobs WHERE id IN ("
+            + ",".join("?" for _ in members)
+            + ") AND json_type(CASE WHEN json_valid(params) THEN params END,"
+            "'$.input_intent') IS NULL",
+            members,
         ):
             continue  # Remaining files show this allocation through their own job rows.
         run = batch["params"].get("ucloud_run", {})
@@ -681,7 +741,9 @@ def status_fields(store, job, *, connection=None):
         "SELECT j.id AS job_id,j.recording_id,j.state,j.progress,j.message, "
         "r.name AS recording_name, "
         "(SELECT t.id FROM transcript_results t WHERE t.job_id=j.id "
-        "AND t.id NOT IN (SELECT result_id FROM result_trash)) AS result_id "
+        "AND t.id NOT IN (SELECT result_id FROM result_trash)) AS result_id, "
+        "json_extract(CASE WHEN json_valid(j.params) THEN j.params END,"
+        "'$.input_intent.phase') AS admission_phase "
         "FROM jobs j JOIN recordings r ON r.id=j.recording_id WHERE j.id IN ("
         + ",".join("?" for _ in identifiers)
         + ")"
@@ -691,6 +753,19 @@ def status_fields(store, job, *, connection=None):
         if connection is None
         else [dict(row) for row in connection.execute(query, identifiers).fetchall()]
     )
+    for row in member_rows:
+        # Files of an early selection that have not joined (ADR 0183): still being inspected,
+        # or dropped with their own outcome. Neither is a failed member to retry here.
+        phase = row.pop("admission_phase")
+        if phase == "terminal":
+            row.update(state="excluded", status_label="Not included", excluded=True)
+        elif phase is not None:
+            row.update(
+                state="preparing",
+                status_label="Inspecting original",
+                message="Uploads after its original inspection passes.",
+                preparing=True,
+            )
     members = {row["job_id"]: row for row in member_rows}
     read_errors = _output_errors(run, batch["members"])
     log_progress = _log_progress(run, batch["members"])
@@ -704,11 +779,14 @@ def status_fields(store, job, *, connection=None):
             if error:
                 member["message"] = error
         note = _log_note(log_progress["files"].get(member["job_id"]))
-        if member["state"] != "completed" and note:
+        if member["state"] not in {"completed", "excluded", "preparing"} and note:
             member["message"] = (member["message"] + ". " + note).strip(". ")
+    for member in members.values():
+        member.pop("preparing", None)
+        member.pop("excluded", None)
     return {
         "ucloud_batch_id": batch["id"],
-        "ucloud_batch_count": len(batch["members"]),
+        "ucloud_batch_count": len(batch["members"]) - len(dropped(batch)),
         "ucloud_batch_state": batch["state"],
         "ucloud_batch_progress": batch["progress"],
         "ucloud_batch_message": message,
@@ -1165,10 +1243,12 @@ def cleanup_batch(store, credentials, identifier):
             )
         stage = "local_validation"
         paths = []
-        deleted = deleted_members(store, batch)
+        deleted = deleted_members(store, batch) | dropped(batch)
         for member in batch["members"]:
             if member["job_id"] in deleted:
-                continue  # Its recording was deleted with explicit consent (ADR 0101).
+                # Deleted with explicit consent (ADR 0101), or dropped from an early
+                # selection before its submission and never uploaded (ADR 0183).
+                continue
             path = _raw_path(store, member)
             if not store.all(
                 "SELECT id FROM transcript_results WHERE job_id=?", (member["job_id"],)
@@ -1373,18 +1453,28 @@ def run_batch(worker, job, *, reconnect=None):
                                 if exc.status_code != 409:
                                     raise
                         checkpoint(folders_created=True)
-                    waiting = []
-                    for member in members:
-                        uploaded = member["job_id"] in run.get("uploaded", [])
-                        store.update_job(
-                            member["job_id"],
-                            message="Uploaded · waiting for UCloud"
-                            if uploaded
-                            else "Waiting to upload",
-                            progress=0.25 if uploaded else 0.05,
-                        )
-                        if not uploaded:
-                            waiting.append(member)
+                    labelled = set()
+
+                    def refresh():
+                        """Current members; an early selection may still be admitting files."""
+                        nonlocal members
+                        current = store.native_batch(identifier)
+                        members = _surviving_members(store, current)
+                        waiting = []
+                        for member in members:
+                            uploaded = member["job_id"] in run.get("uploaded", [])
+                            if member["job_id"] not in labelled:
+                                labelled.add(member["job_id"])
+                                store.update_job(
+                                    member["job_id"],
+                                    message="Uploaded · waiting for UCloud"
+                                    if uploaded
+                                    else "Waiting to upload",
+                                    progress=0.25 if uploaded else 0.05,
+                                )
+                            if not uploaded:
+                                waiting.append(member)
+                        return current, waiting
 
                     def upload_member(member):
                         guard()
@@ -1423,13 +1513,31 @@ def run_batch(worker, job, *, reconnect=None):
                             member["job_id"], message="Uploaded · waiting for UCloud", progress=0.25
                         )
                         store.update_native_batch(
-                            identifier, progress=0.25 * len(run["uploaded"]) / len(members)
+                            identifier,
+                            progress=0.25 * min(1, len(run["uploaded"]) / max(1, len(members))),
                         )
 
-                    _transfers(
-                        waiting, upload_member, uploaded_member, guard, workers=upload_workers
-                    )
+                    # Upload each admitted file at once; only the submission below waits until
+                    # every selected file is uploaded or dropped (ADR 0183). Older batches are
+                    # complete from the start, so this loop runs once for them.
+                    while True:
+                        current, waiting = refresh()
+                        guard()
+                        if waiting:
+                            _transfers(
+                                waiting,
+                                upload_member,
+                                uploaded_member,
+                                guard,
+                                workers=upload_workers,
+                            )
+                            continue
+                        if sealed(current):
+                            break
+                        worker.cancel_event.wait(ADMISSION_POLL_SECONDS)
                     guard()
+                    if not members:
+                        raise ValueError("No file in this UCloud batch can be submitted.")
                     # Each member records its own copy of the shared submission before the
                     # POST (ADR 0100); the batch row journals only the accepted projection hash.
                     submitted = native_capture.projection(

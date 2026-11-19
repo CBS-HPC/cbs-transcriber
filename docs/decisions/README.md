@@ -185,5 +185,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0180 — Undo last change by exact predecessor restoration](0180-undo-last-change.md) (slice 1 implemented; hidden in the MVP profile)
 - [0181 — History change list and Revert this change](0181-history-change-list.md) (slice 2 implemented; hidden in the MVP profile)
 - [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; hidden in the MVP profile)
+- [0183 — Native batch early uploads, limits and plain status](0183-native-batch-early-uploads-limits-status.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

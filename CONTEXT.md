@@ -30,6 +30,9 @@
 | Deletion release | A confirmed decision for exact batch-owned folders, kept independently of removed project/job rows so failed cleanup stays actionable; never a new transcription or Trash purge. |
 | Local deletion stage | An exact managed path renamed into a same-volume marked wrapper before logical SQLite deletion; recovery restores live targets or cleans already committed targets, without replaying Delete. |
 | Native batch | One UCloud allocation shared by selected recordings with identical native settings; each recording keeps its own job and result. |
+| Early native selection | Two or more selected native files whose batch exists from the first admitted file; each file uploads once its own inspection passes (ADR 0183). |
+| Dropped file | A file of an early native selection whose inspection or preparation failed; it keeps its own outcome and never joins the allocation. |
+| Sealed batch | An early native batch in which every selected file has joined or been dropped; it admits no more files and may be submitted once its members are uploaded. |
 | Parallel parts | A bounded number of audio parts sent concurrently within one recording job. |
 | Original-input observation | A job's frozen identity, decoder recipe and sample-clock measurements for the immutable managed original; separate from browser playback readiness. |
 | Original inspection cache | Internal schema-13 observation bound to one generation, job and epoch; retains a complete byte identity through retry, separate from executable producer admission and playback readiness. |

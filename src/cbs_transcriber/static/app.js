@@ -11378,7 +11378,7 @@ function inputPreparationCard(job) {
       !inspection &&
       input.native_group_size > 1 &&
       ["waiting", "materializing"].includes(input.phase)
-        ? `<p class="field-note">${h(input.native_group_waiting)} of ${h(input.native_group_size)} originals are still being prepared before this selection can start together.</p>`
+        ? nativeSelectionNote(input)
         : "";
   const provider =
     !inspection && (job.provider_name || job.model)
@@ -11672,6 +11672,10 @@ function activityRemoteMember(job) {
     )
   );
 }
+// ADR 0183: files of a native selection upload as soon as their own inspection passes.
+function nativeSelectionNote(input) {
+  return `<p class="field-note">${h(input.native_group_waiting)} of ${h(input.native_group_size)} originals are still being inspected. Files that pass upload to the shared UCloud batch straight away; it is submitted once every file is uploaded or excluded.</p>`;
+}
 function workflowRequestCard(job, expanded) {
   const group = job.activity_group,
     members = group.members,
@@ -11762,9 +11766,7 @@ function inputRequestCard(job, expanded) {
         member.input_preparation.native_group_size > 1 &&
         ["waiting", "materializing"].includes(member.input_preparation.phase),
     )?.input_preparation,
-    note = selection
-      ? `<p class="field-note">${h(selection.native_group_waiting)} of ${h(selection.native_group_size)} originals are still being prepared before this selection can start together.</p>`
-      : "",
+    note = selection ? nativeSelectionNote(selection) : "",
     // Until one confirmation covers every sibling, the first eligible file's
     // frozen token is the group's single Prepare action.
     eligible = members.find(

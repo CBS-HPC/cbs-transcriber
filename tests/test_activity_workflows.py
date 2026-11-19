@@ -341,10 +341,11 @@ def test_native_handoff_retains_source_failure_outside_surviving_owner(
             inspect(store, row, wav_bytes)
         cache = original_inspection.read(store, rows[-1]["id"])
         original_inspection.run(store, original_inspection.claim(store, cache["inspection_job_id"]))
-        token = input_admission.claim(store)
-        input_admission.materialize(
-            store, token, input_admission.prepare(store, credentials, token)
-        )
+        # Each file of a native selection is admitted on its own (ADR 0183).
+        while token := input_admission.claim(store):
+            input_admission.materialize(
+                store, token, input_admission.prepare(store, credentials, token)
+            )
         public = {row["id"]: row for row in transcriptions(client)}
         assert public[accepted[-1]["id"]]["input_preparation"]["error_code"] == "source_error"
         assert "activity_request_id" in public[accepted[-1]["id"]]

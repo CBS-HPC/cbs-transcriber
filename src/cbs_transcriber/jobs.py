@@ -751,6 +751,12 @@ class JobQueue:
                     input_admission.recover(self.store, job_ids=[row["id"]])
             except (ValueError, KeyError):
                 pass  # Preserve invalid proof; do not strand healthy siblings behind it.
+        try:
+            # Early native selections settle when their last file has an outcome; settle
+            # any that an earlier version left with only terminal files (ADR 0183).
+            input_admission.settle(self.store)
+        except (ValueError, KeyError, sqlite3.Error):
+            pass
         self.native_reconnect.update(
             self.store.recover_jobs(native_startup_lifecycle=self.native_lifecycle)
         )
