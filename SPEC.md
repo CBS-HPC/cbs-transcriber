@@ -120,6 +120,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   403 code feature_disabled (ADR 0145).
 - I.api: /api/projects, /api/recordings, /api/jobs, /api/settings; ID-based media/export.
   GET/PUT /api/local-concurrency reads and partially updates parallel local task limits.
+- I.spelling: GET/PUT /api/spelling/settings (revisioned preferences), GET /api/spelling/
+  dictionaries and DELETE /api/spelling/dictionaries/{language} (public cache status/removal),
+  GET/PUT /api/spelling/vocabulary and /api/projects/{id}/spelling/vocabulary (independently
+  revisioned private words); POST /api/recordings/{id}/spelling/check|suggest derive the
+  effective language and return UTF-16 draft ranges; POST /api/recordings/{id}/spelling/
+  dictionary is the separate explicit retrieval and carries no transcript text (ADR 0185).
 - I.providers: named provider configurations; bulk and per-recording selection; explicit
   multi-provider queue requests. Legacy /api/settings edits the default configuration.
 - I.results: per-recording saved transcripts, active result selection, independent edits,
@@ -331,6 +337,29 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V236: The `spelling` release-profile feature is on in full and hidden in MVP. MVP refuses
+  spelling preference saves, Check, Suggest and public dictionary retrieval with 403
+  feature_disabled before their handlers and hides every entry point (static data-feature
+  markup, featureOn in spelling.js), so MVP pages make no spelling requests. Existing private
+  data stays available: reads, dictionary removal, vocabulary saves that only remove words
+  (additions refused in the revision-checked writer), project-Delete cleanup and backup/restore
+  retention. catalogs/release.json is unchanged (user decision 19 November; ADR 0185).
+- V235: Private personal/project spelling vocabulary lives in settings row 13 and operational
+  preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions and live
+  project ownership; project Delete fences only that project's revision and removes its entry
+  in the same transaction. Vocabulary stays out of transcript exports and research reports.
+  Backups keep it; isolated restore retains only strictly validated data-only row 13 with live
+  owners and never operational preferences. Malformed vocabulary refuses before promotion.
+- V234: Spelling suggestions change only the current open Text draft after exact recording/
+  result/view/text/range checks; no automatic save, timing, Working or history mutation.
+  Derive the effective recording language and refuse unsupported languages without guessing;
+  Danish is check-only. Check/suggest/status never download or make outbound calls; separate
+  pinned public retrieval carries no text/credentials, preserves opt-out and needs consent when
+  automatic retrieval is off. The bounded, credential-free engine child is killed/reaped on any
+  deadline, including partial startup; one preferred suggestion is requested. Busy Check
+  retries only its exact current draft with bounded backoff; Suggest/install never retry
+  automatically. Dictionary removal preserves replaced/linked targets and refuses after
+  shutdown. Vendor spellcheck stays disabled. Not a hostile-filesystem claim (ADR 0185).
 - V232: An early native selection seals in the transaction that settles its last file: terminal
   files are resolved and recorded as `dropped_members` beside `membership_sealed`. A sealed or
   submitted batch admits no file; dropped files never get `native_batch_id`, an upload, a
@@ -2035,6 +2064,7 @@ T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven s
 T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions replacing the per-passage controls when the feature is on; 8 backend and 4 browser checks pass, per-passage browser tests pinned to MVP (claude/undo-last-change); hidden in MVP|V225,V224,V185,V186,I.change-list,ADR0181
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); hidden in MVP|V226,V225,I.version-graph,ADR0182
 T153|~|Native batches: plain Activity status, Settings → UCloud upload/batch limits and per-file early uploads with sealed single-owner submission; synthetic mocked checks pass (claude/native-batch); live UCloud timing/throughput and the full-GPU choice remain|V229,V230,V231,V232,V22,V142,V187,I.native-batch,ADR0183
+T155|~|Local DA checking and en-GB checking/one preferred suggestion ported from the private preview into v2 (claude/spelling-hidden) with private vocabulary, bounded worker/cache and draft/timing guards; settings rows moved to 12/13; on in full, hidden/refused in MVP with reads and removals kept; scoped backend/browser/MVP checks pass; real-user, licence and platform acceptance remain|V234,V235,V236,I.spelling,ADR0185
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -2157,3 +2187,4 @@ B460|2026-11-19|Delete project permanently did nothing when the project was show
 B461|2026-11-19|Activity's native batch card showed raw UCloud states ("UCloud batch · RUNNING", "IN_QUEUE") and kept a batch-level "Last log: model loading reported · log timestamp … (timezone unspecified)" note even after files had finished|V229,T153,ADR0183; compose a plain sentence on each read (queued time only from the app's own recorded first observation, "reported done" from exact log events, "saved" from local results, local read times), drop the batch-level log note; log/polling/transfer regressions updated
 B462|2026-11-19|A native selection uploaded nothing until every file's original inspection and preflight had settled, so one slow inspection held up every upload of the batch|V231,V232,T153,ADR0183; admit each file on its own, create the one batch at the first admitted file, upload joined files at once and seal before the only submission; early-upload, drop, stop/shutdown/Retry, concurrent-admission and startup tests
 B463|2026-11-19|Design hazard found while implementing B462: batch-wide claim/finish writes iterated the whole manifest, which in an early selection still names files that are input intents; a Stop or claim would have overwritten their admission state (queued/running/failed) and corrupted their phase-bound evidence|V231,V232,T153; claim and finish change only rows carrying this batch's native_batch_id; dropped files are skipped by cleanup, release, deletion scope and startup reconnection; the stop/shutdown test keeps the late file waiting while its batch is stopped
+B464|2026-11-19|Porting the 9 November spelling preview into v2 found its settings rows 10/11 already owned by checked-provider receipts and runtime generations; unchanged, saving spelling preferences would overwrite the provider receipts, and a library with runtime generations would fail the vocabulary validator, refusing project Delete and restore|V235,ADR0185; move spelling to rows 12/13 in the service, Delete fence and repinned restore validator; regression that a vocabulary-shaped row 11 is never restored as spelling data

@@ -13,6 +13,8 @@
 | Library backup | A verified copy of the library database plus a hashed list of every original recording (ADR 0061). |
 | Runtime cohort | At most eight accepted tasks processed by one child in stage passes, retaining one pinned engine object at a time; late tasks form a new cohort (ADR 0094). |
 | Transcript | The text of a recording, organised into passages and optionally timed words. |
+| Spelling dictionary | Verified public Hunspell files cached on this computer; separate from transcript text and private vocabulary (ADR 0185). |
+| Private spelling vocabulary | Personal words for this library and words scoped to a project, with independent revisions; retained in library backups, excluded from transcript exports and research reports. |
 | Result Trash | Recoverable removal of a saved model/enhancement result from live choices and exports; retained research history and files are not erased. |
 | Provider family | OpenAI, Custom, UCloud vLLM or UCloud Transcriber; the first selector narrows real saved model configurations. |
 | Native model expansion | Additive catalog profiles for one complete server/project connection, sharing the endpoint credential and preserving existing rows. |

@@ -27,6 +27,8 @@ HIDDEN_REQUESTS = (
     "/portable-simple/",
     "/portable-retention",
     "/portable-restore",
+    # Hidden spelling makes no request at all, not even status reads (ADR 0185).
+    "/spelling/",
 )
 
 
@@ -201,6 +203,7 @@ def test_mvp_walkthrough_offers_no_hidden_feature(page, mvp_app):
     ).click()
     expect(page.locator("#passage-0 textarea")).to_be_visible()
     expect(page.locator("#passage-0 .passage-realign")).to_be_hidden()
+    expect(page.locator("[data-spelling-panel]")).to_have_count(0)
     page.locator("#passage-0 textarea").fill("a b c d")
     with page.expect_request(lambda r: r.url.endswith("/segments/0/edit-v3")) as saved:
         page.locator("#passage-0 [data-action=save-edit]").click()
@@ -219,7 +222,7 @@ def test_mvp_walkthrough_offers_no_hidden_feature(page, mvp_app):
     expect(page.locator("#release-note")).to_contain_text("release profile mvp")
     page.locator("#tab-processing").click()
     expect(page.locator("#enhance-device")).to_be_visible()
-    for hidden in ("#enhance-python", "#enhance-rules", "#enhance-auto-note"):
+    for hidden in ("#enhance-python", "#enhance-rules", "#enhance-auto-note", "#spelling-settings"):
         expect(page.locator(hidden)).to_be_hidden()
     page.locator("#tab-huggingface").click()
     expect(page.locator("#hf-settings-token")).to_be_visible()

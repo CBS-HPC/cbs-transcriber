@@ -126,7 +126,8 @@ html[data-off~="cloud_backup"]
   [data-feature~="cloud_backup"]:not([data-feature-recovery]),
 html[data-off~="restore_ui"] [data-feature~="restore_ui"],
 html[data-off~="custom_providers"] [data-feature~="custom_providers"],
-html[data-off~="undo_last_change"] [data-feature~="undo_last_change"] {
+html[data-off~="undo_last_change"] [data-feature~="undo_last_change"],
+html[data-off~="spelling"] [data-feature~="spelling"] {
   display: none !important;
 }
 .activity-details {
@@ -1636,6 +1637,41 @@ select {
   justify-content: flex-end;
   gap: 9px;
   margin-left: auto;
+}
+/* Local spelling (ADR 0185): a panel below the open Text editor, never an overlay. */
+.passage-spelling {
+  margin: 0.65rem 0;
+  font-size: 0.8rem;
+}
+.passage-spelling .checkbox-label {
+  margin: 0;
+}
+.spelling-issues,
+.spelling-dictionaries {
+  list-style: none;
+  padding: 0;
+}
+.spelling-issues > li,
+.spelling-dictionaries > li {
+  border-bottom: 1px solid var(--line);
+  padding: 0.65rem 0;
+}
+.spelling-issue-actions,
+.spelling-suggestions,
+.spelling-vocabulary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+.spelling-dictionaries .field-note {
+  display: block;
+}
+#spelling-vocabulary-dialog {
+  width: min(540px, calc(100vw - 30px));
+}
+#spelling-vocabulary-text {
+  width: 100%;
 }
 .passage-actions button {
   font-size: 12px;

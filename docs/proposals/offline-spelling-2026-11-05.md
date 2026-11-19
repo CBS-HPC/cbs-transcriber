@@ -1,12 +1,15 @@
 # Offline spelling assistance for passage edits — design proposal, 5 November 2026
 
-Status: original wider design. A local DA/en-GB preview is implemented and independently tested
-on codex/offline-spelling-rc4, commit 3870ac2 (9 November). It is unmerged/not pushed and is not
-in main or the loaded MVP. Integration requires later user approval. The preview has Danish
-checking, British English suggestions, private vocabulary and bounded local execution. Checking
-starts off; automatic public dictionary retrieval when needed remains on, preserving opt-out.
-Other languages, fast Danish suggestions and real-user/platform/licence acceptance remain open.
-The original wider proposal below is not a completion claim.
+Status: original wider design. A local DA/en-GB preview was implemented and independently tested
+on codex/offline-spelling-rc4, commit 3870ac2 (9 November). On 19 November the user chose
+"Hidden in v2": it is re-applied to v2 behind the `spelling` release-profile feature, on in
+full and hidden in MVP ([ADR 0185](../decisions/0185-local-passage-spelling.md)). The preview
+has Danish checking, British English suggestions, private vocabulary and bounded local
+execution. Checking starts off; automatic public dictionary retrieval when needed remains on,
+preserving opt-out. The [dictionary research](../research/offline-spelling-dictionaries-2026-11-09.md)
+records the pins and licence provenance. Other languages, fast Danish suggestions and
+real-user/platform/licence acceptance remain open. The original wider proposal below is not a
+completion claim.
 
 ## Goals and constraints
 

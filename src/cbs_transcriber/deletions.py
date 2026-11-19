@@ -240,6 +240,13 @@ class Deletions:
                     )
         if kind == "project":
             projects[identifier] = self._project_metadata(identifier)
+            # Only this project's private spelling vocabulary is fenced (ADR 0185).
+            from .spelling import project_vocabulary_revision
+
+            with self.store.connection() as db:
+                projects[identifier]["spelling_vocabulary_revision"] = project_vocabulary_revision(
+                    db, identifier
+                )
         return _digest([rows, results, projects, reviews])
 
     def _project_metadata(self, identifier):
@@ -794,6 +801,10 @@ class Deletions:
                         for identifier in operation.recordings:
                             db.execute("DELETE FROM recordings WHERE id=?", (identifier,))
                         if operation.kind == "project":
+                            from .spelling import remove_project_vocabulary
+
+                            # Same writer transaction as the logical project Delete.
+                            remove_project_vocabulary(db, operation.target)
                             db.execute("DELETE FROM projects WHERE id=?", (operation.target,))
                     operation.complete = True
                     self._remember_files(

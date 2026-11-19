@@ -428,6 +428,7 @@ function acceptRecording(context, recording) {
   state.recording = recording;
   queueMicrotask(() => {
     if (typeof renderManualReviews === "function") renderManualReviews();
+    if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
   });
   return true;
 }
@@ -1216,6 +1217,11 @@ function media() {
   return state.media === "video" ? $("#video") : $("#audio");
 }
 function canLeave() {
+  if (
+    typeof canLeaveSpellingVocabulary === "function" &&
+    !canLeaveSpellingVocabulary()
+  )
+    return false;
   if (firstUse.saving) {
     toast("Wait for the credential save to finish.", true);
     return false;
@@ -1262,6 +1268,8 @@ function canDiscardPassage() {
   return !state.dirty || confirm("Discard this unsaved passage correction?");
 }
 function clearEdit() {
+  if (typeof invalidateSpellingEditor === "function")
+    invalidateSpellingEditor();
   editVersion++;
   state.dirty = false;
   state.editing = null;
@@ -1539,6 +1547,7 @@ function updateLanguageControls() {
       pendingProjectLanguages.has(state.recording.project_id);
   }
   refreshRecordingLanguageDefaults();
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor(true);
 }
 async function saveLanguage(kind, id, value) {
   const project = kind === "projects";
@@ -7296,6 +7305,7 @@ function showTimedWordEditor(
       );
     else input.select();
   }
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
   return true;
 }
 function refreshPassageDraft(segment, editor) {
@@ -7379,6 +7389,7 @@ function openPassageEditorInPlace(segment) {
   input.focus();
   updatePlaybackButtons();
   loadHints().catch(() => {});
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
   return true;
 }
 function renderTranscript() {
@@ -7475,6 +7486,7 @@ function renderTranscript() {
       });
   }
   if (typeof renderManualReviews === "function") renderManualReviews();
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
 }
 $("#transcript-search").addEventListener("input", () => {
   if (state.comparison) {
@@ -7552,6 +7564,7 @@ $("#transcript").addEventListener(
         if (target.value === "timing")
           populateTimedWordChoices(segment, editor);
       }
+      if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
     } else if (target.matches("[data-timing-word]")) {
       changeTimedWord(
         segment,
@@ -7847,6 +7860,8 @@ $("#transcript").addEventListener(
         });
       } finally {
         timedWordSaving = false;
+        if (typeof refreshSpellingEditor === "function")
+          refreshSpellingEditor(true);
         controls.forEach((control, index) => {
           if (control.isConnected) control.disabled = disabled[index];
         });
@@ -7912,6 +7927,8 @@ $("#transcript").addEventListener(
         });
       } finally {
         passageTextSaving = false;
+        if (typeof refreshSpellingEditor === "function")
+          refreshSpellingEditor(true);
         controls.forEach((control, index) => {
           if (control.isConnected) control.disabled = disabled[index];
         });
@@ -9554,6 +9571,7 @@ async function showProcessingTab() {
   if (local.status) renderLocalRuntime(local.status);
   else checkLocalRuntime().catch(() => {});
   loadLocalConcurrency().catch(() => {});
+  if (typeof loadSpellingSettings === "function") loadSpellingSettings();
   await renderCloudEnhancementStatus().catch(() => null);
 }
 // Parallel local tasks per step (ADR 0146): a value equal to this computer's automatic

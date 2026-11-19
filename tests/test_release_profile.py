@@ -154,6 +154,10 @@ GUARDED = [
     ("post", "/api/library/portable-retention/preview", "cloud_backup"),
     ("post", "/api/library/portable-retention/apply", "cloud_backup"),
     ("post", "/api/library/portable-restore", "restore_ui"),
+    ("put", "/api/spelling/settings", "spelling"),
+    ("post", "/api/recordings/r/spelling/check", "spelling"),
+    ("post", "/api/recordings/r/spelling/suggest", "spelling"),
+    ("post", "/api/recordings/r/spelling/dictionary", "spelling"),
 ]
 
 RECOVERY = [
@@ -180,6 +184,10 @@ RECOVERY = [
     ("post", "/api/library/portable-upload/o/reconcile-folder"),
     ("post", "/api/library/portable-retention/e/b/retry"),
     ("post", "/api/library/portable-backup-check"),
+    # Private spelling vocabulary writes: their handler refuses only additions (ADR 0185;
+    # reads and dictionary removal are covered in test_spelling_release_profile.py).
+    ("put", "/api/spelling/vocabulary"),
+    ("put", "/api/projects/p/spelling/vocabulary"),
 ]
 
 

@@ -16,6 +16,7 @@ from cbs_transcriber.app import create_app, create_chooser_app
         "change_steps.js",
         "history_changes.js",
         "history_graph.js",
+        "spelling.js",
     ],
 )
 def test_unversioned_editor_modules_are_fresh_after_app_restart(tmp_path, credentials, filename):
