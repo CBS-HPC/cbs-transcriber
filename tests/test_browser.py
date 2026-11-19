@@ -87,6 +87,15 @@ def local_app(tmp_path_factory):
     app.stop()
 
 
+def serve_profile(tmp_path_factory, monkeypatch, profile):
+    """A local app under an explicit release profile, for a module's own local_app fixture."""
+    monkeypatch.setenv("CBS_TRANSCRIBER_PROFILE", profile)
+    app = LocalApp(tmp_path_factory.mktemp("web") / "library")
+    app.start()
+    yield app
+    app.stop()
+
+
 @pytest.fixture
 def page(request):
     with sync_playwright() as playwright:

@@ -1712,7 +1712,16 @@ def create_app(
             "action",
             "actor_kind",
         }
-        return [{key: value for key, value in row.items() if key in fields} for row in rows]
+        from .change_list import list_context
+
+        # Bounded allowlisted change metadata only; never text, reasons or receipts (ADR 0181).
+        return [
+            {
+                **{key: value for key, value in row.items() if key in fields},
+                "change": list_context(row["action"], row["context"]),
+            }
+            for row in rows
+        ]
 
     @app.get("/api/recordings/{identifier}/transcripts/{result_id}/versions/{version_id}")
     def transcript_version(identifier: str, result_id: str, version_id: str):

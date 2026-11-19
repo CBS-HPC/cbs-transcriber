@@ -30,6 +30,8 @@
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
     <script src="/static/change_steps.js" defer></script>
+    <script src="/static/history_changes.js" defer></script>
+    <script src="/static/history_graph.js" defer></script>
     <script src="/static/conflict_review.js" defer></script>
     <script src="/static/portable.js" defer></script>
   </head>
@@ -1669,7 +1671,26 @@
         </button>
       </div>
       <div class="settings-tabs" role="tablist" aria-label="Versions">
-        <button type="button" role="tab" aria-selected="true">History</button>
+        <button
+          id="history-list-tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+        >
+          History
+        </button>
+        <!-- Branch view (ADR 0182): results as lanes, versions as nodes. -->
+        <button
+          id="history-graph-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          tabindex="-1"
+          data-feature="undo_last_change"
+          title="Each saved result and its versions, with where they branched and merged"
+        >
+          Branches
+        </button>
         <button
           id="results-manage"
           type="button"
@@ -1681,7 +1702,56 @@
           Results
         </button>
       </div>
-      <p class="settings-note">
+      <section
+        id="history-graph"
+        class="history-graph"
+        data-feature="undo_last_change"
+        aria-label="Branch view"
+        hidden
+      >
+        <p class="settings-note">
+          Each saved result is a row of its versions, oldest on the left. A
+          result made from another branches from the exact version it used;
+          merges are drawn from the version they took updates from. A dashed
+          start means the source version is unknown. Click a version to see what
+          changed; click a grouped run to expand it.
+        </p>
+        <p id="history-graph-status" role="status"></p>
+        <div class="history-graph-scroll">
+          <svg
+            id="history-graph-svg"
+            role="group"
+            aria-label="Results and versions"
+          ></svg>
+        </div>
+        <section id="history-graph-detail" aria-label="Selected version" hidden>
+          <h3 id="history-graph-title"></h3>
+          <p id="history-graph-meta" class="settings-note"></p>
+          <div id="history-graph-changes" class="history-changes"></div>
+          <div class="history-graph-actions">
+            <button
+              id="history-graph-review"
+              class="button"
+              type="button"
+              hidden
+            >
+              Open for review
+            </button>
+            <button
+              id="history-graph-compare"
+              class="button"
+              type="button"
+              hidden
+            >
+              Compare with current
+            </button>
+            <button id="history-graph-working" class="button" type="button">
+              Mark this version Working
+            </button>
+          </div>
+        </section>
+      </section>
+      <p id="history-list-note" class="settings-note">
         Read-only saved states. Inspecting a version leaves your current result,
         playback and unsaved edits unchanged. Earlier history before a legacy
         observation is unknown.
@@ -1703,6 +1773,23 @@
         <h3 id="history-preview-title"></h3>
         <p id="history-preview-meta" class="settings-note"></p>
         <p id="history-hash" class="history-hash"></p>
+        <!-- History change list (ADR 0181): what this version changed, and proven reverts. -->
+        <div data-feature="undo_last_change">
+          <h4 class="history-subtitle">What changed</h4>
+          <div
+            id="history-changes"
+            class="history-changes"
+            aria-label="What changed in this version"
+          ></div>
+          <p id="history-revert-note" class="field-note" hidden>
+            Restores the passages exactly as they were before this change. Later
+            edits elsewhere are kept, and History keeps both versions.
+          </p>
+          <button id="history-revert" class="button" type="button" hidden>
+            Revert this change
+          </button>
+          <h4 class="history-subtitle">Full text</h4>
+        </div>
         <div id="history-text" class="history-text"></div>
         <a id="history-export" class="button" download
           >↓ Download this version as text</a

@@ -4,14 +4,20 @@ import time
 
 import pytest
 from playwright.sync_api import expect
-from test_browser import create_project, import_recording
-from test_browser import local_app as local_app
+from test_browser import create_project, import_recording, serve_profile
 from test_browser import page as page
 
 from cbs_transcriber import result_roles
 from cbs_transcriber.transcripts import normalize_segments
 
 pytestmark = pytest.mark.browser
+
+
+@pytest.fixture
+def local_app(tmp_path_factory, monkeypatch):
+    # Per-passage Undo merge stays the MVP entry point; with the History change list on,
+    # older merges are reverted from History instead (ADR 0181).
+    yield from serve_profile(tmp_path_factory, monkeypatch, "mvp")
 
 
 def test_undo_merge_preserves_other_edits_and_respects_draft(page, local_app, wav_bytes):

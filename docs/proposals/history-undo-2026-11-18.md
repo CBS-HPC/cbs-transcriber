@@ -1,10 +1,11 @@
 # History, Undo last change and change list — design proposal, 18 November 2026
 
-Status: accepted 19 November 2026 with every recommended answer; slice 1 (section 6) is
-implemented as [ADR 0180](../decisions/0180-undo-last-change.md), hidden in the MVP profile.
-It answers topic 4 of
-[editor-review-decisions-2026-11-12](../work-plans/editor-review-decisions-2026-11-12.md)
-and TODO "Track and roll back manual edits". Slices 2 and 3 are not implemented yet.
+Status: accepted 19 November 2026 with every recommended answer. All three slices are
+implemented, hidden in the MVP profile: [ADR 0180](../decisions/0180-undo-last-change.md)
+(Undo/Redo), [ADR 0181](../decisions/0181-history-change-list.md) (change list and Revert
+this change) and [ADR 0182](../decisions/0182-branch-view.md) (branch view). It answers topic 4
+of [editor-review-decisions-2026-11-12](../work-plans/editor-review-decisions-2026-11-12.md)
+and TODO "Track and roll back manual edits".
 
 ## In short (for researchers)
 

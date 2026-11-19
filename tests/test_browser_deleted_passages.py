@@ -5,13 +5,20 @@ from copy import deepcopy
 import httpx
 import pytest
 from playwright.sync_api import expect
-from test_browser import local_app as local_app
 from test_browser import page as page
+from test_browser import serve_profile
 
 from cbs_transcriber import result_roles
 from cbs_transcriber.transcripts import edit_segment, normalize_segments
 
 pytestmark = pytest.mark.browser
+
+
+@pytest.fixture
+def local_app(tmp_path_factory, monkeypatch):
+    # Deleted passages stays the MVP entry point; with the History change list on,
+    # deletions are reverted from History instead (ADR 0181).
+    yield from serve_profile(tmp_path_factory, monkeypatch, "mvp")
 
 
 def delete(app, store, rid, result, sid):

@@ -110,6 +110,8 @@ async function restoreDeletedPassage(view, item) {
 function renderDeletedPassages(payload) {
   const recording = state.recording;
   if (
+    // With the History change list on, deletions are reverted there (ADR 0181).
+    featureOn("undo_last_change") ||
     !payload ||
     !recording?.active_transcript_id ||
     payload.result_id !== recording.active_transcript_id ||

@@ -4261,12 +4261,16 @@ async function loadHistory(before = null) {
   }
   if (!currentHistory(context)) return;
   if (!before) context.head = versions[0]?.id;
+  // With the change list (ADR 0181) rows name the change, its passage and undo/redo links.
+  const changeRows =
+    featureOn("undo_last_change") && typeof historyChangeRow === "function";
   $("#history-versions").insertAdjacentHTML(
     "beforeend",
     versions
-      .map(
-        (version) =>
-          `<button class="history-version button" data-history-version="${h(version.id)}"><strong>Version ${version.sequence} · ${h(historyAction(version.action))}${version.id === state.recording.result_roles?.working?.version_id ? " · Working transcript" : ""}</strong><span>${h(new Date(version.observed_at).toLocaleString("en-GB"))} · ${h(historyActor(version.actor_kind))}</span><code>${h(version.payload_sha256)}</code></button>`,
+      .map((version) =>
+        changeRows
+          ? historyChangeRow(version, context)
+          : `<button class="history-version button" data-history-version="${h(version.id)}"><strong>Version ${version.sequence} · ${h(historyAction(version.action))}${version.id === state.recording.result_roles?.working?.version_id ? " · Working transcript" : ""}</strong><span>${h(new Date(version.observed_at).toLocaleString("en-GB"))} · ${h(historyActor(version.actor_kind))}</span><code>${h(version.payload_sha256)}</code></button>`,
       )
       .join(""),
   );
@@ -4332,7 +4336,7 @@ $("#history-versions").addEventListener(
     }
     if (!currentHistory(context) || request !== historyRequest) return;
     $("#history-preview-title").textContent =
-      `Version ${version.sequence} · ${historyAction(version.action)}`;
+      `Version ${version.sequence} · ${featureOn("undo_last_change") && typeof historyChangeName === "function" ? historyChangeName(version.action) : historyAction(version.action)}`;
     $("#history-preview-meta").textContent =
       `${new Date(version.observed_at).toLocaleString("en-GB")} · ${historyActor(version.actor_kind)}${version.action === "legacy_observed" ? " · Earlier history unknown" : ""}`;
     $("#history-hash").textContent = `SHA-256 ${version.payload_sha256}`;
@@ -4359,6 +4363,11 @@ $("#history-versions").addEventListener(
     $("#history-preview").hidden = false;
     $("#history-status").textContent =
       "Historical preview only; the reviewed result is unchanged.";
+    if (
+      featureOn("undo_last_change") &&
+      typeof renderHistoryChanges === "function"
+    )
+      await renderHistoryChanges(context, version, request);
   }),
 );
 let workingContext = null,
@@ -6839,7 +6848,13 @@ function refreshMergeUndoOptions() {
   if (typeof renderDeletedPassages === "function")
     renderDeletedPassages(mergeUndoOptions.response);
   if (typeof renderChangeSteps === "function") renderChangeSteps();
-  if (!mergeUndoOptions.ids || !mergeUndoOptions.splitIds || structureLocked())
+  // With the History change list on, older merges/splits are reverted there (ADR 0181).
+  if (
+    !mergeUndoOptions.ids ||
+    !mergeUndoOptions.splitIds ||
+    structureLocked() ||
+    featureOn("undo_last_change")
+  )
     return;
   for (const passage of $("#transcript").querySelectorAll("[data-segment]")) {
     const actions = passage.querySelector(".passage-actions");

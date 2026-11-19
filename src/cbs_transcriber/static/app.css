@@ -3205,6 +3205,131 @@ h1,
 .history-text p {
   white-space: pre-wrap;
 }
+/* History change list (ADR 0181). */
+.history-version.history-undone {
+  opacity: 0.6;
+}
+.history-version .history-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.history-version .history-tag {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.history-subtitle {
+  margin: 14px 0 6px;
+  font-size: 13px;
+}
+.history-changes {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  padding: 8px 16px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.history-changes .history-change-head {
+  margin: 8px 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.history-changes .history-change-text {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+.history-changes ins {
+  background: rgba(46, 160, 67, 0.18);
+  text-decoration: none;
+}
+.history-changes del {
+  background: rgba(218, 54, 51, 0.16);
+}
+.history-changes .history-skip {
+  color: var(--muted);
+}
+/* Branch view (ADR 0182): the list's own hidden states are kept while it is shown. */
+#history-dialog.showing-graph #history-list-note,
+#history-dialog.showing-graph #history-status,
+#history-dialog.showing-graph #history-versions,
+#history-dialog.showing-graph #history-more,
+#history-dialog.showing-graph #history-preview {
+  display: none !important;
+}
+.history-graph-scroll {
+  overflow: auto;
+  max-height: 360px;
+  border: 1px solid var(--line);
+  margin: 8px 0 12px;
+}
+#history-graph-svg {
+  display: block;
+}
+#history-graph-svg .graph-label {
+  font-size: 11px;
+  fill: var(--ink);
+}
+#history-graph-svg .graph-active .graph-label {
+  font-weight: 600;
+}
+#history-graph-svg .graph-trashed {
+  opacity: 0.5;
+}
+#history-graph-svg .graph-line {
+  stroke: var(--line);
+  stroke-width: 3;
+}
+#history-graph-svg .graph-edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+#history-graph-svg .graph-merge {
+  stroke: var(--cbs-green);
+}
+#history-graph-svg .graph-unknown {
+  stroke-dasharray: 4 3;
+}
+#history-graph-svg .graph-arrow {
+  fill: var(--muted);
+}
+#history-graph-svg .graph-node {
+  cursor: pointer;
+}
+#history-graph-svg .graph-node:focus {
+  outline: none;
+}
+#history-graph-svg .graph-dot,
+#history-graph-svg .graph-revert,
+#history-graph-svg .graph-run {
+  fill: #fff;
+  stroke: var(--cbs-blue);
+  stroke-width: 2;
+}
+#history-graph-svg .graph-revert {
+  stroke: var(--muted);
+}
+#history-graph-svg .graph-working {
+  fill: var(--cbs-blue);
+}
+#history-graph-svg .graph-node:focus-visible > :first-child,
+#history-graph-svg .graph-selected > :first-child {
+  stroke: var(--cbs-dark-blue);
+  stroke-width: 4;
+}
+#history-graph-svg .graph-count,
+#history-graph-svg .graph-tag {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.history-graph-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
 .history-text strong,
 .history-text span {
   display: block;

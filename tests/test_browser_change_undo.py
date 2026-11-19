@@ -73,8 +73,8 @@ def test_labels_follow_each_newest_change_and_redo_walks_forward(page, local_app
     expect(redo).to_be_disabled()
     expect(undo).to_have_text("↶ Undo last text edit")
     page.locator("#history-open").click()
-    expect(page.locator("#history-versions")).to_contain_text("undo last change")
-    expect(page.locator("#history-versions")).to_contain_text("redo")
+    expect(page.locator("#history-versions")).to_contain_text("Undo last change")
+    expect(page.locator("#history-versions")).to_contain_text("Redo")
 
 
 def test_an_open_draft_disables_undo_until_saved_or_cancelled(page, local_app):

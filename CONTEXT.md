@@ -59,6 +59,9 @@
 | Manual passage review | User progress (Not checked, Checked or Needs review) bound to exact saved passage content, independent of uncertainty hints and Working versions. |
 | Change (undo step) | A saved version whose content differs from its predecessor, made by the researcher or applied at their request; no-change saves, Trash/Restore markers, review marks, Working choices and notes are not changes (ADR 0180). |
 | Undo last change / Redo | Appending the exact predecessor of the newest change (Undo) or the exact version the newest Undo removed (Redo) as a new version; history is never rewritten. |
+| What changed | A read-only, bounded word-level comparison of a saved version with its predecessor or another version of the same recording (ADR 0181). |
+| Revert this change | History's reversal of one proven older merge, split or deletion through its exact inverse, keeping later edits elsewhere. |
+| Branch view | A text-free picture of a recording's results as lanes of versions, with verified branch points and merge edges (ADR 0182). |
 | Current word mapping | Word offsets and intervals still belonging to the present text; independent of complete coverage and whether a researcher has edited words. |
 | Passage merge | An explicit adjacent join, retaining source text/timing and recording the chosen speaker and prior version. |
 | Passage split | A Unicode text-boundary edit using real word intervals or a deliberate passage audio position; untimed halves remain untimed. |

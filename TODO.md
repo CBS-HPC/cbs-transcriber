@@ -550,9 +550,12 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   `claude/undo-last-change` (ADR 0180, T150): toolbar **Undo last change** / **Redo** with live
   labels, exact predecessor restoration of every saved content change, one Redo until the next
   change, reach to the result's start; review marks stay outside Undo. It is hidden in the
-  MVP profile until the user decides whether MVP v2 shows it. Remaining: slice 2 (History
-  change list with word-level diffs, "Revert this change" replacing the per-passage Undo
-  merge/split and Deleted passages section) and slice 3 (branch view).
+  MVP profile until the user decides whether MVP v2 shows it. Slice 2 (ADR 0181, T151): the
+  History change list with word-level "What changed", undone/redone tags and "Revert this
+  change" for proven older merges, splits and deletions, replacing the per-passage controls
+  when the feature is on. Slice 3 (ADR 0182, T152): a Branches tab drawing results as lanes
+  with branch points, merge edges, Working and undo markers. All three are hidden in MVP;
+  remaining: the user's choice for MVP v2 and a real-library look before loading.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.

@@ -1,5 +1,6 @@
 """Explicit comparison wording adoption keeps audio, names and research evidence intact."""
 
+import re
 from copy import deepcopy
 
 import pytest
@@ -176,8 +177,9 @@ def test_wording_preview_is_explicit_and_apply_preserves_bounds_names_and_eviden
     assert store.result_versions(rid, wording["source"]["id"]) == source_history
     assert not store.all("SELECT * FROM jobs")
     page.locator("#history-open").click()
+    # The History change list (ADR 0181) capitalises the same label.
     expect(page.locator("[data-history-version]").first).to_contain_text(
-        "adopted comparison wording"
+        re.compile("adopted comparison wording", re.IGNORECASE)
     )
 
 

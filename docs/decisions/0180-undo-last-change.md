@@ -48,7 +48,6 @@ versions (`change_undo`, `change_redo`) through the shared revision-fenced write
 
 Every undo stores a full snapshot, as version restore does, and inherits lineage context
 (for example `timing_artifacts`) exactly like other manual edits. A queued word-timing job
-for undone text never applies because its passages no longer match (ADR 0052). Slice 2 will
-add the History change list, a bounded diff endpoint and "Revert this change" for older
-merges, splits and deletions, then remove the per-passage buttons and Deleted passages
-section; slice 3 is the branch view.
+for undone text never applies because its passages no longer match (ADR 0052). Slice 2, the
+History change list with "Revert this change" ([ADR 0181](0181-history-change-list.md)), and
+slice 3, the branch view ([ADR 0182](0182-branch-view.md)), followed the same day.

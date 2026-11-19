@@ -33,7 +33,7 @@ FEATURES = {
     "restore_ui": "Restoring a backup",
     "custom_providers": "Setting up a custom or UCloud vLLM provider",
     "activity_diagnostics": "Inline Activity routing details",
-    "undo_last_change": "Undo last change and Redo",
+    "undo_last_change": "Undo last change, Redo, the History change list and branch view",
 }
 PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES)}
 LABEL = re.compile(r"[A-Za-z0-9 ._()+-]{1,40}")

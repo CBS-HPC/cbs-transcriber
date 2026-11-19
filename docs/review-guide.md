@@ -91,6 +91,18 @@ restores its exact passage. Save or cancel an open draft first; typing undo insi
 box stays with the browser. If another window saved meanwhile, the newest change is shown
 and nothing is undone.
 
+Post-MVP: **Versions → History** names each change ("Version 12 · Text edit · passage 4"),
+dims versions a later Undo removed ("undone by version 14") and, when you open one, shows
+**What changed**: removed words struck through, added words highlighted, speaker and timing
+notes. Older merges, splits and deletions that can still be reversed safely say "can be
+reverted"; opening one offers **Revert this change**, which restores exactly those passages
+and keeps later edits elsewhere. In this mode the per-passage Undo merge/Undo split buttons
+and the Deleted passages section are not shown. **Versions → Branches** draws each saved
+result as a row of its versions: results made from another start from the version they used,
+Apply safe updates and wording adoptions are arrows from where they took updates, the Working
+version is filled. Click a version for what changed, **Open for review**, **Compare with
+current** or **Mark this version Working**; click a numbered group to expand it.
+
 ## Speakers and manual review
 
 Unnamed voices display as Speaker_01, Speaker_02, and so on within each result. Rename a

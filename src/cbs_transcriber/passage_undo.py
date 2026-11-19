@@ -285,12 +285,15 @@ def _candidates(db, recording_id, result_id, current, head_sequence, *, target=N
                 inverse = _merge_inverse(before, after, context, segments, ids)
                 if inverse is not None:
                     retained, parts = inverse
-                    merges.setdefault(retained, (parts, before_row["id"]))
+                    # The proven version itself is last, for History's Revert (ADR 0181).
+                    merges.setdefault(retained, (parts, before_row["id"], after_row["id"]))
             elif row["action"] == "passage_split":
                 inverse = _split_inverse(before, after, context, segments, ids)
                 if inverse is not None:
                     retained, parts, right_id = inverse
-                    splits.setdefault(retained, (parts, before_row["id"], right_id))
+                    splits.setdefault(
+                        retained, (parts, before_row["id"], right_id, after_row["id"])
+                    )
             elif row["action"] == "passage_delete":
                 proof = _delete_proof(before, after, context)
                 if proof is None:
@@ -337,6 +340,14 @@ def options(store, recording_id, result_id, *, steps=False):
             from . import change_undo
 
             step_blocks = change_undo.options(store, db, recording_id, result_id, head, payload)
+            # History's "Revert this change" offers exactly these proven versions (ADR 0181).
+            step_blocks["revertible"] = [
+                {"kind": "merge", "segment_id": identifier, "version_id": proof[-1]}
+                for identifier, proof in matches.items()
+            ] + [
+                {"kind": "split", "segment_id": identifier, "version_id": proof[-1]}
+                for identifier, proof in splits.items()
+            ]
         else:
             step_blocks = {}
         return {
