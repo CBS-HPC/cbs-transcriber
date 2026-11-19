@@ -197,9 +197,15 @@ def test_cancel_discards_only_open_draft_and_preserves_search_scroll_audio_and_r
     }""",
         {"target": target, "other": other},
     )
-    assert page.evaluate(
-        "[scrollX,scrollY,document.querySelector('#transcript').scrollTop]"
-    ) == page.evaluate("window.cancelSentinels.scroll")
+    # Closing the editor can shorten the transcript; the browser may then clamp its scroll,
+    # but it must never jump back to the top while room to stay remains.
+    scroll_now = page.evaluate(
+        "(() => { const t = document.querySelector('#transcript'); return [scrollX, scrollY,"
+        " t.scrollTop, Math.max(0, t.scrollHeight - t.clientHeight)]; })()"
+    )
+    scroll_before = page.evaluate("window.cancelSentinels.scroll")
+    assert scroll_now[:2] == scroll_before[:2]
+    assert scroll_now[2] == min(scroll_before[2], scroll_now[3])
     expect(page.locator("#transcript-search")).to_have_value("needle")
     expect(passage.locator("mark.search-match")).to_have_count(1)
     expect(review).to_have_value("needs_review")
