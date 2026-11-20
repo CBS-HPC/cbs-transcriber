@@ -139,11 +139,11 @@ def legacy_readers(store, settings, runtime_id):
 
 
 def require_preparation_idle(store, settings, client):
-    if not api.stamped(client, settings) and legacy_readers(store, settings, api.runtime_id()):
-        raise ValueError(
-            "An older UCloud job may still use this runtime. Finish or reconcile it before "
-            "rebuilding the shared runtime. No new allocation was submitted."
-        )
+    """Only actual PREPARE=1 submissions call this; cached readers never acquire it."""
+    if legacy_readers(store, settings, api.runtime_id()):
+        raise api.RuntimePreflightBlocked("runtime-legacy-reader")
+    if api.runtime_metadata(client, api.runtime_folder(settings) + "/.prepare-lock") is not None:
+        raise api.RuntimePreflightBlocked("runtime-preparation-lock")
 
 
 def ensure_use_lock(client, settings, folder, guard):
@@ -714,11 +714,12 @@ class Coordinator:
             )
         require_code(self.batch["identity"])
         self.guard()
+        if self.prepare:
+            require_preparation_idle(self.store, self.settings, self.client)
         prepared = api.stamped(self.client, self.settings)
         if not prepared:
             if not self.prepare:
                 raise ValueError(api.FAILURES["runtime-missing"])
-            require_preparation_idle(self.store, self.settings, self.client)
             api.ensure_folder(
                 self.client, self.settings.ucloud_transcriber.storage_path + "/cbs-runtime"
             )

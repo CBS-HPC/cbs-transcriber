@@ -226,7 +226,12 @@ def test_result_trash_preserves_other_result_drafts_and_reports_errors_in_dialog
     page.locator('#results-dialog [data-close="results-dialog"]').last.click()
     expect(page.locator("#passage-0 textarea")).to_have_value("Keep this reviewed draft.")
     page.locator('#passage-0 [data-action="save-edit"]').click()
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
+    # The untimed passage's new words have no verified timing, which the save reports (V208).
+    expect(page.locator("#save-status")).to_have_text(
+        "Passage saved. Some words have no verified timing after this edit. "
+        "Only identifiable existing words retain their timing."
+    )
+    assert store.recording(rid)["segments"][0]["text"] == "Keep this reviewed draft."
     page.unroute(path, reject)
     manage(page)
     page.evaluate(

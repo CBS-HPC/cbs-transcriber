@@ -5,6 +5,16 @@ not just investigate them. Start with the bounded local controls being implement
 measure before choosing larger defaults or changing source-evidence contracts. UCloud preparation
 is an evaluation item, not an authorized upload or a promise to use cloud compute.
 
+10 November 2026 update: the two-worker baseline and proposals to add adjustable lane controls
+below are historical. [ADR 0146](../decisions/0146-adjustable-local-concurrency.md) is shipped:
+media/inspection/API/admission maxima are 8/8/8/4, with new claims gated by saved or automatic
+limits. Automatic media uses logical CPUs minus two (2–8), inspection half the CPUs (2–4),
+API six and admission two. Existing work drains when limits are lowered. The
+[evaluation](../evaluations/local-concurrency-2026-11-05.md) records the bounded synthetic
+measurements and their limits. Remaining work is combined resource/FFmpeg budgeting, stage-level
+profiling, cache/read/decode reuse, playback remux evaluation and representative device/UI
+acceptance. These controls do not weaken source receipts or establish a shared CPU budget.
+
 ## Current behavior and problem
 
 Import publishes a managed original and a playback media job. A transcription request creates

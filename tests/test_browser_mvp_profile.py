@@ -3,16 +3,16 @@
 import json
 
 import pytest
-from admission_support import write_original_wav
+from admission_support import checked_connection, write_original_wav
 from playwright.sync_api import expect
-from test_browser import LocalApp, create_project
+from test_browser import LocalApp, create_project, skip_first_use
 from test_browser import page as page
 from test_browser_activity_stop import activity_job
 
 from cbs_transcriber import providers
 from cbs_transcriber.transcripts import normalize_segments
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 HIDDEN_REQUESTS = (
     "/retranscriptions",
@@ -27,6 +27,8 @@ HIDDEN_REQUESTS = (
     "/portable-simple/",
     "/portable-retention",
     "/portable-restore",
+    # Hidden spelling makes no request at all, not even status reads (ADR 0185).
+    "/spelling/",
 )
 
 
@@ -73,17 +75,10 @@ def watch(page):
 
 
 def configure(local_app):
+    """A checked UCloud connection; direct OpenAI is retired for new work (V212)."""
     app = local_app.server.config.app
     store, credentials = app.state.store, app.state.credentials
-    providers.save_profile(
-        store,
-        credentials,
-        "OpenAI",
-        providers.Settings(model="gpt-transcribe", capability="json"),
-        api_key="synthetic-openai-key",
-        remember=False,
-    )
-    providers.save_profile(
+    native = providers.save_profile(
         store,
         credentials,
         "UCloud",
@@ -91,6 +86,8 @@ def configure(local_app):
             provider_type="ucloud",
             base_url="https://cloud.invalid",
             model="large-v3",
+            # A saved model without native word timing, which is then added afterwards.
+            capability="segments",
             language="da",
             ucloud_transcriber={
                 "project_id": "synthetic-project",
@@ -106,13 +103,14 @@ def configure(local_app):
         api_key="synthetic-cloud-token",
         remember=False,
     )
-    # Runtime models stay saved and enabled; only the profile hides them.
+    checked_connection(store, credentials, native["id"])
+    # Runtime models stay saved, enabled and connected; only the profile hides them.
     for row in store.all("SELECT id,value FROM providers"):
         value = json.loads(row["value"])
         if value["model"].startswith("whisperx/"):
             value["enabled"] = True
             store.execute("UPDATE providers SET value=? WHERE id=?", (json.dumps(value), row["id"]))
-    return store
+    return store, native
 
 
 def recording_with_results(store, project_id):
@@ -140,7 +138,7 @@ def recording_with_results(store, project_id):
 
 def test_mvp_walkthrough_offers_no_hidden_feature(page, mvp_app):
     seen = watch(page)
-    store = configure(mvp_app)
+    store, native = configure(mvp_app)
     page.goto(mvp_app.url)
     expect(page.locator("html")).to_have_attribute("data-profile", "mvp")
     create_project(page, "MVP walkthrough")
@@ -154,21 +152,24 @@ def test_mvp_walkthrough_offers_no_hidden_feature(page, mvp_app):
     page.evaluate("document.querySelector('#research-report-open').hidden = false")
     expect(page.locator("#research-report-open")).to_be_hidden()
 
-    # Model choices: native Transcriber and OpenAI only; no CBS Runtime group.
+    # Model choices: native Transcriber only; no CBS Runtime group, although its
+    # saved models are enabled and connected.
     recording, target, source = recording_with_results(store, project)
     page.reload()
     expect(page.locator(".recording-card")).to_have_count(1)
     runtime = page.evaluate(
-        "state.providers.filter(p => p.model.startsWith('whisperx/') && p.enabled !== false).length"
+        "state.providers.filter(p => p.model.startsWith('whisperx/') && p.enabled !== false"
+        " && p.connection_ready === true).length"
     )
     assert runtime > 0
+    expect(page.locator("#bulk-provider-kind option")).to_have_count(1)
     page.locator("#bulk-provider-kind").select_option("ucloud")
     expect(page.locator('#bulk-provider optgroup[label="CBS Runtime / WhisperX"]')).to_have_count(0)
     labels = page.locator("#bulk-provider option").all_text_contents()
     assert labels and not any("CBS Runtime" in label for label in labels)
 
-    # OpenAI word timing is added on this computer only.
-    page.locator("#bulk-provider-kind").select_option("openai")
+    # Word timing missing from the chosen model is added on this computer only.
+    page.locator("#bulk-provider").select_option(native["id"])
     timing = page.locator('#bulk-features [data-transcription-feature="word_timing"]')
     expect(timing.locator("xpath=..")).to_have_attribute(
         "title", "Add after transcription on this computer"
@@ -202,6 +203,7 @@ def test_mvp_walkthrough_offers_no_hidden_feature(page, mvp_app):
     ).click()
     expect(page.locator("#passage-0 textarea")).to_be_visible()
     expect(page.locator("#passage-0 .passage-realign")).to_be_hidden()
+    expect(page.locator("[data-spelling-panel]")).to_have_count(0)
     page.locator("#passage-0 textarea").fill("a b c d")
     with page.expect_request(lambda r: r.url.endswith("/segments/0/edit-v3")) as saved:
         page.locator("#passage-0 [data-action=save-edit]").click()
@@ -220,7 +222,7 @@ def test_mvp_walkthrough_offers_no_hidden_feature(page, mvp_app):
     expect(page.locator("#release-note")).to_contain_text("release profile mvp")
     page.locator("#tab-processing").click()
     expect(page.locator("#enhance-device")).to_be_visible()
-    for hidden in ("#enhance-python", "#enhance-rules", "#enhance-auto-note"):
+    for hidden in ("#enhance-python", "#enhance-rules", "#enhance-auto-note", "#spelling-settings"):
         expect(page.locator(hidden)).to_be_hidden()
     page.locator("#tab-huggingface").click()
     expect(page.locator("#hf-settings-token")).to_be_visible()
@@ -272,6 +274,8 @@ def test_mvp_activity_folds_routing_details_but_keeps_recovery(page, mvp_app):
         "**/api/activity", lambda route: route.fulfill(json={"cleared_at": None, "hidden": {}})
     )
     page.goto(mvp_app.url)
+    # The UCloud setup dialog opens over an unconfigured library's home page.
+    skip_first_use(page)
     page.locator("#activity-open").click()
     card = page.locator("#jobs .job")
     expect(card).to_contain_text("The source transcript was edited after this was queued")
@@ -299,6 +303,7 @@ def test_mvp_shows_ucloud_backup_only_to_resolve_an_earlier_upload(page, mvp_app
     operations = {"uploads": [], "restores": []}
     page.route("**/api/library/portable-operations", lambda route: route.fulfill(json=operations))
     page.goto(mvp_app.url)
+    skip_first_use(page)
     page.locator("#library-open").click()
     expect(page.locator("#portable-create")).to_be_visible()
     page.wait_for_timeout(300)

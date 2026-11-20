@@ -51,7 +51,8 @@ def test_resolution_order_cli_environment_packaged_then_full(tmp_path):
     assert (build.name, build.label, build.disabled) == (
         "mvp",
         "MVP rc1",
-        set(release_profile.FEATURES),
+        # MVP v2 shows Undo last change, History and Branches (user, 20 November).
+        set(release_profile.FEATURES) - {"undo_last_change"},
     )
     # The environment overrides the packaged choice; the command line overrides both.
     assert (
@@ -154,6 +155,10 @@ GUARDED = [
     ("post", "/api/library/portable-retention/preview", "cloud_backup"),
     ("post", "/api/library/portable-retention/apply", "cloud_backup"),
     ("post", "/api/library/portable-restore", "restore_ui"),
+    ("put", "/api/spelling/settings", "spelling"),
+    ("post", "/api/recordings/r/spelling/check", "spelling"),
+    ("post", "/api/recordings/r/spelling/suggest", "spelling"),
+    ("post", "/api/recordings/r/spelling/dictionary", "spelling"),
 ]
 
 RECOVERY = [
@@ -180,6 +185,10 @@ RECOVERY = [
     ("post", "/api/library/portable-upload/o/reconcile-folder"),
     ("post", "/api/library/portable-retention/e/b/retry"),
     ("post", "/api/library/portable-backup-check"),
+    # Private spelling vocabulary writes: their handler refuses only additions (ADR 0185;
+    # reads and dictionary removal are covered in test_spelling_release_profile.py).
+    ("put", "/api/spelling/vocabulary"),
+    ("put", "/api/projects/p/spelling/vocabulary"),
 ]
 
 
@@ -292,22 +301,28 @@ def test_mvp_transcription_follow_ups_stay_local_and_hidden_providers_are_refuse
 ):
     client, store, recording, _ = timed
     credentials = client.app.state.credentials
-    openai = providers.save_profile(
+    rows_before = store.all("SELECT * FROM providers ORDER BY id")
+    with pytest.raises(ValueError, match="Direct OpenAI service is disabled"):
+        providers.save_profile(
+            store,
+            credentials,
+            "OpenAI",
+            providers.Settings(model="gpt-transcribe", capability="json"),
+            api_key="synthetic-key",
+            remember=False,
+        )
+    assert store.all("SELECT * FROM providers ORDER BY id") == rows_before
+    assert not credentials.keys
+    native = providers.save_profile(
         store,
         credentials,
-        "OpenAI",
-        providers.Settings(model="gpt-transcribe", capability="json"),
-        api_key="synthetic-key",
-        remember=False,
-    )
-    providers.save_profile(
-        store,
-        credentials,
-        "UCloud",
+        "Synthetic UCloud text-only output",
         providers.Settings(
             provider_type="ucloud",
             base_url="https://cloud.invalid",
             model="large-v3",
+            # Declared text-only output keeps the missing-timing follow-up meaningful.
+            capability="json",
             language="da",
             ucloud_transcriber={
                 "project_id": "synthetic-project",
@@ -320,6 +335,9 @@ def test_mvp_transcription_follow_ups_stay_local_and_hidden_providers_are_refuse
         remember=False,
     )
     rows = client.get("/api/providers").json()["providers"]
+    from admission_support import checked_connection
+
+    checked_connection(store, credentials, native["id"])
     runtime = next(p["id"] for p in rows if p["model"].startswith("whisperx/"))
     request = {"recording_ids": [recording["id"]]}
     refused(
@@ -332,7 +350,7 @@ def test_mvp_transcription_follow_ups_stay_local_and_hidden_providers_are_refuse
             "/api/transcriptions",
             json=request
             | {
-                "provider_ids": [openai["id"]],
+                "provider_ids": [native["id"]],
                 "enhancement": enhancement_options | {"execution": "ucloud"},
             },
         ),
@@ -342,16 +360,27 @@ def test_mvp_transcription_follow_ups_stay_local_and_hidden_providers_are_refuse
         "/api/transcriptions",
         json=request
         | {
-            "provider_ids": [openai["id"]],
+            "provider_ids": [native["id"]],
             "requested_features": {"word_timing": True},
             "enhancement": enhancement_options | {"execution": "auto"},
         },
     )
     assert response.status_code == 202, response.text
     choice = accepted(store, response.json()[0]["id"])
+    assert choice["provider"]["settings"]["capability"] == "json"
+    assert choice["requested_features"]["word_timing"] is True
     assert choice["enhancement"]["execution"] == "local"
     assert choice["routing"]["connection"] is None
-    # Custom and UCloud vLLM setups stay hidden; OpenAI setup is unchanged.
+    # Direct OpenAI is deactivated in MVP too; deferred providers remain hidden.
+    before = store.all("SELECT * FROM providers ORDER BY id")
+    keys = dict(credentials.keys)
+    disabled = client.post(
+        "/api/providers",
+        json={"name": "OpenAI", "provider_type": "openai", "api_key": "do-not-save"},
+    )
+    assert disabled.status_code == 400 and "Direct OpenAI service is disabled" in disabled.text
+    assert store.all("SELECT * FROM providers ORDER BY id") == before
+    assert credentials.keys == keys
     custom = {
         "name": "Custom",
         "provider_type": "custom",

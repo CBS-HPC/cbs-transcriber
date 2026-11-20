@@ -682,6 +682,14 @@ def _capture(store, project_id, selections, collection=None):
                     if context_bytes > MAX_CONTEXT_BYTES:
                         raise ValueError()
                     parent = dict(db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
+                    from . import local_timing, timing_working
+
+                    params = json.loads(parent["params"])
+                    authority = result_roles.job_authority(db, job_id, recording_id, "timing")
+                    if local_timing._policy(params) is not None and authority is None:
+                        raise ValueError()
+                    if authority is not None:
+                        timing_working.validate_authorized_params(authority, "timing", params)
                     row["timing_artifact_parent"] = parent
                     from .timing_capture import historical_references
 
@@ -1420,6 +1428,7 @@ def project_report(
             "Report-generation software is not evidence of earlier processing environments.",
             "This methods draft requires researcher review; journal compliance is not certified.",
         ],
+        "not_checked": ["cloud_timing_transformations", "ordinary_merge_transformations"],
     }
     lines = [
         "# Research workflow evidence",

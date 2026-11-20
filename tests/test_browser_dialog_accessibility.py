@@ -7,7 +7,9 @@ import pytest
 from playwright.sync_api import expect
 from test_browser import page as page
 
-pytestmark = pytest.mark.browser
+# A fresh profile: the returning-browser fixture keeps #first-use-dialog closed, and this
+# inventory opens every dialog, including that one, on synthetic markup.
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 STATIC = Path(__file__).resolve().parents[1] / "src/cbs_transcriber/static"
 
 
@@ -36,6 +38,7 @@ DIALOG_NAMES = [
     ("collection-settings-dialog", "Collection settings"),
     ("file-settings-dialog", "File settings"),
     ("project-settings-dialog", "Project settings"),
+    ("spelling-vocabulary-dialog", "Vocabulary"),
     ("delete-project-dialog", "Delete project"),
     ("name-dialog", "New project"),
     ("language-picker-dialog", "Choose a language"),
@@ -53,6 +56,7 @@ DIALOG_NAMES = [
     ("speaker-dialog", "Speaker for this passage"),
     ("word-dialog", "Correct a word"),
     ("settings-dialog", "Settings"),
+    ("first-use-dialog", "Connect UCloud"),
 ]
 
 

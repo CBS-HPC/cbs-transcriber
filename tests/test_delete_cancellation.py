@@ -3,7 +3,7 @@ import threading
 from contextlib import contextmanager
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import configure_compatible, inspect_and_materialize
 from test_api import upload
 from test_runtime_batch_api import add_recording, transcribe
 from test_runtime_batch_api import prepared as prepared
@@ -231,6 +231,7 @@ def test_remote_obligations_are_retained_and_never_imply_discard(client, wav_byt
 
 def test_reserved_inspection_and_intent_use_fenced_cancel(client, wav_bytes, monkeypatch):
     uploaded = upload(client, wav_bytes)
+    configure_compatible(client)
     store = client.app.state.store
     provider = providers.public_profiles(store, client.app.state.credentials)["providers"][0]
     provider = providers.profile(store, provider["id"])
@@ -298,16 +299,15 @@ def test_native_pending_cohort_is_resolved_before_deleting_its_member(client, wa
         assert store.job(jobs[0]["id"])["state"] == "cancelled"
         assert store.job(jobs[1]["id"])["state"] == "queued"
         assert store.recording(recordings[0]["id"])
-        # Normal admission still needs both original member rows to resolve the cohort.
+        # The selection is unresolved while its other file can still join (ADR 0183).
+        assert input_admission.obligations(store, recording_ids=[recordings[0]["id"]])
         remaining = store.job(jobs[1]["id"])["params"]["input_intent"]
         input_admission.cancel(
             store, jobs[1]["id"], epoch=remaining["epoch"], phase=remaining["phase"]
         )
-        token = input_admission.claim(store)
-        assert token is not None
-        input_admission.materialize(
-            store, token, {job["id"]: {"error": "cancelled"} for job in jobs}
-        )
+        # Ending the last file settles the selection in the same transaction; no claim needed.
+        assert input_admission.claim(store) is None
+        assert not input_admission.obligations(store)
         response = client.delete(route, params={"operation_id": operation_id})
         assert response.status_code == 200, response.text
     assert store.recording(recordings[1]["id"])

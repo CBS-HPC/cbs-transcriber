@@ -5,7 +5,7 @@ import json
 import threading
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import checked_connection, inspect_and_materialize
 from conftest import finish_media
 
 from cbs_transcriber import enhancement, media, providers
@@ -41,6 +41,7 @@ def custom_provider(client, *, approved_for=None):
         },
     )
     assert response.status_code == 200, response.text
+    checked_connection(client.app.state.store, client.app.state.credentials)
 
 
 def fresh_job(client, recording):
@@ -103,32 +104,38 @@ def test_fresh_api_prepares_original_with_broken_playback_and_reuses_frozen_plan
     assert store.one("SELECT params FROM jobs WHERE id=?", (job["id"],))["params"] == before
 
 
-def test_official_openai_fitting_original_is_sent_without_copy_or_conversion(
+def test_official_openai_refuses_fresh_original_work_without_changing_saved_data(
     client, wav_bytes, monkeypatch, library_lease
 ):
     recording = ready_recording(client, wav_bytes)
+    store = client.app.state.store
+    tables = (
+        "settings",
+        "providers",
+        "jobs",
+        "recordings",
+        "transcript_results",
+        "result_versions",
+    )
+    before = {table: store.all(f"SELECT * FROM {table} ORDER BY rowid") for table in tables}
+    keys = dict(client.app.state.credentials.keys)
+    original = store.directory(recording["id"]) / "original.wav"
+
+    def refuse(*args, **kwargs):
+        pytest.fail("Disabled direct service reached an audio request")
+
+    monkeypatch.setattr(providers, "transcribe_file", refuse)
     response = client.put(
         "/api/settings",
         json={"provider_type": "openai", "model": "whisper-1", "api_key": "synthetic-not-a-key"},
     )
-    assert response.status_code == 200, response.text
-    job = fresh_job(client, recording)
-    assert job["params"]["audio_transport"] == "original"
-    store, queue = client.app.state.store, client.app.state.queue
-    original = store.directory(recording["id"]) / "original.wav"
-    paths = []
-
-    def transcribe(path, settings, key):
-        paths.append(path)
-        assert path == original
-        return {"text": "Synthetic.", "segments": [{"text": "Synthetic."}]}
-
-    monkeypatch.setattr(providers, "transcribe_file", transcribe)
-    store.update_job(job["id"], state="running")
-    queue.process(job["id"])
-    assert paths == [original]
-    folder = original.parent / "chunks" / job["id"]
-    assert not (folder / "0000.mp3").exists()
+    assert response.status_code == 400, response.text
+    assert response.json() == {"detail": providers.DIRECT_OPENAI_DISABLED}
+    refused = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]})
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {"detail": providers.DIRECT_OPENAI_DISABLED}
+    assert {table: store.all(f"SELECT * FROM {table} ORDER BY rowid") for table in tables} == before
+    assert client.app.state.credentials.keys == keys
     assert original.read_bytes() == wav_bytes
 
 

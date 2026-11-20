@@ -1,6 +1,7 @@
 """Current static controls refuse runtime batches on an older local backend before enqueue."""
 
 import pytest
+from admission_support import checked_connection
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
@@ -10,20 +11,22 @@ from cbs_transcriber.providers import Settings, save_profile
 pytestmark = pytest.mark.browser
 
 
+# The former "openai-unchanged" case (direct OpenAI whisper-1 skips the probe) is dropped:
+# DIRECT_OPENAI_DISABLED refuses saving that provider and the UI offers only UCloud models.
+# "native-unchanged" keeps the non-Runtime coverage.
 @pytest.mark.parametrize(
     ("model", "backend_status", "allowed"),
     [
         ("whisperx/large-v3", 404, False),
         ("whisperx/large-v3", 200, True),
         ("large-v3", 404, True),
-        ("whisper-1", 404, True),
     ],
-    ids=["old-runtime", "current-runtime", "native-unchanged", "openai-unchanged"],
+    ids=["old-runtime", "current-runtime", "native-unchanged"],
 )
 def test_runtime_backend_guard_before_bulk_enqueue(page, local_app, model, backend_status, allowed):
     app = local_app.server.config.app
     store = app.state.store
-    save_profile(
+    saved = save_profile(
         store,
         app.state.credentials,
         "UCloud",
@@ -45,14 +48,8 @@ def test_runtime_backend_guard_before_bulk_enqueue(page, local_app, model, backe
         api_key="synthetic-cloud-key",
         remember=False,
     )
-    save_profile(
-        store,
-        app.state.credentials,
-        "OpenAI whisper-1",
-        Settings(model="whisper-1"),
-        api_key="synthetic-openai-key",
-        remember=False,
-    )
+    # Only a checked connection offers its models for new work (ADR 0167).
+    checked_connection(store, app.state.credentials, saved["id"])
     # Runtime models are parked by default; these guard cases explicitly opt in.
     if model.startswith("whisperx/"):
         for row in store.all("SELECT id,name,value FROM providers"):
@@ -95,9 +92,7 @@ def test_runtime_backend_guard_before_bulk_enqueue(page, local_app, model, backe
     page.on("dialog", confirm)
     page.goto(local_app.url + f"/#/projects/{project['id']}")
     page.locator("#select-all").click()
-    page.locator("#bulk-provider-kind").select_option(
-        "openai" if model == "whisper-1" else "ucloud"
-    )
+    page.locator("#bulk-provider-kind").select_option("ucloud")
     provider_id = page.evaluate("model => state.providers.find(p => p.model === model).id", model)
     page.locator("#bulk-provider").select_option(provider_id)
     page.locator("#transcribe-selected").click()

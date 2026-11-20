@@ -1,13 +1,13 @@
 """A stale Provider Settings form cannot silently overwrite newer saved settings."""
 
 
-def openai(client):
+def compatible(client):
     response = client.post(
         "/api/providers",
         json={
-            "name": "OpenAI",
-            "provider_type": "openai",
-            "base_url": "https://api.openai.com/v1",
+            "name": "Synthetic compatible service",
+            "provider_type": "custom",
+            "base_url": "https://compatible.invalid/v1",
             "model": "whisper-1",
             "approved_for": [],
         },
@@ -17,7 +17,7 @@ def openai(client):
 
 
 def test_stale_form_cannot_restore_an_approval_removed_in_another_window(client):
-    loaded = openai(client)
+    loaded = compatible(client)
     first = client.put(
         "/api/providers/" + loaded["id"],
         json={**loaded, "approved_for": ["protected"], "expected_version": loaded["version"]},
@@ -42,7 +42,7 @@ def test_stale_form_cannot_restore_an_approval_removed_in_another_window(client)
 
 
 def test_clients_without_a_version_keep_working(client):
-    loaded = openai(client)
+    loaded = compatible(client)
     payload = {key: value for key, value in loaded.items() if key != "version"}
     response = client.put("/api/providers/" + loaded["id"], json={**payload, "language": "en"})
     assert response.status_code == 200 and response.json()["language"] == "en"

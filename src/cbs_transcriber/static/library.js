@@ -78,15 +78,11 @@ const CBSLibraries = (() => {
     const action = library.current
       ? '<span class="badge">Open now</span>'
       : `<button type="button" class="button" data-library-open="${escape(library.path)}" ${library.unreadable ? "disabled" : ""}>Open</button>`;
-    const visibility =
-      library.current || !library.visibility_token
-        ? ""
-        : `<button type="button" class="button" data-library-visibility="${library.hidden ? "show" : "hide"}" data-library-path="${escape(library.path)}" data-library-token="${escape(library.visibility_token)}" title="${library.hidden ? "Show this library in the main list again." : "Hide this library from the main list. Nothing is deleted."}">${library.hidden ? "Show again" : "Remove from list"}</button>`;
     const removal =
       canDelete && !library.current
         ? `<button type="button" class="button danger" data-library-delete="${escape(library.path)}" title="See exactly what would be deleted. Nothing is deleted until you confirm.">Delete permanently</button>`
         : "";
-    return `<li class="library-item${library.current ? " current" : ""}"><div><strong>${escape(library.kind)}</strong><span class="library-path">${escape(library.path)}</span><span class="library-facts">${escape(facts(library))}${library.synced ? " · in a cloud-synced folder" : ""}</span></div><div class="library-actions">${action}${visibility}${removal}</div></li>`;
+    return `<li class="library-item${library.current ? " current" : ""}"><div><strong>${escape(library.kind)}</strong><span class="library-path">${escape(library.path)}</span><span class="library-facts">${escape(facts(library))}${library.synced ? " · in a cloud-synced folder" : ""}</span></div><div class="library-actions">${action}${removal}</div></li>`;
   }
   // An interrupted permanent deletion stays listed with Retry until it is settled.
   function pendingRow(item) {
@@ -112,7 +108,7 @@ const CBSLibraries = (() => {
     const blocked = facts.blockers.length > 0;
     const blockers = blocked
       ? `<div class="settings-error" role="alert" data-library-delete-blockers><p><strong>This library cannot be deleted yet.</strong> Nothing has been deleted. To continue:</p><ul>${facts.blockers.map((reason) => `<li>${escape(reason)}</li>`).join("")}</ul></div>`
-      : `<label>To confirm, type the folder name <strong>${escape(facts.name)}</strong><input type="text" data-library-delete-name autocomplete="off" spellcheck="false" /></label>`;
+      : `<label><span>To confirm, type the folder name <strong>${escape(facts.name)}</strong></span><input type="text" data-library-delete-name autocomplete="off" spellcheck="false" /></label>`;
     return `<h3 class="settings-subhead">Delete the library “${escape(facts.name)}” permanently?</h3><p class="settings-note">This deletes ${facts.projects} project(s) and ${facts.recordings} recording(s), including the original audio and video files, transcripts and their history (${facts.files} file(s), ${size(facts.bytes)} in total). <strong>This cannot be undone.</strong></p><p class="settings-note"><strong>Will be deleted</strong></p>${removed}${others}${kept ? `<p class="settings-note"><strong>Will be kept</strong></p>${kept}` : ""}${facts.notes.map((note) => `<p class="field-note">${escape(note)}</p>`).join("")}${blockers}<div class="dialog-actions"><button type="button" class="button" data-library-delete-cancel>${blocked ? "Close" : "Cancel"}</button>${facts.can_delete ? '<button type="button" class="button danger" data-library-delete-confirm>Delete permanently</button>' : ""}</div>`;
   }
   async function open(
@@ -214,12 +210,11 @@ const CBSLibraries = (() => {
     // Backup controls and the dialog's Close button have independent state owners.
     const buttons = () =>
       root.querySelectorAll(
-        "[data-library-open], [data-library-browse], [data-library-new], [data-library-visibility], [data-library-delete], [data-library-deletion-retry], [data-library-delete-confirm], [data-library-delete-cancel]",
+        "[data-library-open], [data-library-browse], [data-library-new], [data-library-delete], [data-library-deletion-retry], [data-library-delete-confirm], [data-library-delete-cancel]",
       );
-    // Hiding, deleting and recovery never restart the app, so they need no launcher.
+    // Deleting and recovery never restart the app, so they need no launcher.
     const independent = (button) =>
       [
-        "libraryVisibility",
         "libraryDelete",
         "libraryDeletionRetry",
         "libraryDeleteConfirm",
@@ -243,11 +238,11 @@ const CBSLibraries = (() => {
           );
       });
     }
-    async function guarded(action, visibility = false) {
+    async function guarded(action, independentAction = false) {
       if (
         loading ||
         opening ||
-        (!visibility && (!data?.can_switch || !beforeOpen()))
+        (!independentAction && (!data?.can_switch || !beforeOpen()))
       )
         return;
       const version = choiceVersion;
@@ -275,15 +270,11 @@ const CBSLibraries = (() => {
         const observed = await request("/libraries");
         if (version !== loadVersion) return;
         data = observed;
-        const visible = data.libraries.filter((library) => !library.hidden);
-        const hidden = data.libraries.filter((library) => library.hidden);
         const listed = (library) => row(library, data.can_delete === true);
+        // Include earlier hidden entries without rewriting their saved preferences.
         list.innerHTML =
           (data.pending_deletions || []).map(pendingRow).join("") +
-          visible.map(listed).join("") +
-          (hidden.length
-            ? `<li><details><summary>Hidden libraries (${hidden.length})</summary><p class="field-note">Files and any unfinished work are kept. Show a library again or open it to check its work.</p><ul>${hidden.map(listed).join("")}</ul></details></li>`
-            : "");
+          data.libraries.map(listed).join("");
         root.querySelector("[data-library-new]").title =
           `A new, empty library. Suggested folder: ${data.default_new}`;
         status(
@@ -377,26 +368,6 @@ const CBSLibraries = (() => {
           if (!current()) return;
           await load();
           status(result.message, result.state === "attention");
-        }, true);
-      else if (button.dataset.libraryVisibility !== undefined)
-        guarded(async (current) => {
-          const hidden = button.dataset.libraryVisibility === "hide";
-          if (
-            hidden &&
-            !confirm(
-              "Remove this library from the main list? Its files and work are kept, and it remains available under Hidden libraries.",
-            )
-          )
-            return;
-          await request("/libraries/visibility", {
-            method: "POST",
-            body: {
-              path: button.dataset.libraryPath,
-              token: button.dataset.libraryToken,
-              hidden,
-            },
-          });
-          if (current()) await load();
         }, true);
       else if (button.dataset.libraryBrowse !== undefined)
         guarded(async (current) => {

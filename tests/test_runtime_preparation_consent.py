@@ -3,16 +3,24 @@
 ADR 0098. Every readiness probe is mocked: no UCloud, Hugging Face or paid call is made."""
 
 import copy
+import json
 import threading
 import time
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from admission_support import inspect_and_materialize
 from test_runtime_batch_api import add_profile, add_recording, assert_queue_unlocked, plan
 
-from cbs_transcriber import enhancement_api, input_admission, providers, routing
+from cbs_transcriber import (
+    enhancement_api,
+    input_admission,
+    provider_connection,
+    providers,
+    routing,
+)
 from cbs_transcriber.enhancement import EnhancementOptions, ProcessingSettings
 from cbs_transcriber.runtime_compute import MIG_PRODUCT
 
@@ -21,11 +29,32 @@ REAL_STATES = enhancement_api.preparation_states
 NOT_READY = {"ready": False, "speakers": None}
 
 
+def checked_profile(store, credentials, model):
+    """Seed explicit synthetic Settings success, independently of Runtime readiness."""
+    profile = add_profile(store, credentials, model)
+    settings = providers.Settings.model_validate(profile["settings"])
+    if language := providers.fixed_runtime_language(settings):
+        settings = settings.model_copy(update={"language": language})
+    key = credentials.get(providers.credential_scope(settings))
+    checks = provider_connection.Checks()
+    proof = checks.issue(settings, key, checks.begin(settings), models=[settings.model])
+    providers.save_profile(
+        store,
+        credentials,
+        profile["name"],
+        settings,
+        identifier=profile["id"],
+        connection_check=proof,
+        connection_checks=checks,
+    )
+    return providers.profile(store, profile["id"])
+
+
 @pytest.fixture
 def runtime(client, credentials, monkeypatch):
     store, queue = client.app.state.store, client.app.state.queue
     project = store.create_project("Synthetic preparation consent")
-    provider = add_profile(store, credentials, "whisperx/roest-v3")
+    provider = checked_profile(store, credentials, "whisperx/roest-v3")
     rows = [add_recording(store, project, f"synthetic-{index}.wav") for index in range(3)]
     probes, observed = [], {"state": copy.deepcopy(NOT_READY)}
 
@@ -196,7 +225,7 @@ def test_v0098_mixed_unknown_and_unprepared_targets_still_ask(
     client, runtime, credentials, monkeypatch
 ):
     standing(client, False)
-    other = add_profile(runtime.store, credentials, "whisperx/large-v3")
+    other = checked_profile(runtime.store, credentials, "whisperx/large-v3")
     answers = iter([None, NOT_READY])
 
     def states(credentials, targets, **_):
@@ -217,7 +246,7 @@ def test_v0098_mixed_unknown_and_unprepared_targets_still_ask(
 
 def test_v0098_whole_ucloud_enhancement_asks_before_accepting(client, runtime, credentials):
     standing(client, False)
-    add_profile(runtime.store, credentials, "large-v3")
+    checked_profile(runtime.store, credentials, "large-v3")
     row = add_recording(runtime.store, runtime.project, "reviewed.wav", reviewed=True)
     body = {
         "result_id": row["active_transcript_id"],
@@ -342,7 +371,7 @@ def choice(provider, **values):
 
 
 def test_v0098_targets_cover_explicit_ucloud_only(runtime, credentials):
-    native = add_profile(runtime.store, credentials, "large-v3")
+    native = checked_profile(runtime.store, credentials, "large-v3")
     full = choice(runtime.provider)
     [(chosen, options, label)] = input_admission.preparation_targets(full)
     assert chosen["id"] == runtime.provider["id"] and options.transcribe
@@ -378,6 +407,41 @@ class Listing:
 
     def __init__(self, folders, *, fail=False):
         self.folders, self.fail, self.timeouts = set(folders), fail, []
+        self._client = SimpleNamespace(stream=self.control_stream)
+
+    @contextmanager
+    def control_stream(self, method, path, *, params=None, **kwargs):
+        if self.fail:
+            raise httpx.ConnectError("Synthetic offline drive")
+        if (method, path) == ("GET", "/api/files/retrieve"):
+            identifier = params["id"]
+            status = 200 if identifier in self.folders else 404
+            payload = {
+                "id": identifier,
+                "status": {"type": "FILE" if identifier.endswith("/stamp.json") else "DIRECTORY"},
+            }
+        else:
+            assert (method, path) == ("POST", "/api/files/download")
+            status, payload = 200, {"responses": [{"endpoint": "https://cloud.invalid/stamp"}]}
+        response = httpx.Response(
+            status,
+            stream=httpx.ByteStream(json.dumps(payload).encode()),
+        )
+        try:
+            yield response
+        finally:
+            response.close()
+
+    @contextmanager
+    def stream(self, method, endpoint, **kwargs):
+        assert method == "GET" and endpoint == "https://cloud.invalid/stamp"
+        response = httpx.Response(
+            200, stream=httpx.ByteStream(enhancement_api.runtime_stamp_bytes())
+        )
+        try:
+            yield response
+        finally:
+            response.close()
 
     def __enter__(self):
         return self
@@ -400,6 +464,7 @@ def drive(monkeypatch, listing):
         return listing
 
     monkeypatch.setattr(enhancement_api.native, "client_for", client_for)
+    monkeypatch.setattr(enhancement_api.httpx, "Client", lambda **kwargs: listing)
     monkeypatch.setattr(
         enhancement_api.native,
         "folder_listed",

@@ -18,6 +18,7 @@ MAX_MERGES = 100
 MAX_HISTORY_VERSIONS = 500
 MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
 MAX_HISTORY_BYTES = 32 * 1024 * 1024
+PRESENCE_ACTIONS = {"change_undo", "change_redo"}
 
 
 def _read_payload(payload, digest):
@@ -186,7 +187,8 @@ def _candidates(db, recording_id, result_id, current, head_sequence, *, target=N
         "ON p.id=m.predecessor_id AND p.result_id=m.result_id AND p.sequence=m.sequence-1 "
         "WHERE m.result_id=? AND m.sequence>? AND m.sequence<=? "
         "AND m.action IN ('passage_merge','passage_split','passage_delete',"
-        "'passage_merge_undo','passage_split_undo','passage_delete_undo','version_restore') "
+        "'passage_merge_undo','passage_split_undo','passage_delete_undo','version_restore',"
+        "'change_undo','change_redo') "
         "ORDER BY m.sequence DESC LIMIT ?",
         (result_id, max(0, head_sequence - MAX_HISTORY_VERSIONS), head_sequence, MAX_MERGES + 1),
     ).fetchall()
@@ -205,6 +207,32 @@ def _candidates(db, recording_id, result_id, current, head_sequence, *, target=N
             # A whole-version replacement is not an inactive passage view. Its older
             # deletions need the saved-version workflow, not guessed selective recovery.
             deletion_history_unknown = True
+            continue
+        if row["action"] in PRESENCE_ACTIONS:
+            # Undo/Redo last change (ADR 0180) moves one exact step; it only records which
+            # passages existed, so an older deletion it already reversed is never re-offered.
+            sizes = (row["merged_size"], row["previous_size"])
+            if any(size is None or size > MAX_SNAPSHOT_BYTES for size in sizes):
+                limited = deletion_history_unknown = True
+                continue
+            if sum(sizes) > remaining:
+                limited = True
+                break
+            remaining -= sum(sizes)
+            try:
+                for version in db.execute(
+                    "SELECT v.id,v.payload,v.payload_sha256 FROM result_versions v "
+                    "JOIN transcript_results r ON r.id=v.result_id "
+                    "WHERE v.id IN (?,?) AND v.result_id=? AND r.recording_id=?",
+                    (row["id"], row["predecessor_id"], result_id, recording_id),
+                ).fetchall():
+                    present_later.update(
+                        _ids(
+                            _read_payload(version["payload"], version["payload_sha256"])["segments"]
+                        )
+                    )
+            except (KeyError, TypeError, ValueError, RecursionError):
+                limited = deletion_history_unknown = True
             continue
         if row["context"] is None:
             limited = True
@@ -257,12 +285,15 @@ def _candidates(db, recording_id, result_id, current, head_sequence, *, target=N
                 inverse = _merge_inverse(before, after, context, segments, ids)
                 if inverse is not None:
                     retained, parts = inverse
-                    merges.setdefault(retained, (parts, before_row["id"]))
+                    # The proven version itself is last, for History's Revert (ADR 0181).
+                    merges.setdefault(retained, (parts, before_row["id"], after_row["id"]))
             elif row["action"] == "passage_split":
                 inverse = _split_inverse(before, after, context, segments, ids)
                 if inverse is not None:
                     retained, parts, right_id = inverse
-                    splits.setdefault(retained, (parts, before_row["id"], right_id))
+                    splits.setdefault(
+                        retained, (parts, before_row["id"], right_id, after_row["id"])
+                    )
             elif row["action"] == "passage_delete":
                 proof = _delete_proof(before, after, context)
                 if proof is None:
@@ -297,14 +328,30 @@ def _candidates(db, recording_id, result_id, current, head_sequence, *, target=N
     return merges, splits, deletions, limited
 
 
-def options(store, recording_id, result_id):
+def options(store, recording_id, result_id, *, steps=False):
+    """Proven passage undos; with steps, also the Undo last change/Redo blocks (ADR 0180)."""
     with store.connection() as db:
         db.execute("BEGIN")
         current, head, payload = _read_current(store, db, recording_id, result_id)
         matches, splits, deletions, limited = _candidates(
             db, recording_id, result_id, payload, head["sequence"]
         )
+        if steps:
+            from . import change_undo
+
+            step_blocks = change_undo.options(store, db, recording_id, result_id, head, payload)
+            # History's "Revert this change" offers exactly these proven versions (ADR 0181).
+            step_blocks["revertible"] = [
+                {"kind": "merge", "segment_id": identifier, "version_id": proof[-1]}
+                for identifier, proof in matches.items()
+            ] + [
+                {"kind": "split", "segment_id": identifier, "version_id": proof[-1]}
+                for identifier, proof in splits.items()
+            ]
+        else:
+            step_blocks = {}
         return {
+            **step_blocks,
             "result_id": result_id,
             "revision": current["revision"],
             "segment_ids": list(matches),

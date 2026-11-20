@@ -2,13 +2,22 @@
 
 import pytest
 from playwright.sync_api import expect
-from test_browser import local_app as local_app
 from test_browser import page as page
+from test_browser import serve_profile
 
-from cbs_transcriber import result_roles
+from cbs_transcriber import release_profile, result_roles
 from cbs_transcriber.transcripts import normalize_segments
 
 pytestmark = pytest.mark.browser
+
+
+@pytest.fixture
+def local_app(tmp_path_factory, monkeypatch):
+    # Per-passage Undo split is the fallback wherever the History change list is hidden; with
+    # it on (full, and MVP v2 since 20 November) older splits are reverted from History
+    # instead (ADR 0181). Hide the feature to keep the fallback covered.
+    monkeypatch.setitem(release_profile.PROFILES, "mvp", frozenset(release_profile.FEATURES))
+    yield from serve_profile(tmp_path_factory, monkeypatch, "mvp")
 
 
 def seed_split(store):

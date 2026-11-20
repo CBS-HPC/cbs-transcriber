@@ -1,5 +1,7 @@
 """History can restore an earlier version as the newest one without losing anything."""
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
@@ -40,7 +42,10 @@ def test_history_restores_an_earlier_version(page, local_app):
     expect(page.locator("#toast")).to_contain_text("restored as the newest version")
     page.locator("#history-open").click()
     expect(page.locator("[data-history-version]")).to_have_count(3)
-    expect(page.locator("[data-history-version]").first).to_contain_text("restored earlier version")
+    # The History change list (ADR 0181) names it "Restored earlier version".
+    expect(page.locator("[data-history-version]").first).to_contain_text(
+        re.compile("restored earlier version", re.IGNORECASE)
+    )
 
 
 def test_restore_keeps_notes_drafts_and_reports_refusals_in_history(page, local_app):

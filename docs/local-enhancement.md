@@ -5,12 +5,12 @@ alignment, speaker detection, or both, and the processing location. The app free
 result's current text and creates a separate result. It keeps the reviewed result selected.
 Local processing sends no audio or transcript text to an API provider, including for Protected projects.
 
-Passages flagged with missing word timing have a compact **Add word timing** action. It uses the
-recording's language, or its project default, with saved local settings as the legacy fallback,
-and cached models. The count warning also offers repair of
-all eligible missing passages. Only actual passage audio intervals are decoded; untimed or overly
-large passages use full-result enhancement. Other passages and speaker names stay unchanged.
-**Review repair** selects the new combined result after completion; the source is kept.
+Passages flagged with missing word timing have a compact **Add word timing** action. It uses
+the recording's language, or its project default, with saved local settings as the fallback.
+**Repair all** queues eligible missing passages together. These timing actions add a version
+to the same result and retain its wording. Unbounded passages are searched only in bounded
+gaps between known neighbours; search gaps are not stored as passage timing. Other passages
+and speaker names stay unchanged. See the [review guide](review-guide.md#add-word-timing-or-speaker-labels).
 **Review enhanced result** also appears beside the result controls when an enhancement of the
 selected source is ready. Completion during editing waits for the draft to settle; it does not
 silently change the reviewed transcript or its playback timings.
@@ -22,7 +22,10 @@ Processing download preference; completed/frozen retries retain their original p
 
 ## Standard installation
 
-WhisperX 3.8.6 and CPU PyTorch are standard dependencies. Install or repair them with:
+WhisperX 3.8.6 and CPU PyTorch are standard dependencies on Windows x64 and Apple Silicon
+(macOS 14+). Intel Mac installs omit this stack. For a released uv-tool installation, use
+the matching wheel/constraints [install or reinstall procedure](installation.md#update-or-reinstall).
+For a stopped developer/source installation, install or repair dependencies with:
 
 ```powershell
 uv sync --locked

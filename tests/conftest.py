@@ -1,6 +1,8 @@
 import io
+import ipaddress
 import json
 import os
+import socket
 import wave
 from pathlib import Path
 
@@ -31,6 +33,63 @@ def loopback_testclient(monkeypatch):
     monkeypatch.setattr(TestClient, "__init__", local_client)
 
 
+def _loopback(host):
+    """Only this computer's loopback names/addresses (or a passive bind) stay reachable."""
+    if host is None:
+        return True
+    if isinstance(host, bytes):
+        host = host.decode("ascii", "replace")
+    if not isinstance(host, str):
+        return False
+    host = host.strip("[]").lower()
+    if host in {"", "localhost"} or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+class ResolutionRefused(socket.gaierror):
+    """A test tried to look up a real host name; tests never reach a provider or service."""
+
+
+class ConnectionToRealHostRefused(ConnectionRefusedError):
+    """A test tried to connect to a non-loopback address."""
+
+
+def _refusal(target):
+    return f"Tests never reach a real host ({target!r}); mock the call."
+
+
+@pytest.fixture(autouse=True)
+def loopback_network_only(monkeypatch):
+    """No test may resolve or connect to a non-loopback host, even read-only or unauthenticated.
+
+    Individual tests may install stricter tripwires or register loopback-backed names.
+    """
+    resolve, by_name, connect = socket.getaddrinfo, socket.gethostbyname, socket.socket.connect
+
+    def getaddrinfo(host, *args, **kwargs):
+        if not _loopback(host):
+            raise ResolutionRefused(socket.EAI_NONAME, _refusal(host))
+        return resolve(host, *args, **kwargs)
+
+    def gethostbyname(host):
+        if not _loopback(host):
+            raise ResolutionRefused(socket.EAI_NONAME, _refusal(host))
+        return by_name(host)
+
+    def guarded_connect(self, address):
+        if isinstance(address, tuple) and not _loopback(address[0]):
+            raise ConnectionToRealHostRefused(_refusal(address[0]))
+        return connect(self, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(socket, "gethostbyname", gethostbyname)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+
+
 class MemoryCredentials:
     def __init__(self):
         self.keys = {}
@@ -40,6 +99,39 @@ class MemoryCredentials:
 
     def set(self, base_url, value, persist):
         self.keys[base_url] = value
+
+
+# Captured before any test can change it; the browser driver needs the real value.
+REAL_LOCAL_APP_DATA = os.environ.get("LOCALAPPDATA")
+
+
+@pytest.fixture(autouse=True)
+def isolated_app_folder(tmp_path_factory, monkeypatch):
+    """No test reads or writes this computer's app folder or earlier library locations.
+
+    The library registry, hidden-library list and default Library/Projects folders live under
+    Path.home(), so each test gets its own temporary home. The earlier platformdirs default is
+    temporary too, and the packaged-app scan skips the real LOCALAPPDATA (Playwright needs that
+    variable) unless a test points it at its own folder. Tests may install their own home.
+    """
+    from uuid import uuid4
+
+    from cbs_transcriber import libraries, storage
+
+    home = tmp_path_factory.getbasetemp() / "home" / uuid4().hex
+    legacy = home / "legacy-app-data" / "CBS Transcriber"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(storage, "legacy_library_root", lambda: legacy)
+    monkeypatch.setattr(libraries, "legacy_library_root", lambda: legacy)
+    scan = libraries.redirected_roots
+
+    def redirected_roots():
+        if os.environ.get("LOCALAPPDATA") == REAL_LOCAL_APP_DATA:
+            return []
+        return scan()
+
+    monkeypatch.setattr(libraries, "redirected_roots", redirected_roots)
+    return home
 
 
 @pytest.fixture(autouse=True)
@@ -52,6 +144,18 @@ def isolated_library_deletions(tmp_path_factory, monkeypatch):
     records = tmp_path_factory.getbasetemp() / "library-deletions" / uuid4().hex
     monkeypatch.setattr(library_deletion, "journal_root", lambda: records)
     return records
+
+
+@pytest.fixture(autouse=True)
+def isolated_spelling_cache(tmp_path_factory, monkeypatch):
+    """The public spelling dictionary cache is never this computer's app cache (ADR 0185)."""
+    from uuid import uuid4
+
+    from cbs_transcriber import spelling
+
+    cache = tmp_path_factory.getbasetemp() / "spelling-cache" / uuid4().hex
+    monkeypatch.setattr(spelling, "default_cache_dir", lambda: cache)
+    return cache
 
 
 @pytest.fixture(autouse=True)

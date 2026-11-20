@@ -15,6 +15,7 @@ MAX_MERGE_BYTES = MAX_TRANSCRIPT_BYTES
 MAX_PASSAGES = 100_000
 MAX_DETAILS = 200
 POLICY_VERSION = "cbs-transcript-merge-v1"
+NEW_POLICY_VERSION = "cbs-transcript-merge-v2"
 TIMING_FIELDS = ("start", "end", "words", "word_timing", "words_current")
 WORD_FIELDS = {
     "word",
@@ -74,6 +75,28 @@ def _timing(passage):
         # An absent marker can still describe a valid unedited/complete mapping.
         "words_current": word_mapping_current(passage),
     }
+
+
+def _adoption_policy(policy, *payloads):
+    if policy not in (None, POLICY_VERSION, NEW_POLICY_VERSION):
+        raise ValueError("The timing adoption policy is invalid or unsupported.")
+    if policy == NEW_POLICY_VERSION:
+        for payload in payloads:
+            if any(
+                "alignment_hints_stale" in passage and passage["alignment_hints_stale"] is not True
+                for passage in payload["segments"]
+            ):
+                raise ValueError("The alignment hint evidence is invalid.")
+    return policy == NEW_POLICY_VERSION
+
+
+def _timing_identity(passage):
+    value = copy.deepcopy(_timing(passage))
+    for word in value["words"]:
+        if isinstance(word, dict):
+            word.pop("manual_timing", None)
+            word.pop("alignment_hints_stale", None)
+    return value
 
 
 def _number(value):
@@ -139,7 +162,7 @@ def _valid_timing(passage, base):
     return True, timed
 
 
-def merge_payload(base, ours, incoming, creation):
+def merge_payload(base, ours, incoming, creation, *, policy=None):
     """Return safe changes and bounded explanations; callers verify frozen lineage/CAS.
 
     Conflicts count passages with any conflicting group, including a passage whose other
@@ -158,6 +181,7 @@ def merge_payload(base, ours, incoming, creation):
         if size > MAX_MERGE_BYTES:
             raise ValueError("The four merge snapshots exceed the bounded payload limit.")
     base_by_id, ours_by_id, incoming_by_id, _ = indexes
+    fresh = _adoption_policy(policy, base, ours, incoming, creation)
     if len(base["segments"]) != len(creation["segments"]) or any(
         left["text"] != right["text"]
         for left, right in zip(base["segments"], creation["segments"], strict=True)
@@ -249,7 +273,8 @@ def merge_payload(base, ours, incoming, creation):
             )
             continue
         changes, reasons, conflict = [], [], False
-        before, current_timing, proposed = _timing(original), _timing(current), _timing(theirs)
+        timing = _timing_identity if fresh else _timing
+        before, current_timing, proposed = timing(original), timing(current), timing(theirs)
         if proposed != before and current_timing != proposed:
             if current_timing != before:
                 reasons.append("Both versions changed timing; reviewed timing was kept.")
@@ -272,6 +297,8 @@ def merge_payload(base, ours, incoming, creation):
                         updated["words_current"] = True
                     else:
                         updated.pop("words_current", None)
+                    if fresh:
+                        updated["alignment_hints_stale"] = True
                     changes.append("timing")
         before_label = original.get("speaker", "UNKNOWN")
         current_label = current.get("speaker", "UNKNOWN")

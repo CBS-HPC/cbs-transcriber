@@ -4,14 +4,22 @@ import time
 
 import pytest
 from playwright.sync_api import expect
-from test_browser import create_project, import_recording
-from test_browser import local_app as local_app
+from test_browser import create_project, import_recording, serve_profile
 from test_browser import page as page
 
-from cbs_transcriber import result_roles
+from cbs_transcriber import release_profile, result_roles
 from cbs_transcriber.transcripts import normalize_segments
 
 pytestmark = pytest.mark.browser
+
+
+@pytest.fixture
+def local_app(tmp_path_factory, monkeypatch):
+    # Per-passage Undo merge is the fallback wherever the History change list is hidden; with
+    # it on (full, and MVP v2 since 20 November) older merges are reverted from History
+    # instead (ADR 0181). Hide the feature to keep the fallback covered.
+    monkeypatch.setitem(release_profile.PROFILES, "mvp", frozenset(release_profile.FEATURES))
+    yield from serve_profile(tmp_path_factory, monkeypatch, "mvp")
 
 
 def test_undo_merge_preserves_other_edits_and_respects_draft(page, local_app, wav_bytes):
@@ -87,7 +95,7 @@ def test_undo_merge_preserves_other_edits_and_respects_draft(page, local_app, wa
     expect(draft).to_have_value("Unsaved draft")
     expect(page.locator("#transcript .passage")).to_have_count(2)
 
-    page.locator('#passage-2 [data-action="cancel-edit"]').click()
+    page.locator('#passage-2 [data-editor-pane="text"] [data-action="cancel-edit"]').click()
 
     # A late hints response must not re-enable editing while undo is pending.
     hints = []

@@ -11,9 +11,17 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - Windows and macOS; Python 3.13, uv, local .venv, Git main, pytest, Ruff.
   Validate real installation/playback on each OS before claiming platform acceptance.
 - FastAPI + build-free HTML/CSS/JS; SQLite; loopback only; single user.
-- Current provider UI offers OpenAI and UCloud only. Custom and UCloud vLLM are deferred;
+- Released MVP provider UI offers OpenAI and UCloud only. The isolated post-MVP branch
+  retires direct OpenAI under V212. Custom and UCloud vLLM are deferred;
   retain their existing saved configurations, research results and frozen jobs for compatibility.
   Built-in connection names are internal; Available models is part of basic Settings.
+- Post-MVP provider decision (11 November): deactivate the direct OpenAI service in normal
+  setup, model/provider choices and new transcription admission. Retain the OpenAI-compatible
+  client/protocol implementation for a possible future UCloud-hosted transcription endpoint;
+  protocol compatibility does not establish deployment or model capability. Preserve saved
+  results/history and credentials/configuration evidence. Specify queued/running/retry handling
+  before activation, without silently cancelling work or starting new paid calls. This decision
+  is implemented on the isolated morning branch; the installed MVP remains unchanged.
 - CBS service rollout is a separate pilot decision: access, ownership, support, approved processing
   and measured total operating cost. Current local architecture does not imply shared hosting/SSO.
 - Managed local library outside repository/OneDrive; retain originals.
@@ -30,6 +38,40 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   approved coding. NVivo owns advanced thematic interpretation, matrices, code co-occurrence,
   cross-interview comparisons and research reporting. See docs/ai-analysis-nvivo-roadmap.md.
 - UI: action button captions omit trailing ellipses, including dialog launchers and busy states.
+- The 12 November preview preparation uses a local App/.venv installation guide with
+  uv-managed CPython and matching release assets, preserving sibling Library/Projects.
+  Increase passage/editor fonts modestly while retaining editor/overlay wrapping and focus.
+  The user does not install the next preview manually; test installation in disposable
+  storage and prepare a labelled local preview without synchronizing the serving environment.
+- Post-MVP work stays on a separate local branch; no merge/push to main, installed-app reload
+  or release. Limit frontend decisions to explicit requests; broader choices await colleague
+  feedback. Empty libraries show only the unchanged official blue vertical CBS mark and title;
+  project creation remains accessible through existing navigation at narrow widths too.
+- Post-MVP first-launch onboarding (11 November; presentation amended 12 November): offer
+  UCloud API key entry and optional Hugging Face token entry in an independent setup dialog,
+  reusing Settings checks and credential storage. Keep front/project pages clear of an inline
+  setup card. Skip, close and Escape retain the guarded save/late-reply semantics.
+  Missing credentials use a pale-yellow field only when no key/token is saved and its draft
+  is blank; an empty field retaining an existing credential stays normal. This is presence,
+  not validation or operational readiness.
+  Keep later Settings access; empty libraries alone do not imply first use. UCloud-only setup
+  starts no preparation. The user's later HF decision explicitly queues access/configured-model
+  preparation in Activity under ADR 0173. Implementation is on the isolated morning branch;
+  the installed app's ordinary empty-page layout remains unchanged.
+- Planned anonymisation uses an anonymisation LLM running on UCloud (user direction,
+  11 November 2026). The hosting catalogue identifies PII-Tracer as the candidate: a PII
+  token classifier served through `/v1/pii`, not a chat-completions model. Integration,
+  transcript-quality acceptance, identifier scope and mapping custody remain open.
+  The local synthetic demo is review/evaluation scaffolding, not the
+  intended inference backend. This direction does not activate jobs, upload data or claim
+  an implemented anonymisation workflow; real execution/integration remains separately scoped.
+- PII-Tracer implementation is parked by the user pending CBS Runtime stability. Its future
+  app flow should start the model on demand through UCloud API control; no current endpoint
+  uptime, inference credential, deployment authority or replacement/key policy is inferred.
+- The next approved release should include a stable latest-release installer, retaining valid
+  versioned wheel names. Resolve one stable release and its matching wheel/constraints/digests;
+  do not install rolling main or synchronize a serving environment. Until that asset is
+  published, current versioned MVP installation commands remain the available route.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space
   permits, wrapping on narrow screens. Uncertainty controls follow Next to review.
 - UI: Text / Word and timing editor dropdown defaults to Text; audio/video switch retains position.
@@ -78,6 +120,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   403 code feature_disabled (ADR 0145).
 - I.api: /api/projects, /api/recordings, /api/jobs, /api/settings; ID-based media/export.
   GET/PUT /api/local-concurrency reads and partially updates parallel local task limits.
+- I.spelling: GET/PUT /api/spelling/settings (revisioned preferences), GET /api/spelling/
+  dictionaries and DELETE /api/spelling/dictionaries/{language} (public cache status/removal),
+  GET/PUT /api/spelling/vocabulary and /api/projects/{id}/spelling/vocabulary (independently
+  revisioned private words); POST /api/recordings/{id}/spelling/check|suggest derive the
+  effective language and return UTF-16 draft ranges; POST /api/recordings/{id}/spelling/
+  dictionary is the separate explicit retrieval and carries no transcript text (ADR 0185).
 - I.providers: named provider configurations; bulk and per-recording selection; explicit
   multi-provider queue requests. Legacy /api/settings edits the default configuration.
 - I.results: per-recording saved transcripts, active result selection, independent edits,
@@ -99,9 +147,22 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Marking does not edit text, timing, content history or Working roles.
   Next to review navigates visible Not checked/Needs review passages, skipping Checked and
   wrapping independently of the optional model-uncertainty display.
+  A view-local Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing
+  word timing) narrows rendered passages, with counts, together with search; Next to review
+  visits only shown passages (V223).
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
+- I.change-undo: the same merge-undo-options reply carries `head_version_id` plus `undo` and
+  `redo` blocks (action, version, counts, confirm, or an unavailable message) when the
+  `undo_last_change` feature is on. POST transcripts/{rid}/undo-last and redo-last bind
+  revision, head version, the offered step and the Working choice; 409 when stale (ADR 0180).
+- I.change-list: GET …/versions rows add a bounded allowlisted `change` object; GET
+  …/versions/{id}/changes[?against=] returns a read-only word-level comparison with its
+  predecessor or another version of the recording; with the feature on, merge-undo-options
+  adds `revertible` merge/split versions for History's "Revert this change" (ADR 0181).
+- I.version-graph: GET /api/recordings/{id}/version-graph returns text-free lanes (≤50 results,
+  newest ≤200 versions each), verified branch sources, merge/wording edges and Working (ADR 0182).
 - I.native-batch: one explicit selected-file request groups identical native model/connection
   settings into one UCloud allocation with a unique input directory and per-file outputs/results.
   Retain local per-recording identities and durable shared-run ownership/recovery.
@@ -112,6 +173,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Frozen transcriber/1.12 batches may preserve finished members after fresh exact processed
   observations and two identical valid reads. Unknown references wait for terminal. Existing
   raw uses terminal recovery; early saves never authorize remote cleanup (ADR 0155).
+  GET/PUT /api/native-batches/settings reads/partially saves {uploads 1–8, batches 1–4};
+  the status adds defaults, maxima and the applied batch limit (ADR 0183).
 - I.enhance-api: new UCloud enhancements reuse the Provider Settings UCloud connection and
   API-only job/file operations. No new SSH setup or separate control token. Existing frozen SSH
   runs retain their original recovery path. Runtime/models must remain explicit and validated;
@@ -274,8 +337,228 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
-- V192: Next to review uses the current validated manual review snapshot and rendered passage
-  order, skipping Checked and wrapping from the end. Zero model hints or hidden uncertainty
+- V236: The `spelling` release-profile feature is on in full and hidden in MVP. MVP refuses
+  spelling preference saves, Check, Suggest and public dictionary retrieval with 403
+  feature_disabled before their handlers and hides every entry point (static data-feature
+  markup, featureOn in spelling.js), so MVP pages make no spelling requests. Existing private
+  data stays available: reads, dictionary removal, vocabulary saves that only remove words
+  (additions refused in the revision-checked writer), project-Delete cleanup and backup/restore
+  retention. catalogs/release.json is unchanged (user decision 19 November; ADR 0185).
+- V235: Private personal/project spelling vocabulary lives in settings row 13 and operational
+  preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions and live
+  project ownership; project Delete fences only that project's revision and removes its entry
+  in the same transaction. Vocabulary stays out of transcript exports and research reports.
+  Backups keep it; isolated restore retains only strictly validated data-only row 13 with live
+  owners and never operational preferences. Malformed vocabulary refuses before promotion.
+- V234: Spelling suggestions change only the current open Text draft after exact recording/
+  result/view/text/range checks; no automatic save, timing, Working or history mutation.
+  Derive the effective recording language and refuse unsupported languages without guessing;
+  Danish is check-only. Check/suggest/status never download or make outbound calls; separate
+  pinned public retrieval carries no text/credentials, preserves opt-out and needs consent when
+  automatic retrieval is off. The bounded, credential-free engine child is killed/reaped on any
+  deadline, including partial startup; one preferred suggestion is requested. Busy Check
+  retries only its exact current draft with bounded backoff; Suggest/install never retry
+  automatically. Dictionary removal preserves replaced/linked targets and refuses after
+  shutdown. Vendor spellcheck stays disabled. Not a hostile-filesystem claim (ADR 0185).
+- V233: Proposed, not implemented. A native MIG owner asks about a full B200 only when two
+  products reads agree the exact MIG is FULL and the full GPU AVAILABLE/BUSY, with verified
+  identity, funding and 7x relation (no queue-time threshold); failed/unknown never asks. Ask
+  before the POST (bounded hold, then MIG) where possible; a queued MIG is cancelled and proven
+  never started before one full-GPU POST. One click consents to one attempt; Retry returns to
+  the MIG; never two allocations; Stop wins; hidden in MVP (ADR0184). V76 unchanged until then.
+- V232: An early native selection seals in the transaction that settles its last file: terminal
+  files are resolved and recorded as `dropped_members` beside `membership_sealed`. A sealed or
+  submitted batch admits no file; dropped files never get `native_batch_id`, an upload, a
+  submission descriptor or a result requirement for cleanup/release, and are skipped by deletion
+  scope and startup reconnection (which requires the seal and binds it). A confirmed Delete
+  records the Stop of affected unsubmitted batches before cancelling admissions; the submission
+  intent is written only if no Stop is recorded, in the same transaction. Older batches without
+  `native_group` count as sealed and are unchanged (ADR 0183).
+- V231: A selection of two or more native files admits each file as soon as its own original
+  inspection passes; its first admitted file creates the one batch whose manifest is the whole
+  selection, found by the selection digest under the writer transaction (two refuse). Uploads of
+  joined files start at once; only the submission waits until every file is uploaded or dropped.
+  A failed inspection drops only that file with its own outcome. Stop/shutdown before submission
+  stops the batch; later files join it stopped and Retry resumes once. One survivor known at its
+  admission keeps the single-file path. Exactly one owner, no automatic resubmission (ADR 0183).
+- V230: Settings → UCloud saves "Files uploaded at once per batch" (1–8, default 4) and "UCloud
+  Transcriber batches at once" (1–4, default 2) on change, separately from the connection form
+  and its unsaved-entry check. The native lane starts four workers; the batch limit gates new
+  claims under the claim lock and never stops running work; a batch keeps the upload limit it
+  started with; downloads stay at four (ADR 0183).
+- V229: Activity's native batch sentence uses plain words, never raw UCloud states: queued time
+  only from this app's own recorded first observation of that state, "files reported done" from
+  exact log events and "saved" only from local results; log times are this app's read times in
+  local time. Finished or failed batches carry no batch-level log note (ADR 0183).
+- V228: Choosing the open Settings tab again asks before discarding entries the researcher
+  typed in the UCloud form or the Hugging Face token box but did not save; without such
+  entries it reloads and retries as before. Processing and separately saved controls save on
+  change and never ask. Programmatic reloads (late replies, Forget key) are unchanged.
+- V227: v2 Settings hides the UCloud "Allowed for Protected projects" box while the saved
+  connection is allowed (the default); a connection saved as not allowed shows it so the
+  choice can be undone. Saved approvals stay enforced unchanged; no approval is rewritten
+  (user decision 19 November).
+- V226: The branch view is metadata only and bounded; it draws a branch point or merge edge
+  only from verified same-recording references and shows unknown sources as gaps. Its actions
+  are the existing review/compare selectors (with their draft guards) and the fingerprinted
+  Working preview; it never edits content (ADR 0182).
+- V225: The History change list never exposes reasons, receipts or private metadata; diffs are
+  read in one integrity-checked snapshot, bounded, and rendered from text nodes. "Revert this
+  change" is offered only for the exact proven merge/split/delete versions and uses their
+  unchanged writers. With the feature on, the per-passage Undo merge/split buttons and Deleted
+  passages section are hidden; MVP keeps them (user decision 19 November; ADR 0181).
+- V224: Undo last change re-saves the exact predecessor of the newest content change (hash
+  differs from its predecessor) and Redo the exact version the newest Undo removed, both as
+  appended change_undo/change_redo versions; history is never rewritten. A newer save refuses
+  (409) and the browser shows the new newest change. Every saved content change counts; review
+  marks, Working choices and notes are never undone. Structural steps must agree with the
+  proven merge/split/delete inverses; Redo ends at the next other change; reach is the
+  result's start within 500 versions. Undo/Redo rows are passage-presence rows in the deleted
+  passage scan. No global Ctrl+Z (user decisions 19 November; ADR 0180).
+- V223: The Show filter is view-local: it resets when a recording is opened and survives
+  re-renders. It hides rendered passages in place, never hides the passage being edited and
+  keeps passages edited or marked since the filter was chosen until the next choice. Review
+  states use the V192 snapshot; Uncertain uses Show uncertainty flags at the chosen level and
+  is unavailable while that display is off; Missing word timing means !word_timing. Model
+  uncertainty never writes manual marks. Disabled while comparing (user decision 12 Nov).
+- V222: Existing sole-result Working may activate only reviewed runtime/DB18/18 or19/19 pairs
+  with all ADR0141 eligibility/source/role/snapshot fences intact. Preserve passage_reviews
+  exactly, never interpret marks as consent/veto. Before designation, bounded negative native
+  job/owner scans cover both membership directions and failed resumable/unknown work without
+  calling T141 admission or reordering startup. Unknown/opaque/incomplete scope refuses remaining
+  pages; foreign data_version invalidates cached negatives; writer rechecks preserve later
+  choices. Earlier committed pages are not falsely described as globally rolled back (ADR0179).
+- V221: Future project-funding observations use explicit configured context and bounded GET-only
+  complete wallet reads. Strict ownership/unit/scalar projection and curated reasons preserve
+  unknown versus complete absence/zero; partial/error reads grant no usable authority. Always
+  affordability=not_checked/reservation=false, with no routing/job/DB/credential discovery or
+  whole-run funding claim. A watchdog enforces the overall deadline; no result or request
+  headers after observe() returns. At the deadline it shuts down each connected socket through
+  a duplicate taken at TCP connect (wakes Linux, TLS handshakes too; macOS expected), then
+  closes the client (wakes Windows); later connections are shut down at once. Unwired
+  standalone module with independent Go (T146); any caller, live acceptance and a full
+  Linux/macOS run remain (Windows-verified, Linux probe only; ADR0178).
+- V220: Planned CPU fallback applies to native Transcriber and CBS Runtime only for known
+  absent/exhausted or insufficient selected-project GPU funding. Sufficient usable funding
+  keeps exact 1g MIG even when queued; BUSY/FULL or unknown funding never authorizes CPU.
+  Exact cpu-amd-zen5-8-vcpu needs CPU funding and model/recipe proof; freeze accepted choices,
+  never retarget Retry/uncertain submissions. Affordability policy and activation remain pending;
+  current V76/V112 behavior stays unchanged until T145 is verified (ADR0177).
+- V216: Install-latest resolves one public stable release and one matching versioned wheel/
+  constraints pair, rejects ambiguous/foreign/malformed assets and verifies GitHub SHA-256
+  digests before uv installation. Preserve copy/no-config flags, explicit update intent and
+  isolation from the project environment; a running default-port app blocks installation.
+  Never auto-start, kill an app or publish assets. An unpublished stable URL is labelled as such.
+- V217: Native startup reconnect is retrieval-only for exact submitted singleton/batch owners.
+  Dedicated bounded atomic admission preserves frozen identity, saved/Trash/Working results,
+  durable Stop/Cancel (including pre-ack crash), unknown/uncertain/restored/disposed refusal and
+  one attempt per queue lifecycle. Historical generic failures remain manual; only exact typed
+  current transient receipts may qualify. Both worker paths retain pinned authority outside
+  mutable params and refuse missing/changed IDs before any create/upload/submit fallback.
+  Reconciled submissions require a valid timezone-aware timestamp; completed siblings require
+  one exact producer/recording/remote-ID match, including Trash, rechecked during execution.
+  Never call manual Retry, clear Stop, recapture settings, invent replacement consent or start
+  inference followups. Metadata admission has no network/file reads; I/O drains under the lease.
+  [ADR 0174](docs/decisions/0174-native-startup-reconnection.md).
+- V219: Isolated Runtime generations never reclaim old locks or mutate promoted environments.
+  A collision-checked bounded registry, explicit fresh consent, exclusive folder intent/receipt
+  and exact owner/epoch/resource/readiness registry-CAS promotion are distinct authorities.
+  Seal compute/flavor before reservation and an explicit no-active choice at fresh acceptance;
+  delayed/Auto/followup/repair/Retry paths carry it without registry recapture. CPU and CUDA
+  targets/readiness remain distinct; changed models require a fresh candidate. Legacy absent
+  policy keeps exact paths/receipts. Restore drops operational pointers and archives owners.
+  Protected generation proof compares type-strictly; stored owners decode from frozen data
+  only, never current version constants.
+  A settled failed candidate is replaced only by explicit fingerprint-bound supersession:
+  one writer inserts the new owner, records the old owner's permanent receipt and swaps the
+  exact candidate, without revision/pointer change, remote action or released obligations.
+  Active, stop-pending, allocation-holding or uncertain-POST candidates keep blocking.
+  Stage1 only validates data/paths and candidate CAS: no caller-ready promotion/capture grant.
+  All activation stays disabled until owner/admission/execution/capture/restore and live gates.
+  [ADR 0176](docs/decisions/0176-isolated-runtime-generation-recovery.md).
+- V218: Standalone Runtime preparation retries only typed bounded read observations of its
+  exact frozen allocation/artifacts; no new submission, shared cache/lock mutation or Ready
+  from missing/invalid proof. Keep auth/identity/generation/pins/refusal distinct from transient
+  transport and bounded partial publication; legacy generic read APIs retain their contracts.
+  Stop routes through owned remote observation; shutdown/epoch/terminal deadlines stay live.
+  Positive completion rechecks Stop and owner under the writer transaction, including a wait.
+  Historical retained-lock recovery and immutable-generation activation remain separate.
+  [ADR 0175](docs/decisions/0175-runtime-preparation-observation-recovery.md).
+- V215: Explicit nonempty primary HF Settings/first-use token Save starts a server-lifetime
+  Activity setup task, not inline
+  model work; no-worker tests remain inert. Current token/plan fences, pinned cached-file reuse,
+  metadata access/terms checks and configured local/UCloud policy govern each stage. Local set
+  is existing speakers/coarse/da/en, not every advertised ASR model. Optional versioned remote
+  plan checks every selected supported Runtime cache beyond the base stamp at its documented
+  metadata/receipt scope, preserving legacy
+  absent-plan behavior and one durable remote owner/no uncertain resubmission. Stop/drain,
+  capture/switch/lease and partial outcomes remain honest. Tokens/fingerprints stay private;
+  no restart-continuation or global readiness claim follows from the ephemeral parent. Legacy
+  Save aliases do not trigger unrelated preparation but all writers invalidate stale work;
+  absent-token updates neither enqueue nor cancel unchanged work. Explicit Check queues the
+  saved token through the same Activity owner; different unsaved drafts require Save first.
+  A native-only configuration does not select Runtime weights: UCloud setup needs at least
+  one enabled supported CBS Runtime profile and reports that missing choice explicitly.
+  Before durable-child acceptance, bind exact verified speaker files under the parent's
+  access/token fence; the accepted child cannot fetch or borrow replacement HF credentials.
+  Repeated Save reuses a completed nonarchived plan only after fresh full cache-witness checks;
+  its bounded journal receipt alone is not current readiness or a full weight-hash proof.
+- V214: CBS Runtime host/supervisor agree on exact bounded canonical requirements stamp bytes.
+  Host checks API-reported kinds/explicit link flags, not physical lstat proof; shell requires
+  a regular non-link stamp. Unknown reads never grant readiness/preparation. New singleton/
+  shared/standalone PREPARE=1 submissions refuse retained locks and known legacy readers
+  independently of stamp validity before uploads/job-submission POST. Read-only ticket POSTs
+  remain observations. PREPARE=0 cached readers and same-allocation recovery
+  retain authority. Preflight absence is not ownership; shell locks and legacy-reader fences
+  remain. No lock stealing, cache deletion, frozen-job rewrite or disabled generation activation.
+- V212: Direct OpenAI service (family or normalized official endpoint host) cannot receive new
+  setup/model-list/audio requests in the post-MVP build, including custom-label and queued/Retry
+  paths. Refuse before SDK/audio/credential/check-state mutation where applicable. Preserve
+  nonofficial compatible transport, native UCloud, frozen settings, saved evidence, Stop and
+  complete local raw/chunk finalization; accepted requests drain. Never infer cache completeness
+  from the fresh-only audio-plan helper alone. ADR 0170; mocked no-outbound checks.
+- V213: First-use home setup reuses exact UCloud discovery/save proofs and credential storage;
+  presentation is a separate accessible dialog; accepted saves cannot be dismissed while
+  pending, and leaving/Skip cannot allow late checks to write. Keep the existing completion
+  marker and existing-profile Settings handoff. Missing-key decoration uses only presence
+  metadata and blank-draft state, never secrets or a claim that the connection is checked.
+  optional HF uses Save and V215's explicitly chosen background workflow, never the old inline
+  download-capable Check route. UCloud-only setup starts no preparation/processing. A nonsecret
+  browser completion marker follows explicit Save/Skip,
+  not project count or boot; late discovery cannot write after Skip/navigation, accepted saves
+  finish honestly, and partial outcomes are explicit. Secrets stay out of localStorage/logs/URLs.
+  Existing setup and later Settings remain usable; storage-unavailable fallback is graceful.
+  Existing visible UCloud profiles hand off to their exact Settings context; automatic fresh
+  duplicates cannot bypass disabled-model or Protected-denial choices.
+  The marker applies only while a visible UCloud profile has a saved key: without one the
+  setup returns on every page load and Skip/Close last for that page (user decision,
+  19 November). The empty home page also offers a centred Create a project button.
+- V211: Fresh verified timing requests freeze the host-only invalidation policy at their exact
+  source/role acceptance boundary (ADR 0169); missing policy stays byte-exact legacy, unknown
+  policy refuses and mutation cannot remove/retarget it. Applied/replaced passages and changed
+  timing adoption invalidate all source alignment-fit word hints, including omitted spans;
+  skipped/unselected dictionaries and recognition confidence remain. Old/new local/cloud/merge/
+  conflict successors, receipts, Working proofs and projections dispatch stored generations.
+  Local history/capture validation never claims checked cloud transformation; no source rewrite,
+  invented scores, UI redesign or automatic alignment. Portable pins/caps remain enforced.
+  Present-policy Apply requires its generation/presence/value sealed by the host at birth;
+  a coincidental parameter or legacy v1 authority row cannot grant the new generation.
+  Structural joins retain invalidation from either input, including a marked right passage.
+- V209: New HTTP transcription selection/admission requires the saved connection's explicit
+  successful Settings check, bound to actual resolved identity and credential (ADR 0167).
+  Operational settings row 10 never enters provider versions, frozen jobs, provenance or public
+  credential diagnostics. Newer checks invalidate older save proofs; wrong drafts and late
+  responses cannot revoke another saved identity. Missing/stale/unavailable connections do not
+  hide results, Stop, Retry or recovery. No passive probes, expiry or ASR-readiness claim.
+- V210: Text-editor word following is on by default without a setting (user decision,
+  12 November). Exact saved wording highlights verified intervals. A differing draft keeps only
+  saved words wholly inside the common code-point prefix (same offsets) or suffix (shifted by
+  the length change) and separated from edited letters; changed or new words never receive
+  times. Native text input keeps focus, caret/selection, undo and, while typing, its scroll
+  position, with no value replacement. No duplicate saved-text panel, provider call or
+  persisted transcript change.
+- V192: Next to review uses the current validated manual review snapshot and rendered, shown
+  passage order, skipping Checked and wrapping from the end. Zero model hints or hidden uncertainty
   controls cannot disable available manual work. Disable on all checked, unavailable/loading
   marks or unsupported historical views. Refresh eligibility after status/filter/view changes;
   preserve drafts, caret and content and refuse stale view authority. Navigation writes no marks.
@@ -401,7 +684,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   PATCH requires the active live result, current recording revision, passage hash and review-row CAS.
   Preserve marks in complete backup/restore; reject malformed or orphan review rows. UI acknowledgments
   remain view/revision fenced and cannot replace drafts or silently mark unsaved wording Checked.
-- V187: Native batch uploads/downloads use at most four in-flight file transfers per batch.
+- V187: Native batch downloads use at most four in-flight file transfers per batch; uploads use
+  the batch's starting Settings → UCloud limit (V230, default four).
   Network tasks own separate control/transfer clients; the coordinator alone merges durable upload,
   output/capture and result receipts. Bound completed output bytes by the transfer window. On error,
   cancellation or shutdown stop admission and drain accepted tasks before releasing the library lease;
@@ -418,12 +702,16 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   feature_disabled); reads, exports, Stop/Retry/Reconnect/cleanup and frozen jobs are unchanged.
   Without UCloud processing, Automatic freezes this computer and Repair all stays local; main
   ships full and tests pin full unless a run sets the profile explicitly (ADR 0145).
-- V177: Removing a non-current library from the main list is reversible presentation only;
-  retain its files, jobs and remote obligations in a visible Hidden libraries disclosure.
-  Bind suppression to directory/database identities so a replacement is discoverable; reject
-  stale actions and an open target. Corrupt visibility metadata never hides libraries.
-  Hiding never grants permanent-deletion authority; that is the separate V183 (ADR 0144).
+- V177: Legacy visibility APIs/preferences remain reversible presentation only, bound to
+  directory/database identities; reject stale actions and an open target. Current Library
+  UI offers no hide/show action or separate hidden disclosure: every discovered entry,
+  including previously hidden ones, is accessible without rewriting its stored preference.
+  Retain files, jobs and remote obligations. Corrupt visibility metadata cannot hide entries;
+  a legacy hide action never grants V183 permanent-deletion authority (ADRs 0128/0144).
 - V183: Delete permanently applies only to a listed, non-current library no server holds.
+  Its confirmation label/input, paths and counts stay readable within wide/narrow panels;
+  explanatory notes never squeeze the field into a shared column. The UI has no hide action;
+  previously hidden entries remain accessible without rewriting their visibility preferences.
   Its preview never opens the target database in place or creates/writes any target file
   (including `server.lock`): it reads a private copy with unchanged signatures and walks
   without following links. Unsettled jobs, UCloud/Runtime/preparation obligations, local
@@ -743,7 +1031,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   within 2..8, inspection = CPUs/2 within 2..4, API 6, admission 2). Limits gate new claims
   only and apply without restart;
   lowering one never stops running work. Every job is claimed exactly once; native UCloud
-  Transcriber keeps its own two-worker lane; cancellation targets the correct worker, all share
+  Transcriber keeps its own lane, limited by Settings → UCloud (V230); cancellation targets the correct worker, all share
   the library lease through drain, and queued preparation is labelled as waiting rather than
   active conversion. Idle workers of one lane coalesce database polls (ADR 0146).
 - V23: NVivo Windows export has rectangular Timespan/Speaker/Content rows; Mac export uses
@@ -814,6 +1102,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Update search marks in place, retaining passage/word controls and unsaved passage drafts.
 - V41: enabling Follow playback immediately reveals the current timed passage, including
   during bounded replay and comparison; playback position, playing state and replay bounds stay intact.
+  Reapply the guarded reveal after comparison alignment settles changed pane geometry;
+  late layout cannot strand the current word below a short viewport's player.
   Follow playback and Show uncertainty start checked; manual scrolling never changes the follow
   checkbox, and explicit choices remain in effect for the current page session.
 
@@ -1104,6 +1394,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V116: concurrent runtime preparation rechecks the stamp under its lock and never rebuilds
   beneath active readers. Persistent reader-lock inode remains stable; destructive preparation
   requires exclusive ownership; legacy reader uncertainty refuses destructive rebuilding.
+  Release verifies this invocation's acquired directory/owner identities, exact marker and
+  absence of foreign contents; unlink only the marker and remove the empty directory. Changed
+  ownership preserves evidence, never recursive removal or age/terminal-owner reclaim (ADR 0168).
   Heartbeat/idle/deadline drain preserves exact accepted outcomes; cleanup requires durable
   local output/result receipts and a terminal allocation, targeting only its owned folder.
 - V117: stopping a native parent batch may cascade to a shared runtime follow-up only when
@@ -1346,7 +1639,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V142: whole-file HTTP admission is metadata-only and atomically freezes selected intents,
   source ownership, settings/options/features/consent and exact enhancement history. Background
   inspection/materialization holds the library lease and drains bounded lanes; never reserve
-  unready remote membership. One native selected-set barrier creates one owner, while API and
+  unready remote membership. One native selection creates one owner (early admission, V231), while API and
   Runtime members may become ready independently. Preserve append-only sibling ASR and current
   Protected/source/endpoint checks without retargeting or broadening consent. Epoch/phase-bound
   actions cannot become Stop after materialization. Recover only proved local work; corrupt
@@ -1760,6 +2053,34 @@ T124|x|Conservative Text v2 word-time retention, exact legacy replay and repinne
 T125|x|Individual proven deleted-passage restoration, lifecycle barriers and exact current Working edit; 173 backend/structure, seven MVP browser and complete portable-chain checks pass|V185,V186,V197,I.passage-delete-undo,ADR0157
 T126|x|Background project/recording ZIP Activity with frozen selection, cancellation, retained streaming download and source-operation fencing; 22 final backend/API, 99 broader (two setup skips) and 16 browser checks pass|V5,V8,V189,V193,V199,I.export-settings,ADR0158
 T127|x|Reviewed history/response/store fixes loaded in rc4; exact packaged 100/600 synthetic audits pass source/correctness, 0/48 sampled content actions above 3 s, long save median 2.69 s and Undo split 2.49 s; retain n=3/hardware/history limits and separate background times|V3,V8,V79,V149,V200,I.history,I.transcript,ADR0159
+T128|x|Branch-only checked-provider new-work selectors/admission with identity/credential-bound receipts; complete parent backend and 25 relevant browser cases independently verified; recovery preserved|V209,V8,I.providers,ADR0167
+T129|x|Branch-only short README/linked guides, requested blue-on-light empty state and Library hide removal/confirmation layout; local links and synthetic narrow/wide checks; no installed-app change|V183,V8,I.libraries
+T130|x|Off-by-default actual Text textarea playback-overlay prototype; 28 distinct scoped browser cases and independent review pass, with explicit Chromium/Windows limits; branch only|V210,V188,V59,I.transcript
+T131|x|Offline CBS Runtime release confined to acquired lock/marker identities and exact contents; no recursive removal or reclaim; synthetic checks with explicit Linux/symlink limits|V116,I.enhance-api,ADR0168
+T132|x|Audit seventeen hidden work areas, explicit missing-only native rerun/owned-folder inventory design and synthetic bilingual anonymisation review proofs; production/privacy/live acceptance remain open|V8,V18,V20,I.native-batch
+T133|x|Isolated versioned timing-hint invalidation, sealed fresh authority and exact legacy local/cloud/merge/conflict dispatch; complete child backend 5574 passed/26 skipped, independent Go; unmerged/uninstalled, cloud history not_checked|V89,V200,V211,I.history,I.transcript,ADR0169
+T134|x|Branch-only direct OpenAI retirement preserves compatible transport, evidence and cache-only finalization; scoped and assembled synthetic gates pass; installed MVP unchanged|V212,V209,I.providers,ADR0170
+T135|x|Branch-only first-use UCloud/optional HF setup reuses checks/storage and Activity workflow; 67 relevant browser cases pass; no installed update|V213,V212,V215,I.providers,ADR0171,ADR0173
+T136|x|Exact Runtime host/shell stamps and retained-lock/reader preflight verified offline; no reclaim, historical recovery or real Runtime acceptance implied|V214,V116,I.enhance-api,ADR0172
+T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans and credential/ownership fences verified with mocked providers; parent server-lifetime and child durable|V215,V213,V214,I.enhance-api,ADR0173
+T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
+T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
+T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
+T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop and no-submit worker fences; final76 focused passes/independentGo, earlier444pass+1skip source-qualified; real acceptance/not loaded separate|V217,V6,V9,I.native-batch,ADR0174
+T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
+T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
+T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
+T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2 owner/folder/promotion slice implemented disabled e9dd23d, independent Go 229865a, D1-D3 fix 600141f (67 adversarial/84 builder/285 legacy Runtime passes); disabled settled-candidate supersession added 19 November (claude/runtime-supersession, synthetic only, review pending); strict normalised-specification comparison designed (proposal), needs real UCloud replies; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
+T146|x|Standalone bounded project-funding observer: unit pin verified vs upstream 2c23d295, watchdog deadline, Project/Authorization check; builder 8698d4c and independent Go dccf2f6 (259 tests); 19Nov cross-platform wake-up (shutdown via duplicate descriptor, then close; 272 tests, Windows-verified, Linux stdlib probe only, macOS pending); unwired, no routing/CPU activation|V221,V220,I.providers,ADR0178
+T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
+T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148
+T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-pause Follow; prototype gate removed; Chromium/Windows browser checks only|V210,V188,I.transcript
+T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven structural agreement, Working fence, presence rows, toolbar labels/confirmations/late-reply fences; 30 backend and 5 browser checks pass (claude/undo-last-change); shown in MVP v2 by the user's 20 November decision (with T151/T152); per-passage controls stay the fallback where the feature is hidden; slices 2 and 3 in T151/T152|V224,V185,V186,I.change-undo,ADR0180
+T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions replacing the per-passage controls when the feature is on; 8 backend and 4 browser checks pass, per-passage browser tests pinned to a profile hiding the feature (claude/undo-last-change); shown in MVP v2 (20 November)|V225,V224,V185,V186,I.change-list,ADR0181
+T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); shown in MVP v2 (20 November)|V226,V225,I.version-graph,ADR0182
+T153|~|Native batches: plain Activity status, Settings → UCloud upload/batch limits and per-file early uploads with sealed single-owner submission; synthetic mocked checks pass (claude/native-batch); live UCloud timing/throughput and the full-GPU choice remain|V229,V230,V231,V232,V22,V142,V187,I.native-batch,ADR0183
+T155|~|Local DA checking and en-GB checking/one preferred suggestion ported from the private preview into v2 (claude/spelling-hidden) with private vocabulary, bounded worker/cache and draft/timing guards; settings rows moved to 12/13; on in full, hidden/refused in MVP with reads and removals kept; scoped backend/browser/MVP checks pass; real-user, licence and platform acceptance remain|V234,V235,V236,I.spelling,ADR0185
+T154|.|Proposed only: per-batch full-GPU ask when no native 1g MIG is free; design ADR0184 with the user's 19 November decisions, no code, review or live evidence; read-only live reads permitted once implemented|V233,V76,V217,V220,ADR0184
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -1768,7 +2089,7 @@ T43l|x|bounded local timing artifacts and atomic idempotent same-result Apply pr
 T43m|~|actual Runtime accepted-request/preparation/stage bytes bound into producer creation provenance and verified offline; live producer acceptance remains|V151,V153,V154,I.history,I.enhance-api
 T43n|~|fresh API request descriptor/normalized output capture, creation binding, reports and portable roles/kernel verified offline; live provider acceptance remains; native capture delivered by T43o|V161,V144,I.history,I.providers
 T43o|~|fresh native Transcriber single/batch submission projection and exact output capture, journal-checked creation binding, reports and portable roles/kernel verified with mocked UCloud; live allocation acceptance remains|V164,V144,I.history,I.ucloud-transcriber
-T43p|~|bounded startup Working designation of an untouched sole existing result with owned-folder snapshot recovery; synthetic checks on an isolated branch, independent review and real-library activation remain|V149,V182,I.history
+T43p|~|Existing sole-result Working implementation is present but its schema18 guard refuses current schema19; genuine schema18/refusal tests pass; current-schema eligibility/recovery design and activation remain|V149,V182,I.history
 T85j|x|production finite resident Runtime cohorts with one identity-bound real model slot and exact stage/task receipts|V153,V154,I.enhance-api
 T85k|x|synthetic late-cohort/Stop/partial/child-loss/restart/constructor checks; real throughput remains T85e|V153,V154,I.enhance-api
 T80b|~|approved cancelled five-file Runtime folder moved to Trash through main; five legacy singleton obligations protected pending recovery/disposition|V118,V155,I.runtime-discard
@@ -1833,3 +2154,56 @@ B411|2026-11-10|Concurrent identical hint loads repeated GETs and hints arriving
 B412|2026-11-10|Save/Split repeatedly decoded and canonically encoded unchanged current mirrors and freshly generated successor history for Working validation|V200,V207; bounded format/binding facts retain fresh actual-byte hashes, strict JSON-origin seeding and the legacy cold fallback
 B413|2026-11-10|Conservative Text correspondence rejected ordinary manual changes including a repeated word appended at the end|V208; fresh versioned manual policy preserves proven timing and nulls uncertain words instead of blocking wording
 B414|2026-11-10|Split remained enabled inside a completely timed word and then failed on the server, while valid between-word splits depended on timing or a paused audio point|V208; lexical control/server boundaries and timing-independent fresh split policy, preserving legacy inverse behavior
+B415|2026-11-10|Library deletion preview inherited a floated field-note, squeezing confirmation into a 0–26px column|V183; scoped float clearing, full-width confirmation and separated path/count blocks; 1440/390px browser regression
+B416|2026-11-10|Runtime supervisor trusted only HOLDING_LOCK and recursively removed a changed/replaced .prepare-lock during release|V116; verify acquired directory/owner identities and exact contents, unlink marker then rmdir; no reclaim or claim to resolve historical runtime-busy
+B417|2026-11-10|Removing the duplicate empty-page Create action exposed an old mobile rule that hid the sole navigation action|V8; retain existing sidebar Create at narrow widths and verify creation from the new empty state
+B418|2026-11-10|New checked-provider admission correctly refused synthetic native fixtures that never performed Settings Check|V209; explicitly check/save mocked fixture connections, preserving fresh-work refusal and frozen recovery rather than blanket trust
+B419|2026-11-10|Unmarked same-result realignment keeps text-bound old alignment-fit hints; partial word maps can also leave omitted-word hints beyond per-word stale markers|V89,V211,T133; isolated versioned whole-passage remedy implemented with scoped synthetic gates; exact legacy successor reconstruction retained; not merged or installed
+B420|2026-11-10|A retained native Retry mock rejected the existing request_timeout polling keyword, obscuring the survivor-recovery assertion|V8; align only the mock signature with the released polling contract and retain same-allocation/no-recreation assertions
+B421|2026-11-10|A Delete-stage test replaced shared shutil.rmtree globally, treating unrelated temporary-directory teardown as premature logical Delete|V183; scope the mock to Delete-owned targets while retaining transaction-boundary assertions
+B422|2026-11-10|Initial connection-check prototype allowed stale successful proofs or racing Save/failure observations to restore readiness, and malformed records could crash selectors|V209; resolved-identity generations, save/failure fencing and strict bounded observation validation; focused concurrent/replay/malformed regressions
+B423|2026-11-10|Private coverage audit normalized backslashes inside parameter IDs, collapsing two distinct cases although module execution included both|V8; preserve literal parameter tails/case/Unicode, normalize file prefixes only, use Pytest XML name mapping and assert fresh raw inventory/unique outcome equality
+B424|2026-11-10|Structural join deep-copied only the left passage, dropping new whole-passage alignment-fit invalidation when only the right passage was marked|V211; red adversarial join regression, source-marker-conditional carry and repinned normalized source within existing cap
+B425|2026-11-10|First timing-policy implementation trusted a known parameter value at Apply, letting a legacy job without host birth authority self-assert v2|V211; require generation/presence/value sealed at fresh acceptance, refuse coincidental keys and legacy-authority upgrades; adversarial no-authority/old-authority probes
+B426|2026-11-10|New merge/conflict generation dispatch used set membership on unvalidated JSON values, raising TypeError for list/dict formats instead of a clean invalid-evidence refusal|V211; validate stored generation type before dispatch and retain ValueError refusal for malformed/unknown generations
+B427|2026-11-10|First contained timing-policy seal reader materialized role_json before applying its bounded text reader|V8,V211; select only policy, then use the accounted 4096-byte reader; oversized-role resource refusal regression and source repin
+B428|2026-11-10|A same-size Windows test corruption could retain every filesystem witness, so the late-change test nondeterministically expected refusal without observable drift|V8,V137; reproduce equal witnesses and controlled red/green, then explicitly advance/assert test mtime; retain corruption/refusal assertions, quiescent transport contract and unchanged product; affected module rerun
+B429|2026-11-11|Runtime host accepted any stamp path while the shell required its digest, allowing a wrong-digest stamp to bypass the known-legacy-reader fence before a destructive install branch|V214,V116; synthetic Store/listing/Bash reproduction; exact stamp agreement and preparation-flag-based reader/retained-lock preflight, with metadata proof limits explicit
+B430|2026-11-11|Direct OpenAI retirement initially left native-shaped official-host discovery/client constructors and specialized language/allocation saves reachable through sibling paths|V212; enforce the same service-availability gate before keys, clients or mutation while preserving cached finalization and pure protocol kernels; 43 scoped deactivation regressions
+B431|2026-11-11|Provider-tab fallback repeatedly selected a native-shaped but service-disabled official-host profile, recursing instead of reaching the healthy UCloud tab|V212,V213; choose only visible service-available fallback profiles and test bad-first/healthy and only-disabled lists
+B432|2026-11-11|HF setup checked its frozen token fingerprint and then fetched credentials again, allowing a replacement token to reach an old task's Hub/helper call between those reads|V215; read once, compare that actual value to the frozen fingerprint and hand off the same value; before/after credential-race and accepted-call-drain regressions
+B433|2026-11-11|The new HF helper's speaker mode echoed a supplied worker digest without verifying the sibling source bytes, although public preparation mode verified them|V215; verify both owned source hashes in every mode before imports/downloads, with changed-source refusal tests
+B434|2026-11-11|HF metadata checks buffered complete account/model response bodies even though access decisions use only status headers|V215; status-only HTTPX streaming contexts close both responses without consuming bodies; real-client unreadable-body red/green regression preserves redirect and authentication semantics
+B435|2026-11-11|HF child I/O thread startup occurred before its cleanup try/finally, so a thread-start failure could leak the accepted child and pipes beyond the library lease|V215; begin ownership cleanup immediately after process creation, stop/reap and join only started threads before closing pipes; injected second-thread-start failure regression
+B436|2026-11-11|First-use setup could create a default-enabled/default-approved duplicate when an existing native profile had lost its key, bypassing that profile's explicit disabled models or Protected denial|V212,V213; hand existing profiles and draft key to exact Settings controls instead of automatic creation, preserving IDs/versions/flags/approvals; saved-profile browser regression
+B437|2026-11-11|A later token/settings change or shutdown overwrote an explicit HF Stop reason while the accepted child handoff drained, losing Stop for the child that task actually created|V215; keep sticky private user intent independently of display/supersede reasons, cancel an owned child once after handoff and never cancel an attached owner; barrier-controlled regressions
+B438|2026-11-11|HF durable-owner admission checked the parent before waiting for SQLite's writer, allowing Stop or a token change during that wait to become stale before insertion|V215; recheck the parent after writer acquisition immediately before insert/attachment, retain postacceptance drain and exact owner return; actual held-writer regression
+B439|2026-11-11|An adapted Settings absence assertion could pass before the dialog loaded, hiding an inverted native-tab expectation in the test|V8; wait for the visible dialog before negative/absence assertions and retain separate retired-OpenAI and available-UCloud oracles
+B440|2026-11-12|A long Windows verification fixture produced a 277-character owned transcript-source path whose parent existed but exclusive file creation returned Errno2|T139; retain the original failure and qualify the unchanged helper/node with a short fixture root; no timeout/assertion relaxation or claim to fix platform path limits
+B441|2026-11-12|An undo-merge browser fixture selected both visible Text and hidden Timing-pane Cancel controls|T140; scope the locator to the Text pane and retain draft/history/revision assertions; mechanical fixture correction needs no new product invariant
+B442|2026-11-12|Larger passage fonts exposed comparison alignment finishing after playback's resize reveal, stranding the current word below a short video viewport|V41,T140; schedule the existing guarded Follow pass after alignment writes; baseline/candidate differential, nine private geometry observations and formal resize/focus/draft checks
+B443|2026-11-12|An older layout test expected a quiet generic save status after rewriting an untimed passage, contradicting the accepted partial-timing notice|V208,T140; assert the actual nonblocking warning and persisted wording while retaining geometry/history checks; shared helper bodies unchanged
+B444|2026-11-12|Cross-tab first-use completion could invalidate an accepted credential-save reply or hide its partial/uncertain outcome|V213,T142; retain the accepted Save owner until success or explicit dismissal, preserve optional-HF continuation and inline recovery, and test held Native/HF replies with another-tab completion
+B445|2026-11-12|A rejected hash navigation could rewind home eligibility and hide an accepted Save's later partial-HF error|V213,T142; keep the owned setup outcome visible across the rejected navigation until success or explicit dismissal; retain the failing diagnostic and recheck the exact browser adversary
+B446|2026-11-12|Native startup cannot recover interrupted owners safely and a singleton Stop can disappear before worker acknowledgment, while generic recovery overwrites legacy Cancelling evidence|V217,T141; dedicated exact-ID singleton/batch admission, durable Stop before acknowledgment and conservative legacy negative exclusion; retain five old-source red seam cases
+B447|2026-11-12|Standalone Runtime preparation marked its owner failed after a transient observation or SUCCESS before supervisor publication|V218,T143; typed bounded same-allocation observation recovery and terminal settling, retaining old-source red reproductions and permanent-refusal boundaries
+B448|2026-11-12|A late Runtime doctor/verification observation could commit Ready after durable Stop under the same epoch|V218,T143; atomically recheck Stop and current owner after writer acquisition, then route through owned Stop observation; retain I/O and writer-barrier regressions
+B449|2026-11-12|MVP Settings grouping hid a saved Runtime profile option despite retaining its form identity, leaving the hidden manager projection empty during credential recovery|V213,V212,T142; include only supplied saved held profiles in Settings grouping, preserve new-work/catalog hiding, and retain exact no-widening and generic-save oracles
+B450|2026-11-12|The new strict preparation reader initially relied on fake full job specifications while omitting required API application/parameter inclusion flags|V218,T143; match the released SDK request contract and enforce response omission in the regression fixture before accepting identity proof
+B451|2026-11-12|Native startup accepted a merely nonempty reconciliation timestamp and completed siblings without a unique matching producer/remote-ID link|V217,T141; validate bounded timezone-aware timestamps and exact producer metadata including Trash at admission and late guards; eight positive/negative/late regressions
+B452|2026-11-12|Saving a new UCloud key in Settings (or after the first-use hand-off) stored the key without a connection check, so every UCloud model became recheck_required and the Provider/Model lists showed only "Connect a provider in Settings" after a reported save|ADR0167; Save reconnects automatically when a key is typed or a saved key is unchecked, empty lists say "Check the connection in Settings" when a key exists; rotated-key and hand-off browser regressions
+B453|2026-11-18|Disabled Runtime Stage 2 writers compared protected proof with Python == (False==0, 1==1.0), left absence receipts unreserved on generation owners and decoded stored owners against current compute/flavour/parameter constants|V219,T144,ADR0176; canonical-JSON comparison, reserved receipts, stored-shape decoding with fresh-submit refusal and an all-switch gate; six strict-xfail regressions now pass plus 13 builder cases
+B454|2026-11-18|The schema-19 Working native fence fetched stored job/owner text through SQLite's UTF-8 decoder, so invalid UTF-8 or a lone-surrogate JSON escape aborted the whole startup pass with OperationalError|V222,T147,ADR0179; read fence text as bytes and decode strictly: unreadable failed settings skip that recording, unreadable links/owner rows refuse; non-text owner states stay unsettled; 11 regressions (9 fail on the old code)
+B455|2026-11-18|The T140 13px sidebar text kept the global right float on the editor's empty "No speaker labels yet" note, which overlapped the Description / notes summary and took its clicks at desktop width; four recording/card notes browser tests timed out from 5cab832|T140,V41; keep that note in normal flow under Speakers; three-width geometry/click regression plus the four notes tests
+B456|2026-11-18|Reopening a connected UCloud Settings tab ran a read-only Runtime check against the configured host, so browser tests could send a synthetic token to the real UCloud server; no suite-wide network guard existed|Tests never call a service; an autouse guard refuses non-loopback name lookups and connections in every test; guard tests
+B457|2026-11-18|The first-use dialog opens over the home page in every fresh browser profile; about 95 older browser tests never dismissed it and timed out clicking Activity, Settings or Library, and the dialog inventory omitted it. The v2 preview ran only selected browser gates|T135,V213; the shared page fixture starts as a returning browser (the marker Skip sets) unless a module is marked first_use; fixture/app key contract test and dialog inventory entry; run the full browser suite before a preview
+B458|2026-11-18|The first full v2 browser run failed 20 stale cases that also failed alone: Settings now opens on UCloud and reselecting the open tab reloads it, so redundant #tab-ucloud clicks added a second automatic check or superseded a held reply; clicks on the hidden OpenAI tab timed out; unchecked synthetic UCloud saves left selectors empty; older help/label/heading/save-status texts no longer matched|ADR0170,ADR0167,ADR0162,V208; open Settings directly on UCloud and depart through Hugging Face, record explicit synthetic checks, assert the shipped copy, Retry failed, empty-library brand and partial-timing notice; test-only, original protections retained
+B459|2026-11-19|Tests used this computer's real app folder: the browser restore test registered its temporary restore targets in the real libraries.json, and Library dialog tests listed the real registry and the earlier/packaged library locations, opening the real library read-only. Found while loading the v2 preview on the real library|ADR0050,ADR0051,ADR0096; an autouse fixture gives every test a temporary home and earlier default and skips the real packaged-app scan; guard tests; Git Bash lookups and one short restore root read the real home explicitly; the two leaked registry entries were removed after a verified backup
+B460|2026-11-19|Delete project permanently did nothing when the project was shown as the home page's first project (no #/projects address, e.g. after deleting another project): the dialog's view check compared the literal address, so no request was sent and no message appeared|V93,V148; check the displayed project and view epoch instead of the address, report a stale dialog inside it, reroute home after deletion; home/#/#/ browser regression
+B461|2026-11-19|Activity's native batch card showed raw UCloud states ("UCloud batch · RUNNING", "IN_QUEUE") and kept a batch-level "Last log: model loading reported · log timestamp … (timezone unspecified)" note even after files had finished|V229,T153,ADR0183; compose a plain sentence on each read (queued time only from the app's own recorded first observation, "reported done" from exact log events, "saved" from local results, local read times), drop the batch-level log note; log/polling/transfer regressions updated
+B462|2026-11-19|A native selection uploaded nothing until every file's original inspection and preflight had settled, so one slow inspection held up every upload of the batch|V231,V232,T153,ADR0183; admit each file on its own, create the one batch at the first admitted file, upload joined files at once and seal before the only submission; early-upload, drop, stop/shutdown/Retry, concurrent-admission and startup tests
+B463|2026-11-19|Early-selection hazards (B462): batch-wide claim/finish writes iterated the whole manifest, which still names unadmitted input intents, so a Stop or claim would have overwritten their admission state; and (independent review) a confirmed Delete of a joined file cancelled the last unjoined file's admission, sealing the batch, before its shared Stop, so the coordinator could POST a credit-using allocation first (also when a Delete-marked admission finished and sealed later); a completed batch's saved total still counted Delete-released files|V231,V232,V229,T153; claim/finish change only rows carrying this batch's native_batch_id; Delete records the Stop of each affected unsubmitted batch under the claim lock before cancelling admissions and the submission intent is refused atomically after a recorded Stop; deleted files leave the total; race (waiting and mid-admission) and total regressions
+B464|2026-11-19|Porting the 9 November spelling preview into v2 found its settings rows 10/11 already owned by checked-provider receipts and runtime generations; unchanged, saving spelling preferences would overwrite the provider receipts, and a library with runtime generations would fail the vocabulary validator, refusing project Delete and restore|V235,ADR0185; move spelling to rows 12/13 in the service, Delete fence and repinned restore validator; regression that a vocabulary-shaped row 11 is never restored as spelling data
+B465|2026-11-19|The funding observer's watchdog woke a stalled worker only by closing the SDK client, and its wake-up was claimed for Windows alone: a stdlib loopback probe showed a close from another thread does not wake a blocked read on Linux (WSL2), shutdown does not wake it on Windows, and closing the client never reached a TLS handshake on any platform because httpcore returns the TLS socket only afterwards|V221,T146; shut down a duplicate descriptor taken at TCP connect, then close the client; shut down connections completing after the deadline at once; per-platform loopback tests run everywhere and a no-shutdown mutation fails them; macOS and a full Linux run unverified
+B466|2026-11-20|With spelling suggestions on, Cancel on a passage editor scrolled through a long transcript moved it by about 76 px: removing the spelling panel and editor above the focused Cancel button let the browser's scroll anchoring re-anchor the view before the editor closed|Cancel pauses scroll anchoring on the transcript while it clears the draft and closes the editor in place, keeps the earlier scroll (the browser may only clamp it) and resumes anchoring next frame; the 600-passage Cancel regression now waits for the spelling panel and asserts the clamped position
+B467|2026-11-20|Project Export Settings could open before the project's recording list had loaded (for example right after returning from a recording opened directly), so the dialog listed too few recordings; the full v2 browser suite caught it intermittently|The project export button stays disabled, and its handler refuses, until the shown project's own list is loaded, like Transcribe selected; a regression holds back the list request and checks the button and the complete dialog list

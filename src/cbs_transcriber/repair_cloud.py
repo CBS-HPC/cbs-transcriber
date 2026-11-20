@@ -21,6 +21,7 @@ from .transcripts import normalize_segments
 PROTOCOL = repair_remote.PROTOCOL
 HERE = Path(__file__).parent
 FROZEN_FIELDS = (
+    "timing_apply_policy",
     "enhancement",
     "language_preference",
     "source_snapshot",

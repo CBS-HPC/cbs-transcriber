@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from cbs_transcriber import enhancement, providers, runtime_store
@@ -43,6 +44,21 @@ class Drive:
         self.release_until = 0
         self.worker_count = 0
         self.events = []
+        self._client = SimpleNamespace(stream=self.runtime_stream)
+
+    @contextmanager
+    def runtime_stream(self, method, path, *, params, **kwargs):
+        assert (method, path) == ("GET", "/api/files/retrieve")
+        try:
+            payload = self.retrieve_file(params["id"])
+            status = 200
+        except FileNotFoundError:
+            payload, status = {}, 404
+        response = httpx.Response(status, stream=httpx.ByteStream(json.dumps(payload).encode()))
+        try:
+            yield response
+        finally:
+            response.close()
 
     def path(self, name):
         return self.root / name.lstrip("/")
@@ -53,10 +69,11 @@ class Drive:
     def retrieve_file(self, name):
         path = self.path(name)
         return {
+            "id": name,
             "status": {
                 "type": "DIRECTORY" if path.is_dir() else "FILE",
                 "sizeInBytes": path.stat().st_size,
-            }
+            },
         }
 
     def upload(self, client, server, path, target, guard, update, **kwargs):

@@ -1,4 +1,4 @@
-"""ADR 0141's schema18 pass; current schema19 intentionally refuses designation."""
+"""ADR 0141's genuine schema-18 regressions; schema 19 (ADR 0179) is covered separately."""
 
 import hashlib
 import json
@@ -118,13 +118,19 @@ def test_supported_fixture_is_actually_schema18(store):
     assert_catalog_schema(store, 18)
 
 
-def test_actual_schema19_is_refused_without_changing_library_state(tmp_path, monkeypatch):
-    # This test explicitly leaves the legacy module fixture's runtime configuration.
-    monkeypatch.setattr(store_module, "SCHEMA_VERSION", 19)
-    current = store_module.Store(tmp_path / "actual-schema19")
-    assert_catalog_schema(current, 19)
-    project = current.create_project("Current schema")
+@pytest.mark.parametrize("created,runtime", [(17, 17), (18, 19)])
+def test_unreviewed_or_mismatched_schema_pairs_are_refused_without_changing_library_state(
+    tmp_path, monkeypatch, created, runtime
+):
+    # ADR 0179 supports only the reviewed 18/18 and 19/19 pairs. Each library is created by
+    # the real constructor at its own schema; only the runtime constant differs afterwards.
+    monkeypatch.setattr(store_module, "SCHEMA_VERSION", created)
+    current = store_module.Store(tmp_path / f"actual-schema{created}")
+    with current.connection() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == created
+    project = current.create_project("Unreviewed schema")
     rid = add(current, recording(current, project)["id"])["recording_id"]
+    monkeypatch.setattr(store_module, "SCHEMA_VERSION", runtime)
     before = current.recording(rid)
     versions = current.result_versions(rid, before["active_transcript_id"])
     outputs = files(current.project_folder(project["id"]))

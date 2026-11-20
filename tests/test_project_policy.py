@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from admission_support import inspect_and_materialize
+from admission_support import COMPATIBLE_API_URL, checked_connection, inspect_and_materialize
 from conftest import finish_media
 from prior_schema import remove_later_additions
 
@@ -44,6 +44,7 @@ def test_v18_protected_projects_enforce_provider_approval(
     ).json()
     request = {"recording_ids": [recording["id"]], "provider_ids": [provider["id"]]}
     store = client.app.state.store
+    checked_connection(store, credentials, provider["id"])
     with store.library_lock():
         assert client.post("/api/transcriptions", json=request).status_code == 403
         assert (
@@ -88,6 +89,7 @@ def test_v18_worker_rechecks_between_chunks_and_changed_endpoint(
         },
     ).json()
     store = client.app.state.store
+    checked_connection(store, credentials, provider["id"])
     with store.library_lock():
         accepted = client.post(
             "/api/transcriptions",
@@ -129,6 +131,7 @@ def test_v18_classification_change_blocks_pending_jobs(client, wav_bytes, creden
         },
     ).json()
     store = client.app.state.store
+    checked_connection(store, credentials, provider["id"])
     with store.library_lock():
         accepted = client.post(
             "/api/transcriptions",
@@ -229,7 +232,14 @@ def test_v17_check_api_uses_draft_key_without_saving_or_queueing(client, monkeyp
         )
 
     monkeypatch.setattr("cbs_transcriber.app.check_models", checked)
-    response = client.post("/api/providers/check-models", json={"api_key": "draft-synthetic-key"})
+    response = client.post(
+        "/api/providers/check-models",
+        json={
+            "provider_type": "custom",
+            "base_url": COMPATIBLE_API_URL,
+            "api_key": "draft-synthetic-key",
+        },
+    )
     assert response.status_code == 200 and len(response.json()["models"]) == 5
     assert "draft-synthetic-key" not in response.text
     assert not client.app.state.credentials.keys

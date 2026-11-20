@@ -1568,7 +1568,7 @@ class Store:
         from . import restored_owners
 
         restored_owners.require_job(self, job_id)
-        from . import repair_cloud
+        from . import local_timing, repair_cloud
         from .result_actions import append_edit
 
         validate_revision(revision)
@@ -1582,9 +1582,12 @@ class Store:
             job = dict(row)
             params = json.loads(row["params"])
             job["params"] = params
+            apply_policy = local_timing._policy(params)
             from . import result_roles, timing_working
 
             authority = result_roles.job_authority(db, job_id, recording_id, "timing")
+            if apply_policy is not None and authority is None:
+                raise ValueError("The timing application policy has no trusted acceptance receipt.")
             if authority is not None:
                 timing_working.validate_authorized_params(authority, "timing", params)
             if (
@@ -1644,6 +1647,8 @@ class Store:
                 ):
                     raise ValueError("The applied repair version failed its integrity check.")
                 decode_payload(version["payload"], version["payload_sha256"])
+                if apply_policy is not None:
+                    local_timing.verify_cloud_receipt(db, recording_id, result_id, job, params)
                 from . import timing_working
 
                 if authority is not None or working_choice is not None:
@@ -1669,27 +1674,9 @@ class Store:
                 )
                 frozen = {s["id"]: s for s in params["source_snapshot"]["segments"]}
                 outputs = params["realign_output"]["passages"]
-                applied, skipped = [], []
-                for segment in segments:
-                    identifier = segment["id"]
-                    if identifier not in outputs:
-                        continue
-                    if identifier not in frozen or any(
-                        segment.get(k) != frozen[identifier].get(k)
-                        for k in ("text", "start", "end", "words", "word_timing", "words_current")
-                    ):
-                        skipped.append(identifier)
-                        continue
-                    timing = outputs[identifier]
-                    segment.update(
-                        words=json.loads(json.dumps(timing["words"])),
-                        word_timing=timing["word_timing"],
-                        words_current=True,
-                    )
-                    if "start" in timing and (segment["start"] is None or segment["end"] is None):
-                        segment.update(start=timing["start"], end=timing["end"])
-                    applied.append(identifier)
-                skipped.extend(i for i in outputs if i not in {s["id"] for s in segments})
+                segments, applied, skipped = local_timing._cloud_successor(
+                    segments, frozen, outputs, apply_policy=apply_policy
+                )
                 if applied:
                     version = append_edit(
                         self,
@@ -1700,7 +1687,8 @@ class Store:
                         segments,
                         speakers,
                         action="timing_realign",
-                        context={"job_id": job_id},
+                        context={"job_id": job_id}
+                        | ({local_timing.POLICY_KEY: apply_policy} if apply_policy else {}),
                         reason=None,
                         **(
                             {"working_choice": working_choice} if working_choice is not None else {}
@@ -1716,6 +1704,19 @@ class Store:
                             warning = timing_working.FOLLOW_WARNING
                     params["realign_applied"] = "applied"
                     params["realign_receipt"] = {
+                        **(
+                            {
+                                "format": local_timing.CLOUD_FORMAT,
+                                local_timing.POLICY_KEY: apply_policy,
+                                "previous": {
+                                    "id": head["id"],
+                                    "payload_sha256": head["payload_sha256"],
+                                },
+                                "input_sha256": local_timing.input_hash(params),
+                            }
+                            if apply_policy is not None
+                            else {}
+                        ),
                         "version": version,
                         "fingerprint": fingerprint,
                         "base_revision": revision,
@@ -1873,6 +1874,7 @@ class Store:
         provider_artifacts=None,
         native_artifacts=None,
         auto_first=False,
+        native_reconnect=None,
     ):
         from . import restored_owners
 
@@ -1917,6 +1919,12 @@ class Store:
                         "The imported transcript source could not be verified. Preserve its files."
                     ) from exc
             db.execute("BEGIN IMMEDIATE")
+            if native_reconnect is not None:
+                from . import native_startup
+
+                if job_id not in native_reconnect.job_ids:
+                    raise ValueError(native_startup.REFUSED)
+                native_startup.guard(self, native_reconnect, connection=db)
             current = db.execute("SELECT * FROM recordings WHERE id=?", (recording_id,)).fetchone()
             if current is None:
                 raise KeyError(recording_id)
@@ -3151,6 +3159,7 @@ class Store:
                 ):
                     raise ValueError("The timing source changed before it could be queued.")
                 frozen = timing_working.freeze(self, db, recording_id, frozen)
+                frozen = local_timing.freeze_policy(frozen)
             self._insert_job(
                 db,
                 recording_id,
@@ -3185,6 +3194,13 @@ class Store:
             if params.get(key):
                 restored_owners.require_owned(db, owner_kind, params[key])
         from . import runtime_store
+
+        if "timing_apply_policy" in params:
+            from . import local_timing
+
+            local_timing._policy(params)
+            if not timing_role_verified:
+                raise ValueError("Timing application policy requires verified fresh acceptance.")
 
         if kind == "source-inspect":
             raise ValueError("Source inspection jobs require the internal inspection lifecycle.")
@@ -3250,7 +3266,16 @@ class Store:
                 else params["working_role"]
             )
             result_roles.authorize_job(
-                db, self, identifier, recording_id, policy, expected, params.get("source_snapshot")
+                db,
+                self,
+                identifier,
+                recording_id,
+                policy,
+                expected,
+                params.get("source_snapshot"),
+                timing_apply_policy=params.get("timing_apply_policy")
+                if timing_role_verified
+                else None,
             )
 
     def enqueue_enhancement(
@@ -3309,9 +3334,12 @@ class Store:
             if {"working_role", "working_role_policy"} & frozen_params.keys():
                 raise ValueError("Working evidence is created only when work is accepted.")
             if frozen_params.get("realign") is True:
-                from . import timing_working
+                from . import local_timing, timing_working
 
                 frozen_params = timing_working.freeze(self, db, recording_id, frozen_params)
+                frozen_params = local_timing.freeze_policy(frozen_params)
+            elif "timing_apply_policy" in frozen_params:
+                raise ValueError("Timing application policy requires a fresh timing request.")
             else:
                 from . import result_roles, timing_working
 
@@ -3430,6 +3458,146 @@ class Store:
             )
 
     @staticmethod
+    def _native_group_batch(db, group):
+        """The one batch of an early native selection (ADR 0183), or None before its first file."""
+        rows = db.execute(
+            "SELECT id FROM native_batch_runs WHERE json_extract(CASE WHEN json_valid(params) "
+            "THEN params END,'$.native_group.sha256')=? LIMIT 2",
+            (group["sha256"],),
+        ).fetchall()
+        if len(rows) > 1:
+            raise ValueError("A native selection cannot own two UCloud batches.")
+        return rows[0]["id"] if rows else None
+
+    @staticmethod
+    def _attach_native_member(db, identifier, recording_id, params, group):
+        """Join an admitted file to its selection's one batch, creating it for the first file.
+
+        The manifest is the complete selection from the start and never changes; files that
+        later fail are recorded as dropped when the selection settles. A sealed or submitted
+        batch admits nobody, so a selection never gains a second allocation (ADR 0183).
+        Returns the job state and message that match the batch's current state."""
+        from . import native_allocation, restored_owners
+
+        batch_id = Store._native_group_batch(db, group)
+        settings = params.get("settings", {})
+        if settings.get("provider_type") != "ucloud":
+            raise ValueError("Only native UCloud Transcriber files join a native batch.")
+        native_allocation.validate(params)
+        identity = {
+            "settings": params["settings"],
+            "provider_id": params.get("provider_id"),
+            "provider_name": params["provider_name"],
+            **(
+                {"native_allocation": params["native_allocation"]}
+                if "native_allocation" in params
+                else {}
+            ),
+        }
+        selection = {"job_ids": list(group["job_ids"]), "sha256": group["sha256"]}
+        if batch_id is None:
+            batch_id = new_id()
+            restored_owners.require_owned(db, "native_batch", batch_id)
+            project_id, manifest = None, []
+            for member_id in group["job_ids"]:
+                row = db.execute(
+                    "SELECT j.recording_id,r.project_id,r.filename FROM jobs j "
+                    "JOIN recordings r ON r.id=j.recording_id WHERE j.id=?",
+                    (member_id,),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("A selected file is missing; its selection cannot start.")
+                if project_id not in (None, row["project_id"]):
+                    raise ValueError("A native batch cannot span research projects.")
+                project_id = row["project_id"]
+                suffix = Path(row["filename"]).suffix.lower()
+                if not suffix or len(suffix) > 12 or not suffix[1:].isalnum():
+                    raise ValueError("The recording needs a supported filename extension.")
+                manifest.append(
+                    {
+                        "job_id": member_id,
+                        "recording_id": row["recording_id"],
+                        "filename": member_id + suffix,
+                    }
+                )
+            if len({member["recording_id"] for member in manifest}) != len(manifest):
+                raise ValueError("A native batch cannot contain the same recording twice.")
+            db.execute(
+                "INSERT INTO native_batch_runs(id,project_id,params,members,created,updated) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    batch_id,
+                    project_id,
+                    json.dumps({**identity, "native_group": selection, "ucloud_run": {}}),
+                    json.dumps(manifest),
+                    now(),
+                    now(),
+                ),
+            )
+        batch = Store._native_batch(
+            db.execute("SELECT * FROM native_batch_runs WHERE id=?", (batch_id,)).fetchone()
+        )
+        restored_owners.require_owned(db, "native_batch", batch_id)
+        run = batch["params"].get("ucloud_run", {})
+        if (
+            batch["params"].get("native_group") != selection
+            or any(batch["params"].get(key) != value for key, value in identity.items())
+            or ("native_allocation" in batch["params"]) != ("native_allocation" in identity)
+            or not any(
+                member["job_id"] == identifier and member["recording_id"] == recording_id
+                for member in batch["members"]
+            )
+        ):
+            raise ValueError("The UCloud batch's frozen selection disagrees.")
+        if (
+            run.get("membership_sealed")
+            or run.get("job_id")
+            or run.get("submission_attempted")
+            or run.get("submission_intent")
+            or run.get("release_decision")
+            or batch["state"] == "completed"
+        ):
+            raise ValueError("This UCloud batch no longer admits files. Start a new request.")
+        params["native_batch_id"] = batch_id
+        if batch["state"] == "running":
+            return "running", "Waiting to upload"
+        if batch["state"] == "queued":
+            return "queued", "Prepared; queued for processing."
+        # A stopped batch keeps this file with it; Retry resumes the whole selection.
+        return batch["state"], batch["message"] or "Stopped. Retry the UCloud batch."
+
+    @staticmethod
+    def _seal_native_batch(db, group, dropped):
+        """Every file has an outcome: record the dropped files and allow the submission."""
+        from . import restored_owners
+
+        batch_id = Store._native_group_batch(db, group)
+        if batch_id is None:
+            return None
+        restored_owners.require_owned(db, "native_batch", batch_id)
+        batch = Store._native_batch(
+            db.execute("SELECT * FROM native_batch_runs WHERE id=?", (batch_id,)).fetchone()
+        )
+        run = batch["params"]["ucloud_run"]
+        listed = run.get("deleted_members") or []
+        if not isinstance(listed, list) or not all(isinstance(item, str) for item in listed):
+            raise ValueError("The UCloud batch's deleted-member receipt is malformed.")
+        manifest = {member["job_id"] for member in batch["members"]}
+        dropped = sorted(set(dropped) - set(listed))
+        if not set(dropped) <= manifest:
+            raise ValueError("A dropped file does not belong to this UCloud batch.")
+        if run.get("membership_sealed"):
+            if run.get("dropped_members") != dropped:
+                raise ValueError("The sealed UCloud batch membership changed.")
+            return batch_id
+        run.update(membership_sealed=True, dropped_members=dropped)
+        db.execute(
+            "UPDATE native_batch_runs SET params=?,updated=? WHERE id=?",
+            (json.dumps(batch["params"]), now(), batch_id),
+        )
+        return batch_id
+
+    @staticmethod
     def _native_batch(row):
         if row is None:
             raise KeyError("Unknown UCloud batch.")
@@ -3444,8 +3612,13 @@ class Store:
                 db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
             )
 
-    def update_native_batch(self, identifier, *, run_update=None, **fields):
-        """Merge journal receipts instead of replacing a concurrent cancellation receipt."""
+    def update_native_batch(
+        self, identifier, *, run_update=None, reconnect=None, refuse_stopped=False, **fields
+    ):
+        """Merge journal receipts instead of replacing a concurrent cancellation receipt.
+
+        `refuse_stopped` makes the write conditional, in its own transaction, on no recorded
+        Stop: a submission intent can never follow a Stop that a Delete recorded (ADR 0183)."""
         from . import restored_owners
 
         restored_owners.require_owner(self, "native_batch", identifier)
@@ -3453,9 +3626,29 @@ class Store:
             raise ValueError("Unknown UCloud batch field.")
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            if reconnect is not None:
+                from . import native_startup
+
+                if reconnect.kind != "native_batch" or reconnect.identifier != identifier:
+                    raise ValueError(native_startup.REFUSED)
+                native_startup.guard(
+                    self,
+                    reconnect,
+                    connection=db,
+                    allow_stop=run_update == {"cancellation_requested": True} and not fields,
+                )
             batch = self._native_batch(
                 db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
             )
+            if refuse_stopped:
+                from . import native_startup
+                from .media import Cancelled
+
+                run = batch["params"].get("ucloud_run", {})
+                if run.get("release_decision") or any(
+                    run.get(flag) for flag in native_startup.STOP_FLAGS
+                ):
+                    raise Cancelled()
             if run_update is not None:
                 batch["params"]["ucloud_run"].update(run_update)
                 fields["params"] = json.dumps(batch["params"])
@@ -3483,19 +3676,29 @@ class Store:
             "updated=? WHERE id=?",
             (now(), batch_id),
         )
-        deleted = native_batch._deleted(db, batch)
+        deleted = native_batch._deleted(db, batch) | native_batch.dropped(batch)
         for member in batch["members"]:
             if member["job_id"] in deleted:
                 continue
+            # Files of an early selection still being admitted are not members yet (ADR 0183).
             updated = db.execute(
                 "UPDATE jobs SET state='running',message='Starting UCloud batch…',updated=? "
-                "WHERE id=? AND state='queued'",
-                (now(), member["job_id"]),
+                "WHERE id=? AND state='queued' AND json_extract(CASE WHEN json_valid(params) "
+                "THEN params END,'$.native_batch_id')=?",
+                (now(), member["job_id"], batch_id),
             ).rowcount
             if not updated:
                 state = db.execute(
-                    "SELECT state FROM jobs WHERE id=?", (member["job_id"],)
+                    "SELECT state,json_type(CASE WHEN json_valid(params) THEN params END,"
+                    "'$.input_intent') AS intent FROM jobs WHERE id=?",
+                    (member["job_id"],),
                 ).fetchone()
+                if (
+                    state is not None
+                    and state["intent"] is not None
+                    and "native_group" in (batch["params"])
+                ):
+                    continue
                 if state is None or state[0] != "completed":
                     error = ValueError("The UCloud batch member state changed. Retry the batch.")
                     error.batch_id = batch_id
@@ -3598,9 +3801,13 @@ class Store:
             )
             for member in batch["members"]:
                 # Successful imports and their follow-ups are never reverted by a sibling failure.
+                # Files of an early selection that are not admitted yet keep their own
+                # preparation state (ADR 0183); only actual members follow the batch.
                 db.execute(
-                    "UPDATE jobs SET state=?,message=?,updated=? WHERE id=? AND state!='completed'",
-                    (state, message, now(), member["job_id"]),
+                    "UPDATE jobs SET state=?,message=?,updated=? WHERE id=? AND state!='completed' "
+                    "AND json_extract(CASE WHEN json_valid(params) THEN params END,"
+                    "'$.native_batch_id')=?",
+                    (state, message, now(), member["job_id"], identifier),
                 )
             db.execute(
                 "UPDATE native_batch_runs SET state=?,message=?,progress=?,updated=? WHERE id=?",
@@ -3626,7 +3833,9 @@ class Store:
             from . import restored_owners
 
             restored_owners.require_owned(db, "job", identifier)
-            row = db.execute("SELECT kind,params FROM jobs WHERE id=?", (identifier,)).fetchone()
+            row = db.execute(
+                "SELECT id,kind,params,state FROM jobs WHERE id=?", (identifier,)
+            ).fetchone()
             if row is None:
                 raise KeyError(identifier)
             params = json.loads(row["params"])
@@ -3636,6 +3845,9 @@ class Store:
                 or "input_intent" in params
             ):
                 raise ValueError("Preparation cancellation requires its fenced lifecycle.")
+            from . import native_startup
+
+            native_startup.stop_row(db, {**dict(row), "params": params})
             db.execute(
                 "UPDATE jobs SET state=CASE WHEN state='running' THEN state ELSE 'cancelled' END,"
                 "message=CASE WHEN state='running' THEN ? ELSE ? END,updated=? "
@@ -3792,13 +4004,19 @@ class Store:
             params["audio_preparations"] = [*receipts, receipt]
             db.execute("UPDATE jobs SET params=? WHERE id=?", (json.dumps(params), identifier))
 
-    def recover_jobs(self):
-        from . import runtime_store
+    def recover_jobs(self, *, native_startup_lifecycle=None):
+        from . import native_startup, runtime_store
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            native_startup.preserve_legacy_stops(db)
             self._recover_jobs(db)
             runtime_store.recover(db)
+            return (
+                native_startup.admit(self, db, native_startup_lifecycle)
+                if native_startup_lifecycle is not None
+                else {}
+            )
 
     @staticmethod
     def _recover_jobs(db):

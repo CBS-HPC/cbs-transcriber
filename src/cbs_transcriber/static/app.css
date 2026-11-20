@@ -125,7 +125,9 @@ html[data-off~="wording_adoption"] [data-feature~="wording_adoption"],
 html[data-off~="cloud_backup"]
   [data-feature~="cloud_backup"]:not([data-feature-recovery]),
 html[data-off~="restore_ui"] [data-feature~="restore_ui"],
-html[data-off~="custom_providers"] [data-feature~="custom_providers"] {
+html[data-off~="custom_providers"] [data-feature~="custom_providers"],
+html[data-off~="undo_last_change"] [data-feature~="undo_last_change"],
+html[data-off~="spelling"] [data-feature~="spelling"] {
   display: none !important;
 }
 .activity-details {
@@ -440,6 +442,19 @@ label {
   flex-direction: column;
   gap: 0.3rem;
   margin: 0.65rem 0;
+  clear: both;
+  overflow-wrap: anywhere;
+}
+.library-delete .field-note {
+  float: none;
+}
+.library-delete .library-path,
+.library-delete .library-facts {
+  display: block;
+}
+.library-delete input {
+  width: 100%;
+  min-width: 0;
 }
 /* Collections (ADR 0060): chips in the recordings toolbar. */
 .collection-chips {
@@ -736,67 +751,62 @@ html.busy * {
   align-items: center;
   gap: 8px;
 }
-.welcome-card {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: linear-gradient(
-    145deg,
-    var(--surface-blue),
-    var(--surface-blue) 65%,
-    var(--surface-blue)
-  );
-  min-height: 410px;
+.empty-library-brand {
+  min-height: min(65vh, 640px);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 45px 20px;
+  gap: 24px;
+  padding: 40px 16px;
   text-align: center;
 }
-.welcome-card h2 {
-  font-family: "CBS New", "CBS Sans", sans-serif;
-  font-size: 30px;
-  letter-spacing: -0.5px;
-  font-weight: 400;
-  margin-bottom: 12px;
+.empty-library-brand img {
+  max-width: 100%;
+  object-fit: contain;
 }
-.welcome-card p {
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 25px;
+.empty-library-brand h1 {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 44px);
 }
-.welcome-art {
+.first-use-dialog {
+  width: min(560px, calc(100vw - 30px));
+}
+.first-use-setup {
+  margin: 0;
+}
+.first-use-setup h2 {
+  margin: 0 0 10px;
+}
+.first-use-setup p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.first-use-setup > label {
+  display: grid;
+  gap: 7px;
+  margin: 16px 0;
+  font-size: 12px;
+}
+.first-use-setup input[type="password"] {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.first-use-setup > .checkbox-label {
   display: flex;
-  gap: 6px;
-  align-items: center;
-  height: 65px;
-  margin-bottom: 25px;
+  align-items: flex-start;
 }
-.welcome-art span {
-  display: block;
-  width: 5px;
-  height: 18px;
-  background: var(--cbs-mid-blue);
-  border-radius: 4px;
+.first-use-setup .field-note {
+  float: none;
 }
-.welcome-art span:nth-child(2n) {
-  height: 30px;
-  background: var(--cbs-light-blue);
+.first-use-setup .dialog-actions {
+  flex-wrap: wrap;
 }
-.welcome-art span:nth-child(3n) {
-  height: 48px;
-  background: var(--cbs-blue);
-}
-.welcome-art span:nth-child(5) {
-  height: 62px;
-  background: var(--cbs-dark-blue);
-}
-.welcome-features {
-  display: flex;
-  gap: 32px;
-  color: var(--muted);
-  font-size: 10px;
-  margin-top: 35px;
+#hf-panel .dialog-actions {
+  flex-wrap: wrap;
 }
 .library-toolbar {
   display: flex;
@@ -1184,6 +1194,21 @@ html.busy * {
   height: 35px;
   min-height: 35px;
 }
+/* Undo last change / Redo (ADR 0180): a compact row under Versions, never widening it. */
+.result-controls > .change-steps {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.change-steps .change-step {
+  max-width: 240px;
+  min-height: 28px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 #results-dialog .field-note {
   float: none;
 }
@@ -1455,6 +1480,13 @@ mark.search-match {
 .editor-options .follow {
   white-space: nowrap;
 }
+.editor-options #transcript-filter {
+  max-width: 210px;
+}
+.transcript-filter-note {
+  color: var(--muted);
+  font-size: 11px;
+}
 #vllm-model-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1606,8 +1638,45 @@ select {
   gap: 9px;
   margin-left: auto;
 }
+/* Local spelling (ADR 0185): a panel below the open Text editor, never an overlay. */
+.passage-spelling {
+  margin: 0.65rem 0;
+  font-size: 0.8rem;
+}
+.passage-spelling .checkbox-label {
+  margin: 0;
+}
+.spelling-issues,
+.spelling-dictionaries {
+  list-style: none;
+  padding: 0;
+}
+.spelling-issues > li,
+.spelling-dictionaries > li {
+  border-bottom: 1px solid var(--line);
+  padding: 0.65rem 0;
+}
+.spelling-issue-actions,
+.spelling-suggestions,
+.spelling-vocabulary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+.spelling-dictionaries .field-note {
+  display: block;
+}
+#spelling-vocabulary-dialog {
+  width: min(540px, calc(100vw - 30px));
+}
+#spelling-vocabulary-text {
+  width: 100%;
+}
 .passage-actions button {
-  font-size: 10px;
+  font-size: 12px;
+  min-height: 24px;
+  white-space: nowrap;
   background: transparent;
   color: var(--muted);
   padding: 2px;
@@ -1616,7 +1685,7 @@ select {
   color: var(--cbs-blue);
 }
 .passage-text {
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.95;
   color: var(--muted);
   white-space: pre-wrap;
@@ -1657,8 +1726,43 @@ select {
   background: var(--surface-blue);
   padding: 12px;
   line-height: 1.8;
-  font-size: 13px;
+  font-size: 15px;
   margin: 12px 0;
+}
+.passage-text-surface {
+  position: relative;
+  margin: 12px 0;
+  background: var(--surface-blue);
+  border-radius: 6px;
+}
+.passage .passage-text-surface textarea {
+  position: relative;
+  margin: 0;
+  background: transparent;
+  isolation: isolate;
+}
+.passage-text-overlay {
+  position: absolute;
+  inset: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 5px;
+}
+.passage-text-overlay-content {
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: 15px;
+  line-height: 1.8;
+  color: transparent;
+}
+.passage-text-overlay [data-editor-word] {
+  color: transparent;
+  background: transparent;
+}
+.passage-text-overlay [data-editor-word].current {
+  background: var(--cbs-light-blue);
+  border-radius: 2px;
 }
 .edit-actions {
   display: flex;
@@ -1700,7 +1804,7 @@ select {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.9;
-  font-size: 13px;
+  font-size: 15px;
 }
 .export-choices {
   margin: 12px 0;
@@ -1796,6 +1900,7 @@ select {
 .passage-word-fields select {
   width: 100%;
   min-width: 0;
+  font-size: 13px;
 }
 .passage-realign {
   display: flex;
@@ -1864,6 +1969,22 @@ select {
   margin-left: auto;
   color: var(--muted);
   font-size: 10px;
+}
+.details-panel .panel-heading {
+  font-size: 14px;
+}
+.details-panel .panel-heading small,
+.details-panel .detail-row,
+.details-panel .detail-row strong,
+.details-panel .speaker-entry,
+.details-panel .description-notes,
+.details-panel .field-note {
+  font-size: 13px;
+}
+/* The empty-speakers note keeps its own line; floated, it covered Description / notes. */
+.details-panel #speakers .field-note {
+  float: none;
+  margin: 0;
 }
 .export-card {
   margin-top: 30px;
@@ -2291,6 +2412,14 @@ select {
   display: block;
   float: none;
 }
+.hf-setup-stages {
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.hf-setup-stages p {
+  margin: 3px 0;
+}
 .job p {
   font-size: 10px;
   color: var(--muted);
@@ -2403,6 +2532,9 @@ dialog select {
   padding: 10px 12px;
   background: white;
   font-size: 12px;
+}
+dialog input.credential-missing {
+  background: #fffcc8;
 }
 dialog .checkbox-label {
   display: flex;
@@ -2669,41 +2801,12 @@ dialog .checkbox-label {
 }
 /* CBS identity: original logo, display typography, and approved colour roles. */
 h1,
-.welcome-card h2,
 .dialog-heading h2,
 .drawer-heading h2 {
   font-family: "CBS New", "CBS Sans", sans-serif;
   font-weight: 700;
   letter-spacing: 0.015em;
   color: var(--cbs-blue);
-}
-.welcome-card {
-  background: var(--cbs-blue);
-  border-color: var(--cbs-blue);
-}
-.welcome-card h2 {
-  font-size: 38px;
-}
-.welcome-card h2,
-.welcome-card p,
-.welcome-card .eyebrow,
-.welcome-card .welcome-features {
-  color: white;
-}
-.welcome-card .button.primary {
-  background: white;
-  color: var(--cbs-dark-blue);
-  border-color: white;
-}
-.welcome-card .button.primary:hover {
-  background: var(--cbs-light-blue);
-  border-color: var(--cbs-light-blue);
-}
-.welcome-art span:nth-child(3n) {
-  background: var(--cbs-light-blue);
-}
-.welcome-art span:nth-child(5) {
-  background: white;
 }
 .badge,
 .speaker-badge {
@@ -2752,7 +2855,6 @@ h1,
 .sidebar-create,
 .local-note,
 .local-note small,
-.welcome-features,
 .card-file,
 .card-bottom,
 .dropzone p,
@@ -2799,8 +2901,7 @@ h1,
   font-size: 11px;
 }
 .speaker-badge,
-.timestamp,
-.passage-actions button {
+.timestamp {
   font-size: 10px;
 }
 @media (max-width: 1150px) {
@@ -2964,13 +3065,6 @@ h1,
   .transcript {
     max-height: 440px;
   }
-  .welcome-features {
-    gap: 15px;
-    font-size: 9px;
-  }
-  .welcome-card h2 {
-    font-size: 25px;
-  }
   .toast {
     left: 55%;
     max-width: 80vw;
@@ -2989,8 +3083,7 @@ h1,
     display: inline-flex;
   }
   .nav-heading,
-  .sidebar-bottom .local-note,
-  .sidebar-create {
+  .sidebar-bottom .local-note {
     display: none;
   }
   .sidebar nav {
@@ -3097,10 +3190,6 @@ h1,
     right: 15px;
     width: 250px;
   }
-  .welcome-features {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
   .toast {
     left: 50%;
     bottom: 110px;
@@ -3151,6 +3240,131 @@ h1,
 }
 .history-text p {
   white-space: pre-wrap;
+}
+/* History change list (ADR 0181). */
+.history-version.history-undone {
+  opacity: 0.6;
+}
+.history-version .history-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.history-version .history-tag {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.history-subtitle {
+  margin: 14px 0 6px;
+  font-size: 13px;
+}
+.history-changes {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  padding: 8px 16px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.history-changes .history-change-head {
+  margin: 8px 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.history-changes .history-change-text {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+.history-changes ins {
+  background: rgba(46, 160, 67, 0.18);
+  text-decoration: none;
+}
+.history-changes del {
+  background: rgba(218, 54, 51, 0.16);
+}
+.history-changes .history-skip {
+  color: var(--muted);
+}
+/* Branch view (ADR 0182): the list's own hidden states are kept while it is shown. */
+#history-dialog.showing-graph #history-list-note,
+#history-dialog.showing-graph #history-status,
+#history-dialog.showing-graph #history-versions,
+#history-dialog.showing-graph #history-more,
+#history-dialog.showing-graph #history-preview {
+  display: none !important;
+}
+.history-graph-scroll {
+  overflow: auto;
+  max-height: 360px;
+  border: 1px solid var(--line);
+  margin: 8px 0 12px;
+}
+#history-graph-svg {
+  display: block;
+}
+#history-graph-svg .graph-label {
+  font-size: 11px;
+  fill: var(--ink);
+}
+#history-graph-svg .graph-active .graph-label {
+  font-weight: 600;
+}
+#history-graph-svg .graph-trashed {
+  opacity: 0.5;
+}
+#history-graph-svg .graph-line {
+  stroke: var(--line);
+  stroke-width: 3;
+}
+#history-graph-svg .graph-edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+#history-graph-svg .graph-merge {
+  stroke: var(--cbs-green);
+}
+#history-graph-svg .graph-unknown {
+  stroke-dasharray: 4 3;
+}
+#history-graph-svg .graph-arrow {
+  fill: var(--muted);
+}
+#history-graph-svg .graph-node {
+  cursor: pointer;
+}
+#history-graph-svg .graph-node:focus {
+  outline: none;
+}
+#history-graph-svg .graph-dot,
+#history-graph-svg .graph-revert,
+#history-graph-svg .graph-run {
+  fill: #fff;
+  stroke: var(--cbs-blue);
+  stroke-width: 2;
+}
+#history-graph-svg .graph-revert {
+  stroke: var(--muted);
+}
+#history-graph-svg .graph-working {
+  fill: var(--cbs-blue);
+}
+#history-graph-svg .graph-node:focus-visible > :first-child,
+#history-graph-svg .graph-selected > :first-child {
+  stroke: var(--cbs-dark-blue);
+  stroke-width: 4;
+}
+#history-graph-svg .graph-count,
+#history-graph-svg .graph-tag {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.history-graph-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 .history-text strong,
 .history-text span {

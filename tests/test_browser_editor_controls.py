@@ -163,6 +163,11 @@ def test_cancel_discards_only_open_draft_and_preserves_search_scroll_audio_and_r
     original = draft.input_value()
     draft.fill("An intentionally discarded local draft")
     expect(review.locator('option[value="checked"]')).to_be_disabled()
+    # In the full profile the local spelling panel (ADR 0185) loads after the editor opens and
+    # changes its height; record the scroll only once it has settled.
+    if page.evaluate("featureOn('spelling')"):
+        expect(passage.locator("[data-spelling-enable]")).to_be_enabled()
+        page.wait_for_timeout(300)
     cancel = passage.locator('[data-action="cancel-edit"]').first
     cancel.scroll_into_view_if_needed()
     other = 2 if target == 0 else target - 1
@@ -197,9 +202,15 @@ def test_cancel_discards_only_open_draft_and_preserves_search_scroll_audio_and_r
     }""",
         {"target": target, "other": other},
     )
-    assert page.evaluate(
-        "[scrollX,scrollY,document.querySelector('#transcript').scrollTop]"
-    ) == page.evaluate("window.cancelSentinels.scroll")
+    # Closing the editor can shorten the transcript; the browser may then clamp its scroll,
+    # but it must never jump back to the top while room to stay remains.
+    scroll_now = page.evaluate(
+        "(() => { const t = document.querySelector('#transcript'); return [scrollX, scrollY,"
+        " t.scrollTop, Math.max(0, t.scrollHeight - t.clientHeight)]; })()"
+    )
+    scroll_before = page.evaluate("window.cancelSentinels.scroll")
+    assert scroll_now[:2] == scroll_before[:2]
+    assert scroll_now[2] == min(scroll_before[2], scroll_now[3])
     expect(page.locator("#transcript-search")).to_have_value("needle")
     expect(passage.locator("mark.search-match")).to_have_count(1)
     expect(review).to_have_value("needs_review")
@@ -211,6 +222,16 @@ def test_cancel_discards_only_open_draft_and_preserves_search_scroll_audio_and_r
     assert content_state(store, rid) == before
     assert requests == []
     page.locator("#audio").evaluate("audio => audio.pause()")
+
+
+def test_browser_tab_title_never_names_the_project_or_recording(page, local_app):
+    # User, 20 November: the browser tab shows just "CBS Transcriber".
+    store, rid, _ = seed_editor(page, local_app)
+    expect(page).to_have_title("CBS Transcriber")
+    project = store.recording(rid)["project_id"]
+    page.evaluate("id => { location.hash = `/projects/${id}`; }", project)
+    expect(page.locator("#project-title")).to_have_text("Synthetic editor controls")
+    expect(page).to_have_title("CBS Transcriber")
 
 
 def test_rejected_dirty_passage_switch_keeps_original_draft_caret_and_controls(page, local_app):

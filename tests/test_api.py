@@ -1,10 +1,9 @@
 import json
 
-from admission_support import inspect_and_materialize
+from admission_support import COMPATIBLE_API_URL, configure_compatible, inspect_and_materialize
 from conftest import finish_media
 
 from cbs_transcriber.app import create_app
-from cbs_transcriber.providers import OPENAI_URL
 from cbs_transcriber.store import Store
 from cbs_transcriber.transcripts import normalize_segments
 
@@ -129,14 +128,15 @@ def test_v39_frontend_refresh_does_not_reuse_stale_assets(client):
 
 
 def test_v5_boundary_and_key_redaction(client, credentials):
+    settings = configure_compatible(client)
     secret = "test-secret-do-not-echo"
-    response = client.put("/api/settings", json={"api_key": secret, "remember": False})
+    response = client.put("/api/settings", json={**settings, "api_key": secret, "remember": False})
     assert response.status_code == 200
     assert response.json()["has_key"]
     assert secret not in response.text
     assert secret not in client.get("/api/settings").text
     assert secret not in client.app.state.store.db_path.read_bytes().decode("latin1")
-    assert credentials.get(OPENAI_URL) == secret
+    assert credentials.get(COMPATIBLE_API_URL) == secret
     assert (
         client.post(
             "/api/projects", json={"name": "Blocked"}, headers={"Origin": "https://evil.example"}
@@ -149,7 +149,7 @@ def test_v5_boundary_and_key_redaction(client, credentials):
     )
     assert invalid.status_code == 422
     assert secret not in invalid.text
-    assert client.get("/api/settings").json()["base_url"] == OPENAI_URL
+    assert client.get("/api/settings").json()["base_url"] == COMPATIBLE_API_URL
 
 
 def test_project_isolation_and_busy_delete(client, wav_bytes):
@@ -164,7 +164,18 @@ def test_project_isolation_and_busy_delete(client, wav_bytes):
 
 def test_transcription_queue_replacement_is_explicit(client, wav_bytes, credentials):
     with client.app.state.store.library_lock():
-        credentials.keys[OPENAI_URL] = "fake-key"
+        configure_compatible(client)
+        credentials.keys[COMPATIBLE_API_URL] = "fake-key"
+        # Queue behavior starts from an explicitly checked synthetic connection.
+        from cbs_transcriber import provider_connection, providers
+
+        store = client.app.state.store
+        profile = providers.profile(store, providers.default_provider_id(store))
+        settings = providers.Settings.model_validate(profile["settings"])
+        checks = provider_connection.Checks()
+        proof = checks.issue(settings, "fake-key", checks.begin(settings), models=[settings.model])
+        with store.connection() as db:
+            checks.save(db, proof, settings, "fake-key")
         recording = finish_media(client, upload(client, wav_bytes))
         response = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]})
         assert response.status_code == 202

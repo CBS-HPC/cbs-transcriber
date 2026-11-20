@@ -12,7 +12,10 @@ Downloaded unchanged on 20 October 2026 from the public
 
 The logo's geometry, proportions, and CBS blue (#4967AA) are preserved. CSS does
 not recreate, crop, stretch, or recolour it. The primary logo identifies the app;
-the official vertical variant is the favicon.
+the official vertical variant is the favicon and the empty-library mark. It provides
+the requested blue-on-light counterpart of the supplied white-on-blue social logo
+without modifying either official asset. The supplied raster remains unchanged in
+`docs/design-assets/cbs-logo-white-on-blue.png` as the design reference.
 
 CBS New Bold is used for display headlines only. Readable web text uses CBS Sans,
 CBS's named distribution of Inter. All assets are served locally for offline use.

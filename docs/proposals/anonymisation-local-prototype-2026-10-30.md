@@ -1,11 +1,35 @@
-# Local anonymisation review — design and synthetic acceptance plan
+# Anonymisation review — UCloud LLM direction and synthetic acceptance plan
 
-Status: proposed design, 30 October 2026. No production feature, schema, job, provider or
+Status: proposed design, 30 October 2026; offline design/prototyping resumed 10 November 2026.
+No production feature, schema, job, provider or
 key store is introduced. The [original proposal](anonymisation-2026-10-30.md), dated
 [model survey](../evaluations/anonymisation-models-2026-10-30.md) and
 [weekend scope](../work-plans/weekend-2026-10-31.md#anonymisation-options-to-resolve)
 remain inputs; their open decisions remain open. This document does not revalidate model
 claims or select a detector. It refines the local, transcript-only demonstration.
+
+## Updated direction — 11 November 2026
+
+The user wants an **anonymisation LLM running on UCloud**. The local literal/regex
+demonstration is review/evaluation scaffolding, not the intended inference backend.
+The requested hosting-project catalogue identifies **PII-Tracer**
+(`perplexity-ai/PII-Tracer-vLLM`) as the anonymisation candidate. It is a token classifier
+for PII spans and masking, not an autoregressive chat model. Integration must use the hosting
+agent's reviewed `/v1/pii` adapter rather than assume a chat-completions API.
+
+The catalogue was inspected read-only on 11 November at hosting-project commit `1056938`:
+`src/ucloud_vllm_agent/data/model_catalog.json`, `docs/model-catalog.md` and
+`docs/pii-tracer.md`. It pins model revision
+`9f34cd1f5010a1de5a7b464eaf3c3a39db01b15a`, records a B200 MIG 1g.23gb test allocation,
+4096-token context and concurrency two. Its validation is historical synthetic hosting/API
+evidence; it does not prove current uptime or Danish interview detection quality.
+Candidate identification does not enable deployment, downloads, paid jobs or transcript uploads.
+
+Next planning steps are candidate evaluation for Danish/English, the Transcriber-to-agent interface,
+and a reviewed transcript-version-to-suggestions workflow. Keep the existing human span
+review, separate derived result and export-leak gates. Identifier coverage, pseudonym rules
+and mapping custody/retention remain open: the user's hosting preference does not answer
+the earlier direct-identifiers-only scope question. No app integration is implemented.
 
 ## Smallest useful experiment
 
@@ -21,6 +45,29 @@ inputs are caller-owned synthetic objects; it never reads a library/file or call
 an application route, a provider or a model. It prints only the demonstration export.
 It represents review decisions; it is not evidence that a person performed that review.
 Square-bracket replacement labels are fixture values, not proposed production defaults.
+The [bilingual fixture report and next evaluation gate](../evaluations/anonymisation-offline-2026-11-10.md)
+add reproducible detection-gap probes, without selecting or running a model.
+
+## Identifier scope to decide
+
+The following is a proposed annotation/review scope, not an accepted release policy or a
+promise of detection. Apply the same written scope to Danish, English and mixed-language
+passages. Decide the intended recipients and whether linking interviews is wanted first.
+
+| Text to review | Proposed treatment for a first trial | What requires a researcher decision |
+| --- | --- | --- |
+| Participant, third-party, interviewer and named-speaker names; initials/nicknames/ASR variants | Suggest known literal variants; manually add missed occurrences; review every speaker display label. No inference that two equal names are one person. | Which people may remain named, including public figures; no automatic public/interviewer exception. |
+| Email, phone, postal address, private URL/handle | Treat as direct-identifier candidates; review the exact full literal, including punctuation and nearby distinguishing text. Only emails are implemented in the synthetic example. | Public organisational contacts versus personal contacts; what location detail the release needs. |
+| CPR-like/other ID, bank/account number, credential or secret | Flag for review once separately tested rules exist; a malformed/checksum-failing value can still identify someone. | Whether any portion may remain; the example does not implement these detectors. |
+| Organisation, workplace, school, small place, job title, age/date or event | Review in context, together with facts elsewhere in the release. General NER labels do not decide disclosure. | Retain, generalise with explicit replacement text, or remove; resolution needed for the research question. |
+| Rare role/event, relationships, quotations and combinations of ordinary facts | Whole-transcript human review; manual literal spans may cover a phrase or sentence. | Acceptable detail/linkage for the intended audience. A missed combination is not repaired by a name-only pass. |
+| Voice, original audio/video, embedded/file metadata, notes, history and other source copies | Outside the text-redaction guarantee; the first trial exports none of these. Speaker aliases do not alter voices. | Separate handling/release scope; retaining them locally remains identifiable source retention. |
+
+Keep and replacement labels are researcher-authored output, so either can still identify
+someone. Complete review means the frozen supplied suggestions were decided; it does not
+mean the complete source was detected or the final release is anonymous. The final read-through
+must inspect complete derived text, including replacements, speaker labels and combinations
+across all selected recordings. No anonymity score or automatic release certificate is proposed.
 
 ## Exact source and review contract
 
@@ -68,6 +115,30 @@ exist only in disposable memory. Review each speaker's display label too: source
 and names can themselves identify a person. Generate export-scoped voice aliases and require
 explicit reviewed display replacements; do not silently pseudonymise named speakers.
 
+### Consistency experiment
+
+The example optionally accepts an explicit in-memory `entity_labels` dictionary and a
+per-occurrence Replace decision naming one of its private entity keys. The same reviewed key
+always yields the same exact label, including across separately supplied synthetic snapshots.
+Equal source spelling can deliberately name different keys; different literal variants can
+name one key. No detector performs these links. Keys/mappings are in the private receipt only,
+which is copied independently from caller-owned objects.
+
+This experiment refuses missing, empty and exactly colliding entity labels. It tests the
+conservative stable-pseudonym option, without choosing it as the production policy. Direct
+literal replacement remains available for category labels/generalisation. The prototype does
+not infer equivalence between that free text and entity labels or prevent a reviewer typing an
+identifier back into the output. It replaces a whole selected genitive/variant with the chosen
+literal label; it does not generate grammar or name inflections.
+
+For a later project-wide mapping, recommend explicit human entity membership and numbered
+labels scoped to that project, with no cross-project reuse. Freeze the mapping revision and
+the exact occurrence list before an all-occurrences action; show additions, omissions and
+collisions. A mapping change invalidates affected derived review/export eligibility. Reopening
+or retrying cannot relink by current spelling or renumber previously reviewed labels. Whether
+interview linkage is appropriate and whether several people may share a category label remain
+researcher choices. The disposable dictionary supplies no durable project-wide guarantee.
+
 ## Derived content and export allowlist
 
 The first demonstration drops **all timing** rather than retaining partially stale word
@@ -108,6 +179,24 @@ means that discarding a mapping alone does not make the library irreversibly ano
 | Metadata/timing release | Which identifiers, aggregates, timestamps, speaker attributes and methods evidence may be shared; default text-only trial omits them. |
 | Institutional acceptance | CBS researcher/IT/DPO decisions and representative Danish evaluation are separate from synthetic software checks. No claim of anonymity or real NVivo compatibility follows. |
 
+Before persistence, record these concrete key choices together: named responsible role and
+authorised readers; in-library recoverable mapping versus a separately managed encrypted
+mapping; where its unlock key is held; which backups/restore copies contain it; retention
+trigger and period; and who can authorise deletion/withdrawal. A separate store increases
+operational work and needs its own recovery design; an in-library store shares the library's
+source/backup exposure. Do not implement custom cryptography or treat the OS provider-token
+store as an approved entity-key store. The experiment retains nothing beyond caller memory;
+neither zeroisation nor crash-dump/clipboard exclusion is established.
+
+The recommended first publication proposal is an inactive derived result, preserving the
+active and Working choices, with a separate exact reviewed-output designation. Bind eligibility
+to source version/hash/role, policy/run/decision/mapping revisions and the final derived hash.
+Editing that derived output requires new review; a newer Working version marks the old output
+as derived from an earlier source, without silently regenerating or erasing it. Missing/stale
+designations must be skipped with a manifest reason rather than falling back to ordinary
+Working text. This remains a design choice: no application designation or publication seam
+has been added.
+
 ## Acceptance and next gate
 
 | Gate | Evidence required |
@@ -115,6 +204,7 @@ means that discarding a mapping alone does not make the library irreversibly ano
 | Synthetic exactness | Emoji before a hit, decomposed Danish diacritics, CRLF/leading LF, repeated literals, word-edge negatives, multiple passages and input immutability. Literal offsets/quotes must round-trip; unchanged characters remain exact. |
 | Review/authority | Keep/Replace/manual additions; all suggestions decided; wrong quote/range/category, stale payload/version/role revision, missing speaker review and overlapping replacements refuse. Production later adds stale replies, decision CAS, all-occurrence membership and writer/idempotency interleavings. |
 | Export leak probes | Seed distinct canaries in original/alternate text, words, speaker IDs/names, filenames/titles/paths, notes, history and receipt fields. Serialize every allowed demo field and prove forbidden keys/canaries are absent. Kept wording with no other approved replacement remains visible, demonstrating the limit of review. |
+| Entity links | Explicit reviewed variants reuse one label; equal spelling can denote distinct entities. Missing/empty/colliding labels refuse. Mapping keys stay private; changing caller dictionaries after construction cannot change the receipt. No inferred speaker-to-person link. |
 | Resource/cancel, later | Fixed source/rule/candidate budgets, bounded hostile-input parsing, cancellable rules/worker and whole-source review status. Refusal never appears as “no identifiers found.” The small example is not a public parser or a resource qualification. |
 | Independent review | Review source/hash authority, Unicode coordinate conversion, replacement conflicts, alias/export allowlists, source/active/Working preservation and the undecided key choices before any production implementation. |
 
@@ -122,6 +212,7 @@ Run the disposable demonstration with the existing Python environment:
 
 ```powershell
 python docs/examples/anonymisation_demo.py
+python -m docs.examples.anonymisation_evaluation
 python -m pytest tests/test_anonymisation_design_example.py -q -o addopts=''
 ```
 

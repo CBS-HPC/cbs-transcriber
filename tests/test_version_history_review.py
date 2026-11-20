@@ -36,6 +36,7 @@ const state = {recording: {
   notes: 'Earlier saved notes', notes_revision: 0,
 }};
 const scope = {
+  queueMicrotask,
   state, historyContext: context, viewEpoch: 1, editVersion: 0,
   $: id => {assert(id in nodes, `Unexpected DOM access ${id}`); return nodes[id];},
   handle: callback => callback,

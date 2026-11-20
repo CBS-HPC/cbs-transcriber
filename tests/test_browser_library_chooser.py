@@ -10,6 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 from playwright.sync_api import expect
+from test_browser import LocalApp
 from test_browser import page as page
 
 from cbs_transcriber import __main__ as launcher
@@ -90,15 +91,8 @@ def test_launcher_chooses_remembers_and_switches_libraries(
         expect(current).to_contain_text("Open now")
         expect(current).to_contain_text(str(redirected.root))
         other = page.locator("#library-dialog .library-item").filter(has_text="Default library")
-        page.once("dialog", lambda dialog: dialog.accept())
-        other.get_by_role("button", name="Remove from list").click()
-        disclosure = page.locator("#library-dialog details").filter(has_text="Hidden libraries")
-        expect(disclosure.locator("summary")).to_have_text("Hidden libraries (1)")
-        disclosure.locator("summary").click()
-        expect(disclosure).to_contain_text("unfinished work")
-        disclosure.get_by_role("button", name="Show again").click()
-        expect(disclosure).to_have_count(0)
-        other = page.locator("#library-dialog .library-item").filter(has_text="Default library")
+        expect(page.get_by_role("button", name="Remove from list")).to_have_count(0)
+        expect(page.get_by_role("button", name="Show again")).to_have_count(0)
         other.get_by_role("button", name="Open").click()
         expect(page.locator("#projects")).to_contain_text("Default interviews", timeout=30000)
         expect(page.locator("#projects")).not_to_contain_text("Codex-era interviews")
@@ -110,3 +104,51 @@ def test_launcher_chooses_remembers_and_switches_libraries(
             server.should_exit = True
         thread.join(30)
     assert not thread.is_alive()
+
+
+def test_library_dialog_lists_previously_hidden_libraries_without_visibility_writes(
+    page, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr(storage, "legacy_library_root", lambda: tmp_path / "legacy")
+    monkeypatch.setattr(libraries, "legacy_library_root", lambda: tmp_path / "legacy")
+    monkeypatch.setattr(libraries, "redirected_roots", lambda: [])
+    hidden = Store(tmp_path / "previously-hidden")
+    project = hidden.create_project("Earlier research")
+    hidden.create_recording(project["id"], "synthetic.wav")
+    marker = hidden.root / "retained.txt"
+    marker.write_text("Retain this library and its work.", encoding="utf-8")
+    libraries.register(hidden.root)
+    entry = next(item for item in libraries.known() if item["path"] == str(hidden.root))
+    libraries.set_hidden(entry["path"], entry["visibility_token"], hidden=True)
+    visibility = libraries.visibility_path().read_bytes()
+    current = Store(tmp_path / "current")
+    requests = []
+    page.on("request", lambda request: requests.append((request.method, request.url)))
+    app = LocalApp(current.root)
+    app.start()
+    try:
+        page.goto(app.url)
+        page.locator("#library-open").click()
+        dialog = page.locator("#library-dialog")
+        item = dialog.locator("[data-library-list] > .library-item").filter(
+            has_text=str(hidden.root)
+        )
+        expect(item).to_contain_text("1 project(s) · 1 recording(s)")
+        expect(item.get_by_role("button", name="Open", exact=True)).to_be_visible()
+        expect(item.get_by_role("button", name="Delete permanently")).to_be_enabled()
+        expect(dialog.get_by_role("button", name="Remove from list")).to_have_count(0)
+        expect(dialog.get_by_role("button", name="Show again")).to_have_count(0)
+        expect(dialog.locator("[data-library-visibility]")).to_have_count(0)
+        assert libraries.visibility_path().read_bytes() == visibility
+        assert next(
+            item["hidden"] for item in libraries.known() if item["path"] == str(hidden.root)
+        )
+        assert marker.read_text(encoding="utf-8") == "Retain this library and its work."
+        assert hidden.all("SELECT count(*) AS n FROM recordings")[0]["n"] == 1
+        assert not any(
+            method == "POST" and url.endswith("/api/libraries/visibility")
+            for method, url in requests
+        )
+    finally:
+        app.stop()

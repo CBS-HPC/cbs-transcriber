@@ -33,6 +33,12 @@ def validate_authorized_params(authority, policy, params):
     """Require job parameters to match their separate trusted acceptance receipt."""
     if policy not in {"result", "timing"} or not isinstance(params, dict):
         raise ValueError("The frozen Working job parameters are invalid.")
+    if ("timing_apply_policy" in params) != ("timing_apply_policy" in authority) or params.get(
+        "timing_apply_policy"
+    ) != authority.get("timing_apply_policy"):
+        raise ValueError(
+            "The timing application policy differs from its trusted acceptance receipt."
+        )
     source = params.get("source_snapshot")
     if authority["source_snapshot_sha256"] is None:
         if source is not None:
@@ -106,7 +112,12 @@ def _timing_receipt(db, recording_id, result_id, job, previous, successor):
     ):
         return False
     payload = decode_payload(previous["payload"], previous["payload_sha256"])
-    segments, applied, skipped = local_timing._successor(payload["segments"], frozen, outputs)
+    apply_policy = local_timing._policy(params)
+    if apply_policy is not None:
+        local_timing.verify_cloud_receipt(db, recording_id, result_id, job, params)
+    segments, applied, skipped = local_timing._cloud_successor(
+        payload["segments"], frozen, outputs, apply_policy=apply_policy
+    )
     return (
         bool(applied)
         and receipt.get("applied_ids") == applied

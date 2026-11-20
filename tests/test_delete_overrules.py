@@ -34,7 +34,7 @@ class Remote:
         self.trash_error = None
         self.jobs = []
 
-    def retrieve_job(self, identifier):
+    def retrieve_job(self, identifier, *, request_timeout=None):
         self.retrieved.append(identifier)
         return {"id": identifier, "status": {"state": self.state}}
 

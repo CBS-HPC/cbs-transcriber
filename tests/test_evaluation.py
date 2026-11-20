@@ -6,6 +6,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from admission_support import COMPATIBLE_API_URL, checked_connection, configure_compatible
 from fastapi.testclient import TestClient
 
 from cbs_transcriber.app import create_app
@@ -16,7 +17,6 @@ from cbs_transcriber.evaluation import (
     read_predictions,
     score,
 )
-from cbs_transcriber.providers import OPENAI_URL
 
 ROOT = Path(__file__).resolve().parents[1]
 SUITE = ROOT / "tests" / "fixtures" / "fleurs_da"
@@ -140,10 +140,12 @@ def test_v10_fleurs_through_app_queue_playback_persistence_export(
         return {"text": text}  # Deliberate test error, not measured speech recognition.
 
     monkeypatch.setattr("cbs_transcriber.providers.transcribe_file", fake_provider)
-    credentials.keys[OPENAI_URL] = "synthetic-test-key"
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-test-key"
     data = tmp_path / "library"
     app = create_app(data, credentials=credentials)
     with TestClient(app, headers={"X-CBS-Request": "1"}) as client:
+        configure_compatible(client, capability="json")
+        checked_connection(app.state.store, credentials)
         report = RUNNER["run_app_suite"](
             client, SUITE, manifest, tmp_path / "run", timeout=30, poll_interval=0.02
         )

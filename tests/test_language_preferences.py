@@ -175,6 +175,9 @@ def test_transcription_api_uses_recording_override_without_changing_provider(cli
         "language": "fr",
     }
     assert client.put("/api/settings", json=settings).status_code == 200
+    from admission_support import checked_connection
+
+    checked_connection(store, client.app.state.credentials)
     with store.library_lock():
         response = client.post("/api/transcriptions", json={"recording_ids": [recording["id"]]})
     assert response.status_code == 202, response.text

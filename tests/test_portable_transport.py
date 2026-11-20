@@ -494,6 +494,13 @@ def test_v137_late_changes_refuse_without_publishing_an_observation(package, mon
             elif change == "object":
                 data = path.read_bytes()
                 path.write_bytes(bytes([data[0] ^ 1]) + data[1:])
+                # Same-size writes can retain every compared witness on Windows.
+                witness = result[1]
+                os.utime(
+                    path,
+                    ns=(path.stat().st_atime_ns, witness.st_mtime_ns + 2_000_000_000),
+                )
+                assert path.stat().st_mtime_ns != witness.st_mtime_ns
             elif change == "new_root_item":
                 (root / "unexpected.txt").write_bytes(b"x")
             else:

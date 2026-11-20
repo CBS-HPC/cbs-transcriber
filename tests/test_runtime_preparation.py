@@ -5,8 +5,10 @@ import json
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from cbs_transcriber import enhancement_api as api
@@ -18,6 +20,7 @@ from cbs_transcriber import (
 from cbs_transcriber import (
     runtime_preparation as subject,
 )
+from cbs_transcriber import runtime_preparation_observation as observation
 from cbs_transcriber.store import SCHEMA_VERSION, Store, now
 
 SECRET = "synthetic-preparation-key-never-uploaded"
@@ -65,6 +68,17 @@ def prepared(client, credentials, monkeypatch):
         def __init__(self):
             self.submissions, self.uploads, self.terminations, self.trashed = [], [], [], []
             self.folders, self.matches = set(), []
+            self._client = SimpleNamespace(stream=self.runtime_stream)
+
+        @contextmanager
+        def runtime_stream(self, method, path, *, params, **kwargs):
+            assert (method, path) == ("GET", "/api/files/retrieve")
+            assert params["id"].endswith("/.prepare-lock")
+            response = httpx.Response(404, stream=httpx.ByteStream(b""))
+            try:
+                yield response  # Synthetic storage has no retained preparation lock.
+            finally:
+                response.close()
 
         def __enter__(self):
             return self
@@ -121,6 +135,27 @@ def prepared(client, credentials, monkeypatch):
     )
     monkeypatch.setattr("cbs_transcriber.runtime_batches.ensure_use_lock", lambda *args: None)
     monkeypatch.setattr(api, "POLL_SECONDS", 0)
+    monkeypatch.setattr(subject, "OBSERVATION_BACKOFF_SECONDS", 0)
+    # This older fixture models parsed protocol objects. Strict raw transport and
+    # status classification are exercised by the separate observation harness.
+    monkeypatch.setattr(
+        observation,
+        "state",
+        lambda client, identifier, _spec, **_: api.remote_state(client, identifier),
+    )
+
+    def observed_json(client, settings, path, **_):
+        value = api.read_json(client, settings.base_url, path)
+        if value is None:
+            raise observation.Pending()
+        return value
+
+    def observed_stamp(client, settings, **_):
+        if not api.stamped(client, settings):
+            raise observation.Refused()
+
+    monkeypatch.setattr(observation, "read_json", observed_json)
+    monkeypatch.setattr(observation, "stamp", observed_stamp)
 
     def upload(_, server, path, target, guard, checkpoint):
         guard()
@@ -875,7 +910,7 @@ def test_real_queue_lane_drains_with_the_same_store_lease(prepared, monkeypatch)
     f = prepared
     queue = f.client.app.state.queue
     completed = threading.Event()
-    checkpoint = subject.checkpoint
+    complete = subject.Run._complete_prepared
     submit = f.cloud.submit_job
 
     def ready_after_submit(specification):
@@ -883,14 +918,14 @@ def test_real_queue_lane_drains_with_the_same_store_lease(prepared, monkeypatch)
         f.cloud.ready = True
         return reply
 
-    def observed_checkpoint(*args, **kwargs):
-        value = checkpoint(*args, **kwargs)
-        if value["state"] == "completed":
+    def observed_completion(instance, *args, **kwargs):
+        value = complete(instance, *args, **kwargs)
+        if value and instance.value["state"] == "completed":
             completed.set()
         return value
 
     monkeypatch.setattr(f.cloud, "submit_job", ready_after_submit)
-    monkeypatch.setattr(subject, "checkpoint", observed_checkpoint)
+    monkeypatch.setattr(subject.Run, "_complete_prepared", observed_completion)
     enqueue(f)
     with f.store.library_lock():
         queue.start()

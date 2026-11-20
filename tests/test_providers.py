@@ -12,7 +12,15 @@ from cbs_transcriber.providers import (
     check_models,
     normalize_response,
     transcribe_file,
+    transcription_fields,
 )
+
+COMPATIBLE_URL = "https://compatible.invalid/v1"
+
+
+def compatible(legacy):
+    """Exercise retained fields on an explicit synthetic compatible service."""
+    return legacy.model_copy(update={"provider_type": "custom", "base_url": COMPATIBLE_URL})
 
 
 @pytest.mark.parametrize("capability", ["words", "words_speakers"])
@@ -86,7 +94,9 @@ def test_api_errors_never_echo_upstream_body_or_key(tmp_path, status):
         lambda request: httpx.Response(status, json={"error": {"message": "secret-private-audio"}})
     )
     with pytest.raises(ValueError) as error:
-        transcribe_file(path, Settings(), "secret-private-audio", httpx.Client(transport=transport))
+        transcribe_file(
+            path, compatible(Settings()), "secret-private-audio", httpx.Client(transport=transport)
+        )
     assert "secret-private-audio" not in str(error.value)
 
 
@@ -139,11 +149,13 @@ def test_speaker_preset_omits_word_parameters(tmp_path):
             },
         )
 
+    legacy = Settings(model="gpt-4o-transcribe-diarize", capability="speakers")
     result = transcribe_file(
         path,
-        Settings(model="gpt-4o-transcribe-diarize", capability="speakers"),
+        compatible(legacy),
         "secret",
         httpx.Client(transport=httpx.MockTransport(reply)),
+        request_fields=transcription_fields(legacy),
     )
     segment = normalize_response(result)[0]
     assert segment["speaker"] == "A" and not segment["word_timing"]
@@ -160,11 +172,13 @@ def test_v16_legacy_diarize_settings_use_supported_format(tmp_path):
         assert b"timestamp_granularities" not in body
         return httpx.Response(200, json={"text": "Hej.", "segments": []})
 
+    legacy = Settings(model="gpt-4o-transcribe-diarize", capability="words")
     transcribe_file(
         path,
-        Settings(model="gpt-4o-transcribe-diarize", capability="words"),
+        compatible(legacy),
         "synthetic-key",
         httpx.Client(transport=httpx.MockTransport(reply)),
+        request_fields=transcription_fields(legacy),
     )
 
 
@@ -197,11 +211,13 @@ def test_v16_plain_models_send_json_without_invented_timing(tmp_path, model):
             assert b'name="language"' in body and b'name="languages[]"' not in body
         return httpx.Response(200, json={"text": "Hej København."})
 
+    legacy = Settings(model=model, language="da")
     payload = transcribe_file(
         path,
-        Settings(model=model, language="da"),
+        compatible(legacy),
         "synthetic-key",
         httpx.Client(transport=httpx.MockTransport(reply)),
+        request_fields=transcription_fields(legacy),
     )
     segment = normalize_response(payload)[0]
     assert segment["start"] is None and not segment["word_timing"]
@@ -232,7 +248,9 @@ def test_v17_model_check_only_lists_models():
         )
 
     result = check_models(
-        Settings(), "synthetic-secret", httpx.Client(transport=httpx.MockTransport(reply))
+        compatible(Settings()),
+        "synthetic-secret",
+        httpx.Client(transport=httpx.MockTransport(reply)),
     )
     assert len(requests) == 1
     assert {m["id"] for m in result["models"]} == set(OPENAI_MODELS)
@@ -249,6 +267,8 @@ def test_v17_model_check_errors_are_redacted(status):
         )
     )
     with pytest.raises(ValueError) as error:
-        check_models(Settings(), "private-key-and-transcript", httpx.Client(transport=transport))
+        check_models(
+            compatible(Settings()), "private-key-and-transcript", httpx.Client(transport=transport)
+        )
     assert str(status) in str(error.value)
     assert "private" not in str(error.value)

@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "da": "da-DK",
+    "en": "en-GB"
+  },
+  "aliases": {
+    "da-DK": "da",
+    "en-GB": "en"
+  },
+  "dictionaries": [
+    {
+      "language": "da",
+      "name": "Danish",
+      "locale": "da-DK",
+      "capabilities": {
+        "check": true,
+        "suggest": false,
+        "max_suggestions": 0
+      },
+      "source": {
+        "repository": "https://github.com/wooorm/dictionaries",
+        "commit": "8cfea406b505e4d7df52d5a19bce525df98c54ab",
+        "directory": "dictionaries/da",
+        "upstream_url": "https://www.stavekontrolden.dk/",
+        "upstream_version": "2.8.034 (2023-11-01)"
+      },
+      "files": {
+        "aff": {
+          "name": "index.aff",
+          "url": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/da/index.aff",
+          "bytes": 81584,
+          "sha256": "cb5ef704de0ab8575c883c97981d5d242260c7ebe47b28c15c205443aca15976"
+        },
+        "dic": {
+          "name": "index.dic",
+          "url": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/da/index.dic",
+          "bytes": 3719300,
+          "sha256": "9a12345e1881c96f18cc460dbd062e47509571d5f2a2a9bf041da169856dc19e"
+        },
+        "license": {
+          "name": "license",
+          "url": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/da/license",
+          "bytes": 787,
+          "sha256": "ef2785b76dbcb1d0b620435158624a9002b995ee4521cf5d41b055e29eb9d1af"
+        }
+      },
+      "licence": {
+        "spdx_expression": "GPL-2.0-only OR LGPL-2.1-only OR MPL-1.1",
+        "publisher_expression": "(GPL-2.0 OR LGPL-2.1 OR MPL-1.1)",
+        "attribution": "Stavekontrolden; Foreningen for frit tilgængelige sprogværktøjer; data from Det Danske Sprog- og Litteraturselskab. Normalized and packaged by wooorm/dictionaries.",
+        "attribution_url": "https://github.com/wooorm/dictionaries/blob/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/da/license",
+        "verification_status": "publisher_notice_and_package_metadata_pinned",
+        "institutional_review": "not_assessed"
+      }
+    },
+    {
+      "language": "en",
+      "name": "English (United Kingdom, -ise)",
+      "locale": "en-GB",
+      "capabilities": {
+        "check": true,
+        "suggest": true,
+        "max_suggestions": 5
+      },
+      "source": {
+        "repository": "https://github.com/wooorm/dictionaries",
+        "commit": "8cfea406b505e4d7df52d5a19bce525df98c54ab",
+        "directory": "dictionaries/en-GB",
+        "upstream_url": "https://wordlist.aspell.net/",
+        "upstream_version": "SCOWL en_GB-ise 2020.12.07, size 60"
+      },
+      "files": {
+        "aff": {
+          "name": "index.aff",
+          "url": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en-GB/index.aff",
+          "bytes": 3086,
+          "sha256": "8ae1f19d4840d957728ad90555d5a8dff6cc5c046279c95ff0c00fc0a0136c7b"
+        },
+        "dic": {
+          "name": "index.dic",
+          "url": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en-GB/index.dic",
+          "bytes": 552106,
+          "sha256": "869fe17ba4ee4b5401c60a666ee2d6a3dcc237f460b7294435df1cc6a799aa57"
+        },
+        "license": {
+          "name": "license",
+          "url": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en-GB/license",
+          "bytes": 15739,
+          "sha256": "81b644347b40804c25811267efbea024a30b2bb1642fefa9c9c50f7b0bbcb67f"
+        }
+      },
+      "licence": {
+        "spdx_expression": "LicenseRef-SCOWL-2020-12-07",
+        "publisher_expression": "(MIT AND BSD)",
+        "attribution": "SCOWL; Kevin Atkinson and the contributors/notices in the complete pinned licence, including VarCon, Ispell, WordNet and UKACD. Normalized and packaged by wooorm/dictionaries.",
+        "attribution_url": "https://github.com/wooorm/dictionaries/blob/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en-GB/license",
+        "verification_status": "composite_notice_pinned_standard_spdx_mapping_not_asserted",
+        "institutional_review": "not_assessed"
+      }
+    }
+  ]
+}

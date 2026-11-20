@@ -101,12 +101,286 @@ const state = {
   providers: [],
   defaultProvider: null,
   settingsProvider: null,
-  settingsTab: "openai",
+  settingsTab: "ucloud",
   protectedDefaults: {},
   catalog: null,
   comparison: null,
   transcriptionFeatures: {},
 };
+const FIRST_USE_MARKER = "cbs-first-use-completed-v1";
+const firstUse = {
+  version: 0,
+  done: false,
+  busy: false,
+  saving: false,
+  savedNative: false,
+  issue: false,
+  uncertain: false,
+  handoff: false,
+  ready: false,
+  retainSaveOutcome: false,
+};
+function completedNativeSetup(provider) {
+  return (
+    provider.provider_type === "ucloud" &&
+    provider.service_available !== false &&
+    provider.has_key &&
+    nativeReady(provider.ucloud_transcriber || {})
+  );
+}
+function ucloudKeySaved() {
+  return state.providers.some(
+    (provider) => visibleProvider(provider) && provider.has_key,
+  );
+}
+function firstUseCompleted() {
+  if (firstUse.retainSaveOutcome || firstUse.done) return firstUse.done;
+  // Without a saved UCloud key the setup returns on every load; Skip then lasts only for
+  // this page (user decision, 19 November). The marker applies once a key is saved.
+  if (!ucloudKeySaved()) return false;
+  try {
+    firstUse.done = localStorage.getItem(FIRST_USE_MARKER) === "1";
+  } catch {
+    // Browser storage can be disabled; completion still lasts for this page.
+  }
+  return firstUse.done;
+}
+function credentialMissing(input, saved) {
+  input.classList.toggle(
+    "credential-missing",
+    saved === false && !input.value.trim(),
+  );
+}
+function firstUseProvider() {
+  return (
+    state.providers.find(
+      (provider) =>
+        provider.id === state.settingsProvider && visibleProvider(provider),
+    ) ||
+    state.providers.find(
+      (provider) =>
+        provider.id === state.defaultProvider && visibleProvider(provider),
+    ) ||
+    state.providers.find(visibleProvider)
+  );
+}
+function renderFirstUse() {
+  const home = ["", "#", "#/", "#main"].includes(location.hash);
+  const saving = !!firstUse.saving;
+  const busy = firstUse.busy || saving;
+  const visible =
+    saving ||
+    (firstUse.ready &&
+      (home || firstUse.retainSaveOutcome) &&
+      !firstUseCompleted() &&
+      !firstUse.handoff &&
+      !$("#settings-dialog").open &&
+      (!state.providers.some(completedNativeSetup) ||
+        firstUse.savedNative ||
+        firstUse.issue ||
+        firstUse.busy));
+  const dialog = $("#first-use-dialog");
+  if (visible && !dialog.open) dialog.showModal();
+  else if (!visible && dialog.open) dialog.close();
+  $("#first-use-ucloud-key").required = !firstUse.savedNative;
+  $("#first-use-ucloud-key").disabled = busy || firstUse.savedNative;
+  $("#first-use-hf-token").disabled = busy;
+  $("#first-use-remember").disabled = busy;
+  $("#first-use-save").disabled = busy || firstUse.uncertain;
+  $("#first-use-save").textContent = firstUse.savedNative
+    ? "Finish setup"
+    : "Connect and save";
+  $("#first-use-skip").disabled = saving;
+  $("#first-use-close").disabled = saving;
+  $("#settings-open").disabled = saving;
+  credentialMissing(
+    $("#first-use-ucloud-key"),
+    firstUse.ready
+      ? firstUse.savedNative || !!firstUseProvider()?.has_key
+      : null,
+  );
+  credentialMissing($("#first-use-hf-token"), hfSavedToken);
+}
+function cancelFirstUse() {
+  if (firstUse.saving) return;
+  firstUse.version++;
+  firstUse.busy = false;
+  firstUse.retainSaveOutcome = false;
+  $("#first-use-ucloud-key").value = "";
+  $("#first-use-hf-token").value = "";
+  renderFirstUse();
+}
+function completeFirstUse() {
+  if (firstUse.saving) return;
+  const wasOpen = $("#first-use-dialog").open;
+  firstUse.done = true;
+  firstUse.issue = false;
+  firstUse.uncertain = false;
+  firstUse.savedNative = false;
+  try {
+    localStorage.setItem(FIRST_USE_MARKER, "1");
+  } catch {
+    // No credentials or admission proof are stored in browser storage.
+  }
+  cancelFirstUse();
+  if (wasOpen && !$("#settings-dialog").open) $("#settings-open").focus();
+}
+function firstUseSettingsHandoff(profile, key, remember) {
+  firstUse.handoff = true;
+  cancelFirstUse();
+  fillProvider(profile);
+  $("#api-key").value = key;
+  updateProviderCredential();
+  $("#remember-key").checked = remember;
+  $("#settings-dialog").showModal();
+}
+$("#first-use-skip").addEventListener("click", completeFirstUse);
+$("#first-use-close").addEventListener("click", completeFirstUse);
+$("#first-use-dialog").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  completeFirstUse();
+});
+for (const id of ["#first-use-ucloud-key", "#first-use-hf-token"])
+  $(id).addEventListener("input", renderFirstUse);
+window.addEventListener("storage", (event) => {
+  if (event.key === FIRST_USE_MARKER && event.newValue === "1") {
+    if (firstUse.retainSaveOutcome) return;
+    firstUse.done = true;
+    cancelFirstUse();
+  }
+});
+$("#first-use-setup").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (firstUse.busy || firstUse.saving || firstUse.uncertain) return;
+  const version = ++firstUse.version,
+    epoch = viewEpoch;
+  const current = () => version === firstUse.version && epoch === viewEpoch;
+  const key = $("#first-use-ucloud-key").value;
+  const hfToken = $("#first-use-hf-token").value.trim();
+  const remember = $("#first-use-remember").checked;
+  const status = $("#first-use-status");
+  status.classList.remove("settings-error");
+  let stage = "discovery";
+  firstUse.busy = true;
+  firstUse.issue = false;
+  renderFirstUse();
+  async function saveHf() {
+    if (!hfToken) return true;
+    if (!current()) return false;
+    stage = "hf";
+    firstUse.retainSaveOutcome = true;
+    firstUse.saving = version;
+    renderFirstUse();
+    const saved = await api("/huggingface-settings", {
+      method: "PUT",
+      body: { hf_token: hfToken, remember },
+    });
+    if (!current()) return false;
+    hfSavedToken =
+      typeof saved.has_token === "boolean" ? saved.has_token : null;
+    updateHfCheck();
+    $("#first-use-hf-token").value = "";
+    firstUse.saving = false;
+    renderFirstUse();
+    return true;
+  }
+  try {
+    if (!firstUse.savedNative) {
+      const existing = firstUseProvider();
+      if (existing) {
+        firstUseSettingsHandoff(existing, key, remember);
+        $("#provider-advanced").open = true;
+        toast(
+          hfToken
+            ? "Review the existing UCloud connection in Settings. The optional Hugging Face token has not been saved; add it in the Hugging Face tab."
+            : "Review the existing UCloud connection in Settings before saving.",
+        );
+        return;
+      }
+      const draft = newProviderSettings("ucloud");
+      draft.ucloud_transcriber = { cleanup_after_success: true };
+      status.textContent = "Checking the UCloud connection…";
+      const result = await api("/providers/discover-ucloud", {
+        method: "POST",
+        body: { ...draft, api_key: key, native_allocation_choice: "mig1g" },
+      });
+      if (!current()) return;
+      if (!result.ready) {
+        if (!(await saveHf()) || !current()) return;
+        firstUseSettingsHandoff(
+          { ...draft, ucloud_transcriber: result.setup },
+          key,
+          remember,
+        );
+        renderNativeDiscovery(result);
+        toast(
+          hfToken
+            ? "Token saved; checks/preparation appear in Activity. Finish UCloud setup in Settings."
+            : "Choose the UCloud account details in Settings.",
+        );
+        return;
+      }
+      stage = "native";
+      firstUse.retainSaveOutcome = true;
+      firstUse.saving = version;
+      status.textContent = "Saving the UCloud connection…";
+      renderFirstUse();
+      await api("/providers", {
+        method: "POST",
+        body: {
+          ...draft,
+          ucloud_transcriber: result.setup,
+          api_key: key,
+          remember,
+          native_allocation_choice: "mig1g",
+          connection_check: result.connection_check,
+        },
+      });
+      if (!current()) {
+        toast(
+          "The UCloud save finished. Check Settings; any optional token still needs saving.",
+        );
+        return;
+      }
+      firstUse.savedNative = true;
+      $("#first-use-ucloud-key").value = "";
+      firstUse.saving = false;
+    }
+    status.textContent = "UCloud connection saved. Saving the optional token…";
+    if (!(await saveHf()) || !current()) return;
+    stage = "refresh";
+    await loadProviders();
+    if (!current()) return;
+    completeFirstUse();
+    toast(
+      hfToken
+        ? "UCloud connected. Token saved; checks/preparation appear in Activity."
+        : "UCloud connected.",
+    );
+  } catch (error) {
+    if (!current()) {
+      if (firstUse.saving)
+        toast(
+          "A credential save was already sent. Check Settings for its outcome.",
+          true,
+        );
+      return;
+    }
+    firstUse.issue = true;
+    const uncertain = !error.status || error.status >= 500;
+    firstUse.uncertain = stage === "native" && uncertain;
+    status.textContent = firstUse.savedNative
+      ? `UCloud connection saved. ${stage === "hf" ? "Hugging Face token save was not confirmed." : "The saved provider list could not be refreshed."} ${error.message}`
+      : stage === "native"
+        ? `Connection save was not confirmed. Check Settings before trying again. ${error.message}`
+        : error.message;
+    status.classList.add("settings-error");
+  } finally {
+    if (current()) firstUse.busy = false;
+    if (firstUse.saving === version) firstUse.saving = false;
+    renderFirstUse();
+  }
+});
 let viewEpoch = 0,
   editVersion = 0,
   mediaHandoffGeneration = 0,
@@ -154,6 +428,7 @@ function acceptRecording(context, recording) {
   state.recording = recording;
   queueMicrotask(() => {
     if (typeof renderManualReviews === "function") renderManualReviews();
+    if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
   });
   return true;
 }
@@ -214,9 +489,22 @@ async function loadProviders() {
   state.providers = data.providers;
   state.defaultProvider = data.default_provider_id;
   renderProviderSelects();
+  updateProviderCredential();
+  renderFirstUse();
+}
+async function refreshProviderConnections() {
+  const data = await api("/providers");
+  state.providers = data.providers;
+  state.defaultProvider = data.default_provider_id;
+  renderProviderSelects();
+  updateProviderCredential();
+  if (state.recording) renderEditorDetails();
+  else renderRecordings();
 }
 function visibleProvider(provider) {
-  return ["openai", "ucloud"].includes(providerTab(provider));
+  return (
+    providerTab(provider) === "ucloud" && provider.service_available !== false
+  );
 }
 // Hidden CBS Runtime models stay saved, but are never offered for new work.
 function offeredProvider(provider) {
@@ -231,6 +519,7 @@ function allowedProviders() {
     (p) =>
       offeredProvider(p) &&
       p.enabled !== false &&
+      p.connection_ready === true &&
       (!state.project ||
         state.project.classification === "standard" ||
         p.approved_for?.includes(state.project.classification)),
@@ -242,11 +531,11 @@ function providerOptions(
   forSettings = false,
 ) {
   if (!providers.length)
-    return `<option value="">${state.providers.some((provider) => offeredProvider(provider) && provider.enabled !== false) ? "No approved providers" : "No enabled models"}</option>`;
+    return `<option value="">${providerEmptyLabel()}</option>`;
   const option = (p) =>
     `<option value="${p.id}" ${p.id === selected ? "selected" : ""} ${!forSettings && p.provider_type === "ucloud-vllm" && (!p.base_url || !p.has_key) ? "disabled" : ""}>${h(forSettings ? configurationLabel(p.name, p.model) : modelLabel(p))}${p.provider_type === "ucloud-vllm" && !p.base_url ? " · awaiting deployment" : ""}</option>`;
   return providers.every((p) => providerTab(p) === "ucloud")
-    ? ucloudModelGroups(providers, option)
+    ? ucloudModelGroups(providers, option, forSettings)
     : providers.map(option).join("");
 }
 function ucloudModelGroup(model) {
@@ -268,8 +557,11 @@ function ucloudGroupLabels() {
     ? ["UCloud Transcriber", "CBS Runtime / WhisperX"]
     : ["UCloud Transcriber"];
 }
-function ucloudModelGroups(models, render) {
-  return ucloudGroupLabels()
+function ucloudModelGroups(models, render, forSettings = false) {
+  const labels = forSettings
+    ? ["UCloud Transcriber", "CBS Runtime / WhisperX"]
+    : ucloudGroupLabels();
+  return labels
     .map((label) => {
       const entries = models.filter(
         (model) => ucloudModelGroup(model) === label,
@@ -305,14 +597,25 @@ function providerKindOptions(selected) {
     ucloud: "UCloud",
   };
   const kinds = [...new Set(allowedProviders().map(providerTab))];
-  if (!kinds.length)
-    return `<option value="">${state.providers.some((provider) => offeredProvider(provider) && provider.enabled !== false) ? "No approved providers" : "No enabled models"}</option>`;
+  if (!kinds.length) return `<option value="">${providerEmptyLabel()}</option>`;
   return kinds
     .map(
       (kind) =>
         `<option value="${kind}" ${kind === selected ? "selected" : ""}>${labels[kind]}</option>`,
     )
     .join("");
+}
+function providerEmptyLabel() {
+  const enabled = state.providers.filter(
+    (provider) => offeredProvider(provider) && provider.enabled !== false,
+  );
+  if (!enabled.length) return "No enabled models";
+  if (enabled.some((provider) => provider.connection_ready === true))
+    return "No approved providers";
+  // A saved key whose connection was not (re)checked is not a missing provider.
+  return enabled.some((provider) => provider.has_key)
+    ? "Check the connection in Settings"
+    : "Connect a provider in Settings";
 }
 function selectedProvider(selected) {
   return (
@@ -356,7 +659,9 @@ function renderProviderSelects() {
     '<option value="">New configuration</option>' +
     providerOptions(
       state.settingsProvider,
-      state.providers.filter((p) => providerTab(p) === state.settingsTab),
+      state.providers.filter(
+        (p) => providerTab(p) === state.settingsTab && visibleProvider(p),
+      ),
       true,
     );
 }
@@ -516,7 +821,7 @@ function manualTranscriptEdit(path, options) {
         path,
       )) ||
     (method === "POST" &&
-      /^\/recordings\/[^/]+\/(?:segments\/[^/]+\/(?:merge|undo-merge|undo-split|split(?:-v2)?|delete|restore)|transcripts\/[^/]+\/(?:merge|conflicts|wording-adopt|versions\/[^/]+\/restore))$/u.test(
+      /^\/recordings\/[^/]+\/(?:segments\/[^/]+\/(?:merge|undo-merge|undo-split|split(?:-v2)?|delete|restore)|transcripts\/[^/]+\/(?:merge|conflicts|wording-adopt|undo-last|redo-last|versions\/[^/]+\/restore))$/u.test(
         path,
       ))
   );
@@ -538,6 +843,8 @@ function manualEditTarget(path, method, body = {}) {
     body.direction ?? null,
     body.fingerprint ?? null,
     body.delete_version_id ?? null,
+    // Undo/Redo last change: the exact offered step (ADR 0180).
+    body.version_id ?? null,
   ]);
 }
 async function workingEditChoice(target, fresh = false, preview = null) {
@@ -910,6 +1217,15 @@ function media() {
   return state.media === "video" ? $("#video") : $("#audio");
 }
 function canLeave() {
+  if (
+    typeof canLeaveSpellingVocabulary === "function" &&
+    !canLeaveSpellingVocabulary()
+  )
+    return false;
+  if (firstUse.saving) {
+    toast("Wait for the credential save to finish.", true);
+    return false;
+  }
   if (timedWordSaving || passageTextSaving) {
     toast("Wait for the current change to finish saving.", true);
     return false;
@@ -952,6 +1268,8 @@ function canDiscardPassage() {
   return !state.dirty || confirm("Discard this unsaved passage correction?");
 }
 function clearEdit() {
+  if (typeof invalidateSpellingEditor === "function")
+    invalidateSpellingEditor();
   editVersion++;
   state.dirty = false;
   state.editing = null;
@@ -1229,6 +1547,7 @@ function updateLanguageControls() {
       pendingProjectLanguages.has(state.recording.project_id);
   }
   refreshRecordingLanguageDefaults();
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor(true);
 }
 async function saveLanguage(kind, id, value) {
   const project = kind === "projects";
@@ -1413,9 +1732,8 @@ async function createProject() {
   await refreshProjects();
   location.hash = `/projects/${project.id}`;
 }
-["#sidebar-create", "#welcome-create"].forEach((id) =>
-  $(id).addEventListener("click", handle(createProject)),
-);
+$("#sidebar-create").addEventListener("click", handle(createProject));
+$("#welcome-create").addEventListener("click", handle(createProject));
 $("#browse-project-storage").addEventListener(
   "click",
   handle(async (event) => {
@@ -1429,7 +1747,7 @@ $("#browse-project-storage").addEventListener(
   }),
 );
 const PROJECT_SETTINGS_NOTE =
-  "Save to apply changes. A new parent folder moves this project's files. Protected projects use approved providers only.";
+  "Save to apply changes. A new parent folder moves this project's files. Protected projects use only connections allowed for Protected data.";
 let projectForm = null;
 const savingProjects = new Set(),
   savingProjectNotes = new Set(),
@@ -1687,7 +2005,6 @@ $("#project-rename").addEventListener(
       if (state.project?.id === context.id && !state.recording) {
         projectForm.name = state.project.name;
         $("#project-title").textContent = state.project.name;
-        document.title = `${state.project.name} · CBS Transcriber`;
       }
     } catch (error) {
       projectRefreshRequired.add(context.id);
@@ -1925,7 +2242,6 @@ Large recordings can take time to copy.`,
           $("#project-delete").disabled = false;
           $("#project-rename").disabled = false;
           $("#project-title").textContent = state.project.name;
-          document.title = `${state.project.name} · CBS Transcriber`;
           $("#project-edit-note").textContent =
             (failure &&
               `${savedFields.length ? `Confirmed saved: ${savedFields.join(", ")}. ` : ""}A previous request may still finish. ${failure.message}`) ||
@@ -1995,10 +2311,13 @@ async function route() {
       "",
       state.recording
         ? `#/recordings/${state.recording.id}`
-        : `#/projects/${state.project.id}`,
+        : state.project
+          ? `#/projects/${state.project.id}`
+          : "#/",
     );
     return;
   }
+  cancelFirstUse();
   if ($("#language-picker-dialog").open) $("#language-picker-dialog").close();
   $("#bulk-language-status").textContent = "";
   $("#export-dialog").close();
@@ -2067,16 +2386,16 @@ async function route() {
   $("#file-settings-open").hidden = true;
   $("#file-settings-dialog").close();
   $("#welcome").hidden = !!state.project;
+  $("#library-view > .page-heading").hidden = !state.project;
   $("#project-content").hidden = !state.project;
-  $("#project-title").textContent =
-    state.project?.name || "Make room for the conversation.";
+  $("#project-title").textContent = state.project?.name || "";
   renderProjectSettings();
-  document.title = state.project
-    ? `${state.project.name} · CBS Transcriber`
-    : "CBS Transcriber";
+  // The browser tab always reads just "CBS Transcriber" (user, 20 November).
+  document.title = "CBS Transcriber";
   renderProjects();
   if (state.project) await refreshRecordings();
   renderProviderSelects();
+  renderFirstUse();
 }
 window.addEventListener("hashchange", handle(route));
 async function refreshRecordings() {
@@ -2156,6 +2475,8 @@ function updateSelection() {
     !!state.project && recordingListProject === state.project.id;
   $("#recordings").hidden = !currentList;
   if (!currentList) $("#empty-project").hidden = true;
+  // Project export lists the shown recordings, so it waits for this project's list (B467).
+  $("#project-export-open").disabled = !currentList;
   $("#transcribe-selected").disabled =
     !currentList ||
     pendingBulkLanguage ||
@@ -2666,7 +2987,13 @@ $("#project-settings-open").addEventListener(
 let projectDeleteContext = null;
 $("#project-delete").addEventListener("click", () => {
   if (!state.project) return;
-  projectDeleteContext = { id: state.project.id, name: state.project.name };
+  // Bound to the view that opened it: the project's own address or the home page's first
+  // project (B460). Every navigation runs route(), which advances viewEpoch and closes it.
+  projectDeleteContext = {
+    id: state.project.id,
+    name: state.project.name,
+    epoch: viewEpoch,
+  };
   $("#project-settings-dialog").close();
   $("#delete-project-name").textContent = state.project.name;
   $("#delete-project-confirm").value = "";
@@ -2694,15 +3021,18 @@ $("#delete-project-form").addEventListener(
     )
       return;
     const button = $("#delete-project-submit");
-    const epoch = viewEpoch;
+    const epoch = project.epoch;
     const sameDialog = () =>
       projectDeleteContext === project &&
       dialog.dataset.project === project.id &&
       dialog.open;
-    const current = () =>
-      epoch === viewEpoch &&
-      location.hash === `#/projects/${project.id}` &&
-      sameDialog();
+    const current = () => epoch === viewEpoch && sameDialog();
+    if (!current()) {
+      $("#delete-project-error").textContent =
+        "This project is no longer open. Close this dialog and open the project again.";
+      $("#delete-project-error").hidden = false;
+      return;
+    }
     button.disabled = true;
     $("#delete-project-error").hidden = true;
     try {
@@ -2730,10 +3060,10 @@ $("#delete-project-form").addEventListener(
       }
     }
     dialog.close();
-    await refreshProjects();
-    if (epoch !== viewEpoch || location.hash !== `#/projects/${project.id}`)
-      return;
-    location.hash = "";
+    // A newer poll read can supersede this refresh; the home view below needs the new list.
+    while (!(await refreshProjects())) if (epoch !== viewEpoch) return;
+    if (epoch !== viewEpoch) return;
+    if (location.hash) location.hash = "";
     await route();
   }),
 );
@@ -2959,7 +3289,9 @@ async function openEditor() {
   $("#project-settings-dialog").close();
   $("#library-view").hidden = true;
   $("#editor-view").hidden = false;
-  document.title = `${state.recording.name} · CBS Transcriber`;
+  document.title = "CBS Transcriber";
+  // The Show filter belongs to one opened recording view.
+  if (typeof resetTranscriptFilter === "function") resetTranscriptFilter();
   renderEditorDetails();
   renderTranscript();
   state.media = "audio";
@@ -3085,9 +3417,10 @@ $("#export-open").addEventListener("click", () => {
   );
   openExport({ result: result ? { ...state.recording, ...result } : null });
 });
-$("#project-export-open").addEventListener("click", () =>
-  openExport({ project: state.project.id }),
-);
+$("#project-export-open").addEventListener("click", () => {
+  if (state.project && recordingListProject === state.project.id)
+    openExport({ project: state.project.id });
+});
 function currentExport(context) {
   return (
     exportContext === context &&
@@ -3357,15 +3690,51 @@ function resultLabel(result) {
       : result.label;
   return `${label} · ${new Date(result.created).toLocaleString("en-GB")}`;
 }
+// When its toolbar row has room, the transcript search grows so its right edge meets the
+// transcript panel's (the Versions row's) right edge (user request 20 November). Where the row
+// is already wider than the panel it keeps its default width, so the toolbar never wraps more.
+function alignTranscriptSearch() {
+  const search = document.querySelector(".editor-actions .transcript-search"),
+    input = search?.querySelector("input"),
+    edge = document.querySelector(".result-controls");
+  if (!input || !edge || !search.getClientRects().length) return;
+  input.style.width = "";
+  const room = Math.floor(
+    edge.getBoundingClientRect().right - search.getBoundingClientRect().right,
+  );
+  if (room > 0)
+    input.style.width = `${input.getBoundingClientRect().width + room}px`;
+}
+const searchAlignment = new ResizeObserver(() => alignTranscriptSearch());
+for (const element of [
+  document.querySelector(".editor-actions"),
+  document.querySelector(".result-controls"),
+  ...document.querySelectorAll(
+    ".editor-actions > :not(.editor-action-end), .editor-action-buttons",
+  ),
+])
+  if (element) searchAlignment.observe(element);
 function renderResults() {
   const r = state.recording;
   const working = r.result_roles?.working;
   const workingResult = r.transcripts.find(
     (result) => result.id === working?.result_id,
   );
-  $("#working-version-status").textContent = working
+  const workingText = working
     ? `Working transcript: ${workingResult?.label || "Saved result"} · Version ${working.sequence}. Project exports use this saved version.`
     : "No Working version designated. Project exports will skip this recording.";
+  // The Working result is tagged in the result lists (user request 20 November); the sentence
+  // stays as the selector's tooltip and screen-reader description, and shows only when none.
+  $("#working-version-status").textContent = workingText;
+  $("#working-version-status").classList.toggle("sr-only", !!working);
+  $("#result-select").title = workingText;
+  const workingTag = (result) =>
+    working?.result_id !== result.id
+      ? ""
+      : result.id === r.active_transcript_id &&
+          working.version_id === r.active_version?.id
+        ? " · Working"
+        : ` · Working (version ${working.sequence})`;
   $("#working-mark-current").disabled =
     !r.active_transcript_id ||
     pendingResultMutations.has(r.id) ||
@@ -3382,7 +3751,7 @@ function renderResults() {
     ? results
         .map(
           (t) =>
-            `<option value="${t.id}" ${t.id === r.active_transcript_id ? "selected" : ""}>${h(resultLabel(t))}</option>`,
+            `<option value="${t.id}" ${t.id === r.active_transcript_id ? "selected" : ""}>${h(resultLabel(t) + workingTag(t))}</option>`,
         )
         .join("")
     : '<option value="">No transcript yet</option>';
@@ -3400,7 +3769,7 @@ function renderResults() {
       .filter((t) => t.id !== r.active_transcript_id)
       .map(
         (t) =>
-          `<option value="${t.id}" ${t.id === state.comparison?.id ? "selected" : ""}>${h(resultLabel(t))}</option>`,
+          `<option value="${t.id}" ${t.id === state.comparison?.id ? "selected" : ""}>${h(resultLabel(t) + workingTag(t))}</option>`,
       )
       .join("");
   $("#compare-result").disabled =
@@ -3925,7 +4294,11 @@ function historyAction(action) {
       ? "merged enhancement"
       : action === "wording_adopt"
         ? "adopted comparison wording"
-        : String(action).replaceAll("_", " ");
+        : action === "change_undo"
+          ? "undo last change"
+          : action === "change_redo"
+            ? "redo"
+            : String(action).replaceAll("_", " ");
 }
 function historyActor(kind) {
   return kind === "local_user"
@@ -3951,12 +4324,16 @@ async function loadHistory(before = null) {
   }
   if (!currentHistory(context)) return;
   if (!before) context.head = versions[0]?.id;
+  // With the change list (ADR 0181) rows name the change, its passage and undo/redo links.
+  const changeRows =
+    featureOn("undo_last_change") && typeof historyChangeRow === "function";
   $("#history-versions").insertAdjacentHTML(
     "beforeend",
     versions
-      .map(
-        (version) =>
-          `<button class="history-version button" data-history-version="${h(version.id)}"><strong>Version ${version.sequence} · ${h(historyAction(version.action))}${version.id === state.recording.result_roles?.working?.version_id ? " · Working transcript" : ""}</strong><span>${h(new Date(version.observed_at).toLocaleString("en-GB"))} · ${h(historyActor(version.actor_kind))}</span><code>${h(version.payload_sha256)}</code></button>`,
+      .map((version) =>
+        changeRows
+          ? historyChangeRow(version, context)
+          : `<button class="history-version button" data-history-version="${h(version.id)}"><strong>Version ${version.sequence} · ${h(historyAction(version.action))}${version.id === state.recording.result_roles?.working?.version_id ? " · Working transcript" : ""}</strong><span>${h(new Date(version.observed_at).toLocaleString("en-GB"))} · ${h(historyActor(version.actor_kind))}</span><code>${h(version.payload_sha256)}</code></button>`,
       )
       .join(""),
   );
@@ -4022,7 +4399,7 @@ $("#history-versions").addEventListener(
     }
     if (!currentHistory(context) || request !== historyRequest) return;
     $("#history-preview-title").textContent =
-      `Version ${version.sequence} · ${historyAction(version.action)}`;
+      `Version ${version.sequence} · ${featureOn("undo_last_change") && typeof historyChangeName === "function" ? historyChangeName(version.action) : historyAction(version.action)}`;
     $("#history-preview-meta").textContent =
       `${new Date(version.observed_at).toLocaleString("en-GB")} · ${historyActor(version.actor_kind)}${version.action === "legacy_observed" ? " · Earlier history unknown" : ""}`;
     $("#history-hash").textContent = `SHA-256 ${version.payload_sha256}`;
@@ -4049,6 +4426,11 @@ $("#history-versions").addEventListener(
     $("#history-preview").hidden = false;
     $("#history-status").textContent =
       "Historical preview only; the reviewed result is unchanged.";
+    if (
+      featureOn("undo_last_change") &&
+      typeof renderHistoryChanges === "function"
+    )
+      await renderHistoryChanges(context, version, request);
   }),
 );
 let workingContext = null,
@@ -5108,6 +5490,7 @@ function scheduleAlignmentLayout() {
       node.style.minHeight = heights[i] + "px";
       right[i].style.minHeight = heights[i] + "px";
     });
+    schedulePlaybackViewport(true);
   });
 }
 async function refreshComparisonAlignment() {
@@ -5869,6 +6252,7 @@ function refreshTranscriptHints() {
   if (changed.length) highlightSearch(changed, "passage-");
   if (activeWord && !activeWord.isConnected) activeWord = null;
   if (state.comparison) scheduleAlignmentLayout();
+  if (typeof applyTranscriptFilter === "function") applyTranscriptFilter();
 }
 // Rank-based: mark at most `share` percent of all items, lowest first, and only items below
 // a confidence ceiling, so a consistently confident transcript shows few or no marks.
@@ -6467,6 +6851,7 @@ function refreshMergeUndoOptions() {
     $("#merge-undo-check-error").hidden = true;
     if (typeof renderDeletedPassages === "function")
       renderDeletedPassages(null);
+    if (typeof renderChangeSteps === "function") renderChangeSteps();
     return;
   }
   const epoch = viewEpoch;
@@ -6525,7 +6910,14 @@ function refreshMergeUndoOptions() {
   }
   if (typeof renderDeletedPassages === "function")
     renderDeletedPassages(mergeUndoOptions.response);
-  if (!mergeUndoOptions.ids || !mergeUndoOptions.splitIds || structureLocked())
+  if (typeof renderChangeSteps === "function") renderChangeSteps();
+  // With the History change list on, older merges/splits are reverted there (ADR 0181).
+  if (
+    !mergeUndoOptions.ids ||
+    !mergeUndoOptions.splitIds ||
+    structureLocked() ||
+    featureOn("undo_last_change")
+  )
     return;
   for (const passage of $("#transcript").querySelectorAll("[data-segment]")) {
     const actions = passage.querySelector(".passage-actions");
@@ -6631,7 +7023,11 @@ function passageEditorMarkup(segment) {
       <button type="button" class="button passage-editor-replay" data-action="editor-replay" data-replay-label="${h(label)}" title="${h(help)}" ${replay && state.recording.status === "ready" ? "" : "disabled"}>▷ ${h(label)}</button>
     </div>
     <div data-editor-pane="text">
-      <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
+      <div class="passage-text-surface">
+        <div class="passage-text-overlay" aria-hidden="true" hidden><div class="passage-text-overlay-content"></div></div>
+        <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
+      </div>
+      <p class="split-help" data-text-playback-note hidden></p>
       <p class="split-help">Place the cursor between words to split. Save text changes first. If you know the split's audio position, pause playback there; unavailable timing is left unknown.</p>
       <label class="passage-realign" data-feature="editor_realign" ${featureOn("editor_realign") ? "" : "hidden"}><input type="checkbox" data-editor-realign ${featureOn("editor_realign") && (passageRealignChoice ?? $("#realign-edits").checked) ? "checked" : ""}>Realign this passage after saving on this computer</label>
       <p class="split-help" data-text-draft-note hidden>Save or reset the word changes before saving passage text.</p>
@@ -6646,6 +7042,7 @@ function passageEditorMarkup(segment) {
   </div>`;
 }
 function renderEditorPlayback(segment, editor) {
+  refreshTextEditorPlayback(segment, editor);
   renderPassageText(
     editor.querySelector(".editor-playback-text"),
     segment,
@@ -6656,7 +7053,186 @@ function renderEditorPlayback(segment, editor) {
       ? "Saved text for playback"
       : "Saved text for playback · word highlighting unavailable";
 }
+let activeTextPlaybackWord = null;
+function syncTextEditorScroll(editor) {
+  if (editor.querySelector(".passage-text-overlay").hidden) return;
+  const input = editor.querySelector("textarea");
+  const content = editor.querySelector(".passage-text-overlay-content");
+  // The native scrollbar reduces the textarea's text width. Match its actual
+  // client box, including padding, rather than the surrounding editor width.
+  const width = `${input.clientWidth}px`;
+  const transform = `translate(${-input.scrollLeft}px, ${-input.scrollTop}px)`;
+  if (content.style.width !== width) content.style.width = width;
+  if (content.style.transform !== transform)
+    content.style.transform = transform;
+}
+// Text highlighting maps saved word timing onto the native textarea's draft. Offsets are
+// code points in the textarea's presentation (CR/CRLF become LF, as textarea values do).
+const savedTextPresentations = new WeakMap();
+function savedTextPresentation(segment) {
+  let saved = savedTextPresentations.get(segment);
+  if (saved) return saved;
+  const source = Array.from(segment.text);
+  const characters = [];
+  const offsets = new Uint32Array(source.length + 1);
+  for (let index = 0; index < source.length; index++) {
+    offsets[index] = characters.length;
+    if (source[index] === "\r" && source[index + 1] === "\n")
+      offsets[++index] = characters.length;
+    characters.push(source[index] === "\r" ? "\n" : source[index]);
+  }
+  offsets[source.length] = characters.length;
+  const words = [];
+  let cursor = 0;
+  for (const index of playbackWords(segment)) {
+    const word = segment.words[index];
+    const { char_start: start, char_end: end } = word;
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < cursor ||
+      end <= start ||
+      end > source.length ||
+      source.slice(start, end).join("") !== word.word ||
+      offsets[end] <= offsets[start]
+    )
+      continue;
+    words.push([index, offsets[start], offsets[end]]);
+    cursor = end;
+  }
+  saved = { characters, text: characters.join(""), words };
+  savedTextPresentations.set(segment, saved);
+  return saved;
+}
+// A saved word keeps its timing in a differing draft only when it is provably unchanged:
+// wholly inside the common code-point prefix (same offsets) or suffix (shifted by the length
+// change), and still separated from any edited letters. Words touching the changed middle,
+// and every new or changed word, stay unhighlighted; no time is ever assigned to them.
+function draftPlaybackWords(segment, draft) {
+  const saved = savedTextPresentation(segment);
+  const before = saved.characters;
+  const after = Array.from(draft);
+  const limit = Math.min(before.length, after.length);
+  let prefix = 0;
+  while (prefix < limit && before[prefix] === after[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < limit - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  )
+    suffix++;
+  const shift = after.length - before.length;
+  const tail = before.length - suffix;
+  const separated = (character) =>
+    character === undefined || !/[\p{L}\p{N}\p{M}]/u.test(character);
+  const words = [];
+  for (const [index, start, end] of saved.words) {
+    if (end < prefix || (end === prefix && separated(after[end])))
+      words.push([index, start, end]);
+    else if (
+      start > tail ||
+      (start === tail && separated(after[start + shift - 1]))
+    )
+      words.push([index, start + shift, end + shift]);
+  }
+  return { characters: after, words };
+}
+// One mirror per editor and draft; playback ticks only look up its cached word nodes.
+const textEditorMirrors = new WeakMap();
+function renderTextEditorMirror(segment, content, draft) {
+  const layout = draftPlaybackWords(segment, draft);
+  const fragment = document.createDocumentFragment();
+  const nodes = new Map();
+  let cursor = 0;
+  for (const [index, start, end] of layout.words) {
+    fragment.append(
+      document.createTextNode(layout.characters.slice(cursor, start).join("")),
+    );
+    const mark = document.createElement("span");
+    mark.dataset.editorWord = index;
+    mark.textContent = layout.characters.slice(start, end).join("");
+    fragment.append(mark);
+    nodes.set(index, mark);
+    cursor = end;
+  }
+  // The trailing zero-width space keeps a final empty line's height in the mirror.
+  fragment.append(
+    document.createTextNode(
+      layout.characters.slice(cursor).join("") + "\u200b",
+    ),
+  );
+  content.replaceChildren(fragment);
+  const mirror = { segment, draft, nodes };
+  textEditorMirrors.set(content, mirror);
+  if (activeTextPlaybackWord && !activeTextPlaybackWord.isConnected)
+    activeTextPlaybackWord = null;
+  return mirror;
+}
+function refreshTextEditorPlayback(segment, editor) {
+  const overlay = editor.querySelector(".passage-text-overlay");
+  const content = overlay.firstElementChild;
+  const note = editor.querySelector("[data-text-playback-note]");
+  // Read the textarea only; never write its value, selection, focus or scroll.
+  const draft = editor.querySelector("textarea").value;
+  let mirror = textEditorMirrors.get(content);
+  if (mirror?.segment !== segment || mirror.draft !== draft)
+    mirror = renderTextEditorMirror(segment, content, draft);
+  const saved = savedTextPresentation(segment);
+  const available = mirror.nodes.size > 0;
+  overlay.hidden = !available;
+  const message = !saved.words.length
+    ? "Word highlighting is unavailable: this passage has no reliable saved word timing."
+    : draft === saved.text
+      ? ""
+      : available
+        ? "Unsaved changes: only unchanged words are highlighted during playback."
+        : "Unsaved changes: no unchanged timed words remain to highlight.";
+  if (note.textContent !== message) note.textContent = message;
+  note.hidden = !message;
+  syncTextEditorScroll(editor);
+}
+function tickTextEditorPlayback(segment, index, player) {
+  const editor = state.editing
+    ? document
+        .getElementById(`passage-${state.editing}`)
+        ?.querySelector(".passage-editor")
+    : null;
+  const overlay = editor?.querySelector(".passage-text-overlay");
+  const word =
+    overlay &&
+    !overlay.hidden &&
+    !editor.querySelector('[data-editor-pane="text"]').hidden &&
+    segment?.id === state.editing &&
+    index >= 0
+      ? textEditorMirrors.get(overlay.firstElementChild)?.nodes.get(index) ||
+        null
+      : null;
+  if (editor && !overlay.hidden) syncTextEditorScroll(editor);
+  if (word === activeTextPlaybackWord) return;
+  activeTextPlaybackWord?.classList.remove("current");
+  word?.classList.add("current");
+  activeTextPlaybackWord = word;
+  if (word && !player.paused) followEditorPlaybackWord(word);
+}
+// Typing owns the draft's scroll position; Follow playback resumes once typing pauses.
+let lastTextDraftInput = -Infinity;
 function followEditorPlaybackWord(word) {
+  const surface = word?.closest(".passage-text-surface");
+  if (surface) {
+    if (
+      !$("#follow-playback").checked ||
+      performance.now() - lastTextDraftInput < 1500
+    )
+      return;
+    const input = surface.querySelector("textarea");
+    const box = input.getBoundingClientRect();
+    const target = word.getBoundingClientRect();
+    if (target.top < box.top + 4) input.scrollTop += target.top - box.top - 4;
+    else if (target.bottom > box.bottom - 4)
+      input.scrollTop += target.bottom - box.bottom + 4;
+    syncTextEditorScroll(surface.closest(".passage-editor"));
+    return;
+  }
   const scroll = word?.closest(".editor-playback-scroll");
   if (
     !scroll ||
@@ -6765,12 +7341,14 @@ function showTimedWordEditor(
       );
     else input.select();
   }
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
   return true;
 }
 function refreshPassageDraft(segment, editor) {
   const textarea = editor.querySelector("textarea");
   const textDirty = passageEditText(segment, textarea) !== segment.text;
   const wordDirty = timedWordDraftChanged(segment, editor);
+  refreshTextEditorPlayback(segment, editor);
   state.dirty = textDirty || wordDirty;
   editVersion++;
   saved(state.dirty ? "Unsaved changes" : undefined);
@@ -6847,6 +7425,7 @@ function openPassageEditorInPlace(segment) {
   input.focus();
   updatePlaybackButtons();
   loadHints().catch(() => {});
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
   return true;
 }
 function renderTranscript() {
@@ -6943,6 +7522,7 @@ function renderTranscript() {
       });
   }
   if (typeof renderManualReviews === "function") renderManualReviews();
+  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
 }
 $("#transcript-search").addEventListener("input", () => {
   if (state.comparison) {
@@ -6976,8 +7556,18 @@ $("#transcript").addEventListener("input", (event) => {
     return;
   const segment = segmentFromNode(event.target);
   const editor = event.target.closest(".passage-editor");
+  if (event.target.matches(".passage-text-surface textarea"))
+    lastTextDraftInput = performance.now();
   if (segment && editor) refreshPassageDraft(segment, editor);
 });
+$("#transcript").addEventListener(
+  "scroll",
+  (event) => {
+    if (event.target.matches(".passage-text-surface textarea"))
+      syncTextEditorScroll(event.target.closest(".passage-editor"));
+  },
+  true,
+);
 function refreshCursorSplit(event) {
   const input = event?.target?.matches?.(".passage-editor textarea")
     ? event.target
@@ -7010,6 +7600,7 @@ $("#transcript").addEventListener(
         if (target.value === "timing")
           populateTimedWordChoices(segment, editor);
       }
+      if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
     } else if (target.matches("[data-timing-word]")) {
       changeTimedWord(
         segment,
@@ -7305,6 +7896,8 @@ $("#transcript").addEventListener(
         });
       } finally {
         timedWordSaving = false;
+        if (typeof refreshSpellingEditor === "function")
+          refreshSpellingEditor(true);
         controls.forEach((control, index) => {
           if (control.isConnected) control.disabled = disabled[index];
         });
@@ -7341,8 +7934,16 @@ $("#transcript").addEventListener(
     }
     if (action === "cancel-edit") {
       pendingWorkingEditChoice = null;
+      // Cancel keeps the transcript where it was; the browser may only clamp it. Removing the
+      // spelling panel and editor above the focused button would otherwise let the browser's
+      // scroll anchoring move it, so anchoring stays off until that layout has been applied.
+      const transcript = $("#transcript"),
+        scroll = transcript.scrollTop;
+      transcript.style.overflowAnchor = "none";
       clearEdit();
       if (!closePassageEditorInPlace(segment)) renderTranscript();
+      transcript.scrollTop = scroll;
+      requestAnimationFrame(() => (transcript.style.overflowAnchor = ""));
     }
     if (action === "save-edit") {
       const button = event.target;
@@ -7370,6 +7971,8 @@ $("#transcript").addEventListener(
         });
       } finally {
         passageTextSaving = false;
+        if (typeof refreshSpellingEditor === "function")
+          refreshSpellingEditor(true);
         controls.forEach((control, index) => {
           if (control.isConnected) control.disabled = disabled[index];
         });
@@ -8054,7 +8657,10 @@ $("#follow-playback").addEventListener("change", (event) => {
   const current = segmentAt(state.recording.segments, position);
   const passage = current ? $(`#passage-${current.id}`) : null;
   if (state.editing)
-    followEditorPlaybackWord(passage?.querySelector(".word.current"));
+    followEditorPlaybackWord(
+      passage?.querySelector(".passage-text-overlay .current") ||
+        passage?.querySelector(".word.current"),
+    );
   else
     revealPlaybackPassage(passage?.querySelector(".word.current") || passage);
   if (state.comparison) {
@@ -8149,6 +8755,7 @@ function tick() {
         else revealPlaybackPassage(word);
       }
     }
+    tickTextEditorPlayback(segment, index, player);
     tickComparison(position, player);
   }
   requestAnimationFrame(tick);
@@ -8246,6 +8853,24 @@ function connectionAllocation() {
       : "mig1g"
     : "mig1g";
 }
+function renderNativeDiscovery(result) {
+  applyNativeSetup(result.setup);
+  renderEnabledModels(true);
+  state.nativeChoices = result.choices || {};
+  $("#native-discovery-choices").innerHTML = Object.entries(state.nativeChoices)
+    .filter(([field, choices]) => field !== "product" && choices.length)
+    .map(
+      ([
+        field,
+        choices,
+      ]) => `<label>${h({ project_id: "Project", storage_path: "Storage", application: "Transcriber application/version" }[field] || field)}
+        <select data-native-choice="${h(field)}"><option value="">Choose…</option>
+        ${choices.map((choice, i) => `<option value="${i}">${h(choice.name)}</option>`).join("")}</select></label>`,
+    )
+    .join("");
+  $("#ucloud-check-results").textContent = result.note;
+  providerConnectionCheck = result.connection_check || null;
+}
 async function connectNative() {
   if (!$("#native-model-choice").reportValidity()) return false;
   const token = ++modelCheckToken;
@@ -8270,23 +8895,7 @@ async function connectNative() {
       },
     });
     if (token !== modelCheckToken || !sameProvider(context)) return false;
-    applyNativeSetup(result.setup);
-    renderEnabledModels(true);
-    state.nativeChoices = result.choices || {};
-    $("#native-discovery-choices").innerHTML = Object.entries(
-      state.nativeChoices,
-    )
-      .filter(([field, choices]) => field !== "product" && choices.length)
-      .map(
-        ([
-          field,
-          choices,
-        ]) => `<label>${h({ project_id: "Project", storage_path: "Storage", application: "Transcriber application/version" }[field] || field)}
-        <select data-native-choice="${h(field)}"><option value="">Choose…</option>
-        ${choices.map((c, i) => `<option value="${i}">${h(c.name)}</option>`).join("")}</select></label>`,
-      )
-      .join("");
-    $("#ucloud-check-results").textContent = result.note;
+    renderNativeDiscovery(result);
     return result.ready;
   } catch (error) {
     if (token === modelCheckToken && sameProvider(context))
@@ -8294,6 +8903,7 @@ async function connectNative() {
     throw error;
   } finally {
     button.disabled = false;
+    await refreshProviderConnections();
   }
 }
 $("#connect-ucloud").addEventListener("click", handle(connectNative));
@@ -8329,6 +8939,8 @@ for (const [id] of nativeFields) {
 }
 $("#check-ucloud").addEventListener("click", async () => {
   const token = ++modelCheckToken;
+  const context = providerContext();
+  providerConnectionCheck = null;
   const button = $("#check-ucloud");
   button.disabled = true;
   $("#ucloud-check-results").textContent =
@@ -8345,7 +8957,8 @@ $("#check-ucloud").addEventListener("click", async () => {
         ucloud_transcriber: nativeSetup(),
       },
     });
-    if (token !== modelCheckToken) return;
+    if (token !== modelCheckToken || !sameProvider(context)) return;
+    providerConnectionCheck = result.connection_check || null;
     $("#native-parameter-details").open = Boolean(result.issue);
     $("#ucloud-check-results").innerHTML =
       `<p>${h(result.application.name)} ${h(result.application.version)} · ${h(result.product.id)}</p><p>${h(result.issue || result.note)}</p><ul>${result.parameters.map((p) => `<li>${h(p.name)}: ${h(p.type)}${p.options?.length ? ` · ${h(p.options.map((o) => o.value).join(", "))}` : ""}</li>`).join("")}</ul>`;
@@ -8354,11 +8967,30 @@ $("#check-ucloud").addEventListener("click", async () => {
       $("#ucloud-check-results").textContent = error.message;
   } finally {
     button.disabled = false;
+    await refreshProviderConnections();
   }
 });
 let modelCheckToken = 0;
+let providerConnectionCheck = null;
 let providerFormVersion = 0;
 let providerFormProfile = null;
+function updateProviderCredential() {
+  const endpoint = $("#base-url").value.trim().replace(/\/+$/u, "");
+  const latest = providerFormProfile?.id
+    ? state.providers.find(
+        (provider) => provider.id === providerFormProfile.id,
+      ) || providerFormProfile
+    : providerFormProfile;
+  const saved = latest
+    ? [...state.providers, latest].some(
+        (provider) =>
+          provider.has_key === true &&
+          providerTab(provider) === state.settingsTab &&
+          provider.base_url?.replace(/\/+$/u, "") === endpoint,
+      )
+    : null;
+  credentialMissing($("#api-key"), saved);
+}
 function providerContext() {
   return {
     version: providerFormVersion,
@@ -8374,19 +9006,40 @@ function sameProvider(context) {
     context.tab === state.settingsTab
   );
 }
+// Settings → UCloud controls that save on change through their own endpoints.
+const SEPARATELY_SAVED_SETTINGS = [
+  "enhance-prepare-ucloud",
+  "runtime-max-allocations",
+  "native-upload-limit",
+  "native-batch-limit",
+];
 for (const event of ["input", "change"])
   $("#settings-form").addEventListener(
     event,
     (event) => {
       // These controls save separately and must not invalidate provider drafts.
-      if (
-        ["enhance-prepare-ucloud", "runtime-max-allocations"].includes(
-          event.target.id,
-        )
-      )
-        return;
+      if (SEPARATELY_SAVED_SETTINGS.includes(event.target.id)) return;
       providerFormVersion++;
       $("#provider-error").hidden = true;
+    },
+    true,
+  );
+// Choosing the open Settings tab again reloads it (also the retry after a load error), so
+// it first asks before discarding entries typed but not saved (user decision 19 November).
+// Processing and the separately saved controls above save on change and never hold
+// unsaved entries.
+let settingsUnsaved = false;
+for (const type of ["input", "change"])
+  $("#settings-form").addEventListener(
+    type,
+    (event) => {
+      if (
+        !event.isTrusted ||
+        $("#processing-panel").contains(event.target) ||
+        SEPARATELY_SAVED_SETTINGS.includes(event.target.id)
+      )
+        return;
+      settingsUnsaved = true;
     },
     true,
   );
@@ -8454,10 +9107,12 @@ $("#catalog-model").addEventListener("change", (event) => {
 });
 function clearModelCheck() {
   modelCheckToken++;
+  providerConnectionCheck = null;
   $("#model-check-results").replaceChildren();
   $("#ucloud-check-results").replaceChildren();
 }
 function showProviderTab(tab) {
+  if (tab === "openai") tab = "ucloud";
   providerFormVersion++;
   $("#provider-error").hidden = true;
   state.settingsTab = tab;
@@ -8482,6 +9137,16 @@ function showProviderTab(tab) {
   $("#runtime-preparation-panel").disabled = !runtime;
   $("#runtime-capacity-panel").hidden = !runtime;
   if (!runtime) $("#runtime-max-allocations").disabled = true;
+  // Native Transcriber limits (ADR 0183) belong to the UCloud tab in every profile.
+  $("#native-limits-panel").hidden = tab !== "ucloud";
+  if (tab !== "ucloud")
+    for (const id of ["#native-upload-limit", "#native-batch-limit"])
+      $(id).disabled = true;
+  else
+    queueMicrotask(() => {
+      if ($("#settings-dialog").open && state.settingsTab === "ucloud")
+        loadNativeLimits().catch(() => {});
+    });
   if (runtime) {
     $("#enhance-cloud-check").disabled = true;
     $("#enhance-prepare-ucloud").disabled = true;
@@ -8521,9 +9186,11 @@ function showProviderTab(tab) {
       : "Model";
   $("#base-url").required = tab !== "ucloud-vllm";
   $("#base-url").placeholder =
-    tab === "ucloud-vllm"
-      ? "https://YOUR-UCLOUD-HOST/v1 (once deployed)"
-      : "https://api.openai.com/v1";
+    tab === "ucloud"
+      ? "https://cloud.sdu.dk"
+      : tab === "ucloud-vllm"
+        ? "https://YOUR-UCLOUD-HOST/v1 (once deployed)"
+        : "https://api.openai.com/v1";
   $("#serving-key-label").textContent =
     tab === "ucloud"
       ? "UCloud API token"
@@ -8538,6 +9205,7 @@ function showProviderTab(tab) {
   $("#api-key").value = "";
   layoutProvider(tab);
   clearModelCheck();
+  updateProviderCredential();
 }
 function layoutProvider(tab) {
   const basic = $("#provider-basic"),
@@ -8610,18 +9278,34 @@ function providerSummary() {
     state.settingsTab === "ucloud-vllm" && !$("#base-url").value
       ? "Awaiting deployment · Saving starts no hosting job or model download."
       : capability;
-  $("#provider-policy-summary").textContent =
-    `Protected projects: ${$('[name="approved-for"]').checked ? "Allowed" : "Not allowed"}. Change in Advanced settings.`;
+  $("#provider-policy-summary").textContent = $(".provider-approvals").hidden
+    ? "Allowed for Standard and Protected projects."
+    : `Protected projects: ${$('[name="approved-for"]').checked ? "Allowed" : "Not allowed"}. Change in Advanced settings.`;
 }
 $('[name="approved-for"]').addEventListener("change", providerSummary);
-let hfVersion = 0;
-// Check token covers the whole speaker-label preparation (ADR 0057): the token, the gated
-// model's terms, and a verified copy of the model on this computer.
+let hfVersion = 0,
+  hfSavedToken = null,
+  hfPending = null;
+function updateHfCheck() {
+  const draft = $("#hf-settings-token").value.trim();
+  $("#hf-settings-check").disabled =
+    !hfSavedToken || !!draft || hfPending !== null;
+  $("#hf-settings-check").title = draft
+    ? "Save this token before checking it."
+    : "Check the saved token and follow preparation in Activity.";
+  credentialMissing($("#hf-settings-token"), hfSavedToken);
+  credentialMissing($("#first-use-hf-token"), hfSavedToken);
+}
+$("#hf-settings-token").addEventListener("input", () => {
+  hfVersion++;
+  updateHfCheck();
+});
+// Token checks and configured preparation belong to the Activity owner (ADR 0173).
 function hfStatusLines(status) {
   const local = {
     verified: "Speaker model: downloaded and verified on this computer.",
     missing:
-      "Speaker model: not on this computer yet. Check token downloads it.",
+      "Speaker model: not on this computer yet; preparation progress is in Activity.",
     failed: `Speaker model: ${status.speaker_model_error || "download failed."}`,
   }[status.speaker_model_local];
   if (!status.has_token)
@@ -8631,7 +9315,7 @@ function hfStatusLines(status) {
     ];
   const token = {
     unchecked:
-      "Token saved (not checked). Check token also prepares speaker labels.",
+      "Token saved (not checked). Follow access checks and preparation in Activity.",
     valid: "Token valid.",
     invalid: "Hugging Face rejected this token.",
     unavailable: "Hugging Face could not be reached; token not verified.",
@@ -8651,6 +9335,9 @@ function hfStatusLines(status) {
   return [token, access, showLocal ? local : null].filter(Boolean);
 }
 function renderHfStatus(status) {
+  hfSavedToken = status.has_token === true;
+  updateHfCheck();
+  $("#hf-settings-activity").hidden = !status.preparation_task;
   $("#hf-settings-status").textContent = status.has_token
     ? "Token saved"
     : "No token saved";
@@ -8672,6 +9359,10 @@ function renderHfStatus(status) {
     link.textContent = "Open the model page ↗";
     result.append(" ", link);
   }
+  if (status.preparation_task) {
+    result.append(document.createElement("br"));
+    result.append("Checks and preparation are shown in Activity.");
+  }
 }
 async function showHuggingFaceTab() {
   const version = ++hfVersion;
@@ -8690,6 +9381,7 @@ async function showHuggingFaceTab() {
   $("#hf-panel").hidden = false;
   $("#hf-panel").disabled = true;
   $("#hf-settings-token").value = "";
+  settingsUnsaved = false;
   $("#hf-settings-result").textContent = "Loading…";
   const context = providerContext();
   const status = await api("/huggingface-settings").catch((error) => {
@@ -8703,12 +9395,16 @@ async function showHuggingFaceTab() {
   $("#hf-panel").disabled = false;
 }
 async function hfRequest(button, path, method) {
-  const version = ++hfVersion;
   const token = $("#hf-settings-token").value.trim();
+  if (method === "POST" && token)
+    throw new Error("Save this token before checking it.");
+  const version = ++hfVersion;
+  hfPending = version;
   button.disabled = true;
+  updateHfCheck();
   $("#hf-settings-result").textContent =
     method === "POST"
-      ? "Checking the token and speaker model terms; downloading the speaker model if needed (about 33 MB)…"
+      ? "Queuing access checks and preparation in Activity…"
       : "Saving…";
   try {
     const status = await api(path, {
@@ -8719,15 +9415,25 @@ async function hfRequest(button, path, method) {
       },
     });
     if (version !== hfVersion || state.settingsTab !== "huggingface") return;
-    if (method === "PUT") $("#hf-settings-token").value = "";
+    if (method === "PUT") {
+      $("#hf-settings-token").value = "";
+      settingsUnsaved = false;
+    }
     renderHfStatus(status);
+    if (status.preparation_task) await pollJobs().catch(() => {});
   } catch (error) {
     if (version === hfVersion) $("#hf-settings-result").textContent = "";
     throw error;
   } finally {
+    if (hfPending === version) hfPending = null;
     button.disabled = false;
+    updateHfCheck();
   }
 }
+$("#hf-settings-activity").addEventListener("click", () => {
+  $("#settings-dialog").close();
+  $("#activity-open").click();
+});
 $("#hf-settings-save").addEventListener(
   "click",
   handle((event) =>
@@ -8861,6 +9567,7 @@ async function showProcessingTab() {
   providerFormVersion++;
   $("#provider-error").hidden = true;
   state.settingsTab = "processing";
+  settingsUnsaved = false;
   document.querySelectorAll("[data-provider-tab]").forEach((button) => {
     const selected = button.dataset.providerTab === "processing";
     button.setAttribute("aria-selected", String(selected));
@@ -8908,6 +9615,7 @@ async function showProcessingTab() {
   if (local.status) renderLocalRuntime(local.status);
   else checkLocalRuntime().catch(() => {});
   loadLocalConcurrency().catch(() => {});
+  if (typeof loadSpellingSettings === "function") loadSpellingSettings();
   await renderCloudEnhancementStatus().catch(() => null);
 }
 // Parallel local tasks per step (ADR 0146): a value equal to this computer's automatic
@@ -9149,22 +9857,127 @@ $("#runtime-max-allocations").addEventListener("keydown", (event) => {
   event.preventDefault();
   event.currentTarget.blur();
 });
+// Settings → UCloud native Transcriber limits (ADR 0183): saved on change, separately from
+// the connection form; a running batch keeps the limits it started with.
+let nativeLimits = null,
+  nativeLimitsViewVersion = 0,
+  nativeLimitsSaveVersion = 0,
+  nativeLimitsSaveTail = Promise.resolve();
+const NATIVE_LIMIT_FIELDS = {
+  "native-upload-limit": { key: "uploads", max: 8 },
+  "native-batch-limit": { key: "batches", max: 4 },
+};
+function sameNativeLimitsView(version) {
+  return (
+    $("#settings-dialog").open &&
+    state.settingsTab === "ucloud" &&
+    nativeLimitsViewVersion === version
+  );
+}
+function renderNativeLimits() {
+  for (const [id, field] of Object.entries(NATIVE_LIMIT_FIELDS)) {
+    const input = $(`#${id}`);
+    if (nativeLimits) input.value = nativeLimits[field.key];
+    input.disabled = nativeLimits === null;
+  }
+}
+async function loadNativeLimits() {
+  const version = ++nativeLimitsViewVersion,
+    status = $("#native-limits-status");
+  for (const id of Object.keys(NATIVE_LIMIT_FIELDS))
+    $(`#${id}`).disabled = true;
+  status.textContent = "Loading UCloud limits…";
+  await nativeLimitsSaveTail.catch(() => {});
+  if (!sameNativeLimitsView(version)) return;
+  const saved = await api("/native-batches/settings", {
+    background: true,
+  }).catch(() => null);
+  if (!sameNativeLimitsView(version)) return;
+  nativeLimits = saved
+    ? { uploads: saved.uploads, batches: saved.batches }
+    : null;
+  renderNativeLimits();
+  status.textContent = nativeLimits
+    ? ""
+    : "The UCloud limits could not be loaded. Reopen UCloud settings to try again.";
+}
+for (const [id, field] of Object.entries(NATIVE_LIMIT_FIELDS)) {
+  $(`#${id}`).addEventListener(
+    "change",
+    handle(async () => {
+      const input = $(`#${id}`),
+        status = $("#native-limits-status");
+      if (nativeLimits === null || !input.checkValidity()) {
+        status.textContent = `Choose a whole number from 1 to ${field.max}.`;
+        return;
+      }
+      const version = ++nativeLimitsSaveVersion,
+        context = nativeLimitsViewVersion,
+        value = Number(input.value);
+      const current = () =>
+        version === nativeLimitsSaveVersion && sameNativeLimitsView(context);
+      input.disabled = true;
+      status.textContent = "Saving UCloud limits…";
+      const save = nativeLimitsSaveTail
+        .catch(() => {})
+        .then(() =>
+          api("/native-batches/settings", {
+            method: "PUT",
+            body: { [field.key]: value },
+          }),
+        );
+      nativeLimitsSaveTail = save;
+      try {
+        const saved = await save;
+        if (!current()) return;
+        nativeLimits = { uploads: saved.uploads, batches: saved.batches };
+        status.textContent = "Saved. Running batches keep their limits.";
+      } catch (error) {
+        if (!current()) return;
+        status.textContent = error.message;
+      } finally {
+        if (current()) renderNativeLimits();
+      }
+    }),
+  );
+  $(`#${id}`).addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.currentTarget.blur();
+  });
+}
 function switchProviderTab(tab) {
   if (tab === "huggingface") return showHuggingFaceTab();
   if (tab === "processing") return showProcessingTab();
-  if (!["openai", "ucloud"].includes(tab)) tab = "openai";
+  if (tab !== "ucloud") tab = "ucloud";
   showProviderTab(tab);
-  const existing = state.providers.find((p) => providerTab(p) === tab);
+  const existing = state.providers.find(
+    (p) => providerTab(p) === tab && visibleProvider(p),
+  );
   if (existing) fillProvider(existing);
   else newProvider();
 }
 document.querySelectorAll("[data-provider-tab]").forEach((button) => {
   button.addEventListener(
     "click",
-    handle(() => switchProviderTab(button.dataset.providerTab)),
+    handle(() => {
+      const tab =
+        button.dataset.providerTab === "openai"
+          ? "ucloud"
+          : button.dataset.providerTab;
+      if (
+        tab === state.settingsTab &&
+        settingsUnsaved &&
+        !confirm("Discard your unsaved changes on this tab and reload it?")
+      )
+        return;
+      return switchProviderTab(button.dataset.providerTab);
+    }),
   );
   button.addEventListener("keydown", (event) => {
-    const tabs = [...document.querySelectorAll("[data-provider-tab]")];
+    const tabs = [...document.querySelectorAll("[data-provider-tab]")].filter(
+      (tab) => !tab.hidden && !tab.disabled,
+    );
     const index = tabs.indexOf(button);
     const next = {
       ArrowRight: (index + 1) % tabs.length,
@@ -9180,7 +9993,7 @@ document.querySelectorAll("[data-provider-tab]").forEach((button) => {
 });
 function fillProvider(settings) {
   if (!visibleProvider(settings)) {
-    switchProviderTab("openai");
+    switchProviderTab("ucloud");
     return;
   }
   showProviderTab(providerTab(settings));
@@ -9192,7 +10005,9 @@ function fillProvider(settings) {
   $("#base-url").value = settings.base_url;
   $("#api-key").value = "";
   $("#key-status").textContent = settings.has_key
-    ? "Key available"
+    ? settings.connection_ready
+      ? "Connection checked"
+      : "Key available · check the connection before transcription"
     : "No key saved";
   $("#model").value = settings.model;
   $("#language").value = settings.language;
@@ -9243,23 +10058,31 @@ function fillProvider(settings) {
   document.querySelectorAll('[name="approved-for"]').forEach((input) => {
     input.checked = (settings.approved_for || []).includes(input.value);
   });
+  // UCloud may serve Standard and Protected projects (user decision 19 November). Its saved
+  // approval stays enforced; the box shows only for a connection saved as not allowed, so
+  // that choice can be undone.
+  $(".provider-approvals").hidden =
+    providerTab(settings) === "ucloud" &&
+    (settings.approved_for || []).includes("protected");
+  settingsUnsaved = false;
   capabilityHelp();
   providerSummary();
   $("#delete-provider").disabled = !settings.id;
   renderEnabledModels();
+  updateProviderCredential();
 }
-function newProvider() {
-  const openai = state.settingsTab === "openai";
-  const vllm = state.settingsTab === "ucloud-vllm";
-  const native = state.settingsTab === "ucloud";
+function newProviderSettings(tab = state.settingsTab) {
+  const openai = tab === "openai";
+  const vllm = tab === "ucloud-vllm";
+  const native = tab === "ucloud";
   const openaiDefault = state.modelPresets.openai.models.find(
     (m) => m.model === state.modelPresets.openai.default,
   );
   const nativeDefault = state.modelPresets.ucloud_transcriber.models.find(
     (m) => m.model === state.modelPresets.ucloud_transcriber.default,
   );
-  fillProvider({
-    provider_type: state.settingsTab,
+  return {
+    provider_type: tab,
     base_url: native
       ? "https://cloud.sdu.dk"
       : openai
@@ -9291,9 +10114,7 @@ function newProvider() {
           : "json",
     max_upload_mb: vllm ? 14 : 20,
     concurrent_chunks: openai ? 2 : 1,
-    approved_for: state.protectedDefaults[state.settingsTab]
-      ? ["protected"]
-      : [],
+    approved_for: state.protectedDefaults[tab] ? ["protected"] : [],
     ucloud: vllm
       ? {
           hf_model: "openai/whisper-large-v3-turbo",
@@ -9302,20 +10123,42 @@ function newProvider() {
           ).revision,
         }
       : null,
-  });
-  (vllm ? $("#ucloud-token") : $("#api-key")).focus();
+  };
+}
+function newProvider() {
+  fillProvider(newProviderSettings());
+  (state.settingsTab === "ucloud-vllm"
+    ? $("#ucloud-token")
+    : $("#api-key")
+  ).focus();
 }
 async function openSettings(identifier = state.defaultProvider) {
+  if (firstUse.saving) return false;
+  firstUse.handoff = true;
+  cancelFirstUse();
   const version = ++providerFormVersion;
-  await loadProviders();
+  try {
+    await loadProviders();
+  } catch (error) {
+    if (version === providerFormVersion) {
+      firstUse.handoff = false;
+      renderFirstUse();
+    }
+    throw error;
+  }
   if (version !== providerFormVersion) return;
   const selected =
     state.providers.find((p) => p.id === identifier && visibleProvider(p)) ||
     state.providers.find(visibleProvider);
   if (selected) fillProvider(selected);
-  else switchProviderTab("openai");
+  else switchProviderTab("ucloud");
   $("#settings-dialog").showModal();
+  return true;
 }
+$("#settings-dialog").addEventListener("close", () => {
+  firstUse.handoff = false;
+  renderFirstUse();
+});
 $("#settings-open").addEventListener(
   "click",
   handle(() => openSettings()),
@@ -9387,6 +10230,7 @@ $("#base-url").addEventListener("input", () => {
   clearModelCheck();
   providerSummary();
   renderEnabledModels(true);
+  updateProviderCredential();
 });
 function renderEnabledModels(preserveDraft = false) {
   const panel = $("#provider-model-options");
@@ -9526,6 +10370,7 @@ function choosePresetModel(preset) {
   else $("#native-model-choice").value = preset.model;
   clearModelCheck();
   capabilityHelp();
+  updateProviderCredential();
 }
 $("#provider-preset").addEventListener("change", (event) => {
   const existing = event.target.selectedOptions[0]?.dataset;
@@ -9552,7 +10397,10 @@ $("#native-model-choice").addEventListener("change", (event) => {
   $("#model-value-label").hidden = true;
 });
 $("#language").addEventListener("input", clearModelCheck);
-$("#api-key").addEventListener("input", clearModelCheck);
+$("#api-key").addEventListener("input", () => {
+  clearModelCheck();
+  updateProviderCredential();
+});
 $("#ucloud-server").addEventListener("input", () => {
   $("#ucloud-token-status").textContent =
     "Token is specific to this UCloud server";
@@ -9589,6 +10437,8 @@ $("#forget-hosting-keys").addEventListener(
 );
 $("#check-models").addEventListener("click", async () => {
   const token = ++modelCheckToken;
+  const context = providerContext();
+  providerConnectionCheck = null;
   const button = $("#check-models");
   button.disabled = true;
   $("#model-check-results").textContent =
@@ -9603,7 +10453,8 @@ $("#check-models").addEventListener("click", async () => {
         api_key: $("#api-key").value || null,
       },
     });
-    if (token !== modelCheckToken) return;
+    if (token !== modelCheckToken || !sameProvider(context)) return;
+    providerConnectionCheck = result.connection_check || null;
     $("#model-check-results").innerHTML =
       `<ul class="model-availability">${result.models.map((model) => `<li><span>${h(model.name)}</span><strong class="${model.listed ? "listed" : "unlisted"}">${model.listed ? "Listed" : "Not listed"}</strong></li>`).join("")}</ul><p class="settings-note">${h(result.note)}</p>`;
   } catch (error) {
@@ -9612,6 +10463,7 @@ $("#check-models").addEventListener("click", async () => {
         `Could not check availability: ${error.message}`;
   } finally {
     button.disabled = false;
+    await refreshProviderConnections();
   }
 });
 function capabilityHelp() {
@@ -9649,11 +10501,22 @@ $("#settings-form").addEventListener(
     button.disabled = true;
     const key = $("#api-key").value;
     try {
-      if (state.settingsTab === "ucloud" && !nativeReady(nativeSetup())) {
+      // A changed key, or a saved connection that was never checked with its current key,
+      // is checked first: only a fresh successful check makes models usable (ADR 0167).
+      const saved = state.providers.find(
+        (p) => p.id === state.settingsProvider,
+      );
+      if (
+        state.settingsTab === "ucloud" &&
+        (!nativeReady(nativeSetup()) ||
+          (!providerConnectionCheck &&
+            (key ||
+              (saved?.has_key === true && saved.connection_ready !== true))))
+      ) {
         if (!(await connectNative())) return;
       }
       if (!sameProvider(context)) return;
-      await api(
+      const savedProvider = await api(
         state.settingsProvider
           ? `/providers/${state.settingsProvider}`
           : "/providers",
@@ -9705,12 +10568,18 @@ $("#settings-form").addEventListener(
               ...document.querySelectorAll('[name="approved-for"]:checked'),
             ].map((input) => input.value),
             api_key: key || null,
+            connection_check: providerConnectionCheck,
             remember: $("#remember-key").checked,
           },
         },
       );
       await loadProviders();
-      if (sameProvider(context)) $("#settings-dialog").close();
+      if (context.tab === "ucloud" && completedNativeSetup(savedProvider))
+        completeFirstUse();
+      if (sameProvider(context)) {
+        $("#api-key").value = "";
+        $("#settings-dialog").close();
+      }
       if (state.recording) renderEditorDetails();
       else renderRecordings();
       toast("Settings saved");
@@ -10571,7 +11440,7 @@ function inputPreparationCard(job) {
       !inspection &&
       input.native_group_size > 1 &&
       ["waiting", "materializing"].includes(input.phase)
-        ? `<p class="field-note">${h(input.native_group_waiting)} of ${h(input.native_group_size)} originals are still being prepared before this selection can start together.</p>`
+        ? nativeSelectionNote(input)
         : "";
   const provider =
     !inspection && (job.provider_name || job.model)
@@ -10865,6 +11734,10 @@ function activityRemoteMember(job) {
     )
   );
 }
+// ADR 0183: files of a native selection upload as soon as their own inspection passes.
+function nativeSelectionNote(input) {
+  return `<p class="field-note">${h(input.native_group_waiting)} of ${h(input.native_group_size)} originals are still being inspected. Files that pass upload to the shared UCloud batch straight away; it is submitted once every file is uploaded or excluded.</p>`;
+}
 function workflowRequestCard(job, expanded) {
   const group = job.activity_group,
     members = group.members,
@@ -10955,9 +11828,7 @@ function inputRequestCard(job, expanded) {
         member.input_preparation.native_group_size > 1 &&
         ["waiting", "materializing"].includes(member.input_preparation.phase),
     )?.input_preparation,
-    note = selection
-      ? `<p class="field-note">${h(selection.native_group_waiting)} of ${h(selection.native_group_size)} originals are still being prepared before this selection can start together.</p>`
-      : "",
+    note = selection ? nativeSelectionNote(selection) : "",
     // Until one confirmation covers every sibling, the first eligible file's
     // frozen token is the group's single Prepare action.
     eligible = members.find(
@@ -11119,6 +11990,60 @@ const pendingJobCancels = new Set(),
   pendingInputGroupCancels = new Set();
 const pendingLocalCleanup = new Set();
 const pendingRuntimePreparations = new Set();
+const pendingHfTasks = new Set();
+function hfSetupId(job) {
+  return job.kind === "hf_setup" &&
+    typeof job.id === "string" &&
+    /^hf-setup:[a-f0-9]{32}$/.test(job.id)
+    ? job.id.slice("hf-setup:".length)
+    : null;
+}
+function hfSetupActions(job) {
+  const identifier = hfSetupId(job);
+  if (!identifier) return "";
+  const button = (action, label) =>
+    `<button class="button" data-hf-task-action="${action}" data-hf-task-id="${identifier}" ${pendingHfTasks.has(identifier) ? "disabled" : ""}>${label}</button>`;
+  return [
+    job.cancellable ? button("cancel", "Stop setup") : "",
+    job.retryable ? button("retry", "Retry setup") : "",
+  ].join("");
+}
+function hfSetupCard(job) {
+  const identifier = hfSetupId(job),
+    progress = Number.isFinite(job.progress)
+      ? Math.max(0, Math.min(1, job.progress))
+      : null,
+    stages = (job.stage_outcomes || [])
+      .map(
+        (stage) =>
+          `<li><strong>${h(stage.label)}</strong> · ${h(stage.outcome)}${stage.message ? `<p>${h(stage.message)}</p>` : ""}</li>`,
+      )
+      .join(""),
+    child = job.remote_child;
+  return `<article class="job" data-hf-setup="${h(identifier || job.id)}">${activityCardHead(job, "Model access and preparation")}<h3>Hugging Face setup</h3><p>${h(job.message)}</p>${stages ? `<ul class="hf-setup-stages">${stages}</ul>` : ""}${child ? `<p class="field-note">${child.created_by_task ? "This setup started UCloud preparation." : "Using an existing UCloud preparation with independent controls."} UCloud progress remains in its Activity card.</p>` : ""}<progress ${progress === null ? "" : `value="${progress}"`} max="1" aria-label="Model preparation progress"></progress><div class="job-footer"><span class="badge ${["queued", "running"].includes(job.state) ? "working" : ["failed", "interrupted"].includes(job.state) ? "failed" : ""}">${h(job.state)}</span>${hfSetupActions(job)}</div></article>`;
+}
+async function runHfSetupAction(button) {
+  const identifier = button.dataset.hfTaskId,
+    action = button.dataset.hfTaskAction;
+  if (
+    !/^[a-f0-9]{32}$/.test(identifier) ||
+    !["cancel", "retry"].includes(action) ||
+    pendingHfTasks.has(identifier)
+  )
+    return;
+  pendingHfTasks.add(identifier);
+  document
+    .querySelectorAll(`[data-hf-task-id="${identifier}"]`)
+    .forEach((control) => {
+      control.disabled = true;
+    });
+  try {
+    await api(`/huggingface-tasks/${identifier}/${action}`, { method: "POST" });
+  } finally {
+    pendingHfTasks.delete(identifier);
+    await pollJobs();
+  }
+}
 function runtimePreparationId(job) {
   const identifier = job.runtime_preparation_id;
   return typeof identifier === "string" &&
@@ -11227,6 +12152,7 @@ async function runJobCancel(button) {
   }
 }
 function jobActions(job) {
+  if (job.kind === "hf_setup") return hfSetupActions(job);
   if (job.runtime_preparation_id) return runtimePreparationActions(job);
   if (job.local_deletion) {
     const item = job.local_deletion;
@@ -11515,6 +12441,13 @@ function activityJobs(jobs) {
   });
 }
 function needsActivityAttention(job) {
+  if (job.kind === "hf_setup")
+    return (
+      ["failed", "interrupted"].includes(job.state) ||
+      (job.stage_outcomes || []).some((stage) =>
+        ["failed", "unavailable"].includes(stage.outcome),
+      )
+    );
   if (job.kind === "export") return !["queued", "running"].includes(job.state);
   if (job.runtime_preparation_id)
     return !runtimePreparationId(job) || job.needs_attention === true;
@@ -11581,6 +12514,7 @@ function runtimeBatchProgress(job) {
     )}</dl><p class="runtime-saved">${h(counts.completed)} of ${h(counts.total)} results saved locally</p><progress value="${counts.completed}" max="${Math.max(1, counts.total)}" aria-label="Results saved locally"></progress>${active.length ? `<ul class="runtime-active-files">${active.map((file) => `<li class="runtime-active-file"><strong>${h(file.recording_name)}</strong><span>${h(file.stage_label)}</span></li>`).join("")}</ul><p class="field-note">Speech-recognition percentage is not reported.</p>` : ""}</div>`;
 }
 function activityCard(job, expanded) {
+  if (job.kind === "hf_setup") return hfSetupCard(job);
   if (job.kind === "export") return CBSBackgroundExports.card(job);
   if (job.runtime_preparation_id) {
     const identifier = runtimePreparationId(job),
@@ -11697,7 +12631,7 @@ function mergeActivityHidden(value) {
     if (typeof updated === "string") activityHidden.set(id, updated);
 }
 function activityRemovable(job) {
-  if (job.kind === "export") return false;
+  if (["export", "hf_setup"].includes(job.kind)) return false;
   if (job.runtime_preparation_id)
     return !!runtimePreparationId(job) && job.can_remove === true;
   if (job.local_deletion) return false;
@@ -11768,7 +12702,7 @@ function activityStopButton(job) {
           .join("")
     : jobActions(job);
   const controls = template.content.querySelectorAll(
-    '[data-cancel], [data-upload-cancel], [data-input-action="cancel"], [data-runtime-action="cancel"], [data-runtime-preparation-action="cancel"]',
+    '[data-cancel], [data-upload-cancel], [data-input-action="cancel"], [data-runtime-action="cancel"], [data-runtime-preparation-action="cancel"], [data-hf-task-action="cancel"]',
   );
   if (!controls.length) return "";
   const button = controls[0],
@@ -11878,6 +12812,11 @@ $("#activity-clear").addEventListener(
 $("#jobs").addEventListener(
   "click",
   handle(async (event) => {
+    const hfTask = event.target.closest("[data-hf-task-action]");
+    if (hfTask) {
+      await runHfSetupAction(hfTask);
+      return;
+    }
     const preparation = event.target.closest(
       "[data-runtime-preparation-action]",
     );
@@ -12266,6 +13205,8 @@ handle(async () => {
   await loadEditingSettings();
   await refreshProjects();
   await route();
+  firstUse.ready = true;
+  renderFirstUse();
   await pollJobs();
   setInterval(poll, 1600);
 })();

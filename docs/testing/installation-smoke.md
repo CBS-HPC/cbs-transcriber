@@ -1,6 +1,6 @@
 # Offline source-install smoke check
 
-After completing [README's clone or source-ZIP installation](../../README.md#install-and-start-windows-and-macos) with Python 3.13 and
+After completing [clone or source-ZIP installation](../development.md#clone-or-source-zip) with Python 3.13 and
 `uv sync --locked`, run from the folder containing `pyproject.toml`:
 
 ```text

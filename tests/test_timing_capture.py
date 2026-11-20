@@ -85,6 +85,7 @@ def test_public_units_capture_distinct_origins_and_seal_normalized_output(client
     client.app.state.queue.process(job["id"])
     job = store.job(job["id"])
     value = job["params"]["timing_artifact_capture"]
+    assert value["format"] == timing_capture.NEW_FORMAT
     assert len(value["units"]) == 2
     first, last = value["units"].values()
     assert first["capture"]["origin"]["generation"] != last["capture"]["origin"]["generation"]

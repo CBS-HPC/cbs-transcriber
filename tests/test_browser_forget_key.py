@@ -22,10 +22,12 @@ def test_forget_buttons_follow_their_key_boxes(page, local_app):
     )
     page.goto(local_app.url)
     page.locator("#settings-open").click()
-    for tab in ("OpenAI API", "UCloud"):
-        page.get_by_role("tab", name=tab, exact=True).click()
-        # Not tucked into Advanced settings: directly below the key the user pastes.
-        assert page.locator("#forget-key").evaluate("e => !e.closest('#provider-advanced')")
-        under(page, "#api-key", "#forget-key")
+    page.get_by_role("tab", name="UCloud", exact=True).click()
+    # Direct OpenAI is retired from Settings (ADR 0170); UCloud is the provider key tab.
+    # Asserted after the visible dialog has loaded so the absence is meaningful (B439).
+    expect(page.get_by_role("tab", name="OpenAI API", exact=True)).to_have_count(0)
+    # Not tucked into Advanced settings: directly below the key the user pastes.
+    assert page.locator("#forget-key").evaluate("e => !e.closest('#provider-advanced')")
+    under(page, "#api-key", "#forget-key")
     page.get_by_role("tab", name="Hugging Face", exact=True).click()
     under(page, "#hf-settings-token", "#hf-settings-forget")

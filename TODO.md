@@ -10,8 +10,120 @@ Supporting references: [application audit plan](docs/audits/application-audit-pl
 [transcription and Activity audit](docs/audits/transcription-batch-2026-10-30.md),
 [weekend plan and Settings backup design](docs/work-plans/weekend-2026-10-31.md),
 [SPEC](SPEC.md), and [architecture decisions](docs/decisions/README.md).
+
+Checks only a person can do before public release (real devices, accounts, recordings and
+desktop software) are collected in the [human release checklist](docs/testing/human-release-checklist.md),
+started 20 November. Add a check there whenever new behavior is verified only synthetically.
 The [post-MVP audit and proposed sequence](docs/work-plans/post-mvp-2026-11-10.md) separates
 missing implementation, pending acceptance, workflow decisions and explicitly parked work.
+The [11 November implementation plan](docs/work-plans/post-mvp-2026-11-11.md) tracks the
+verified local morning changes on `codex/post-mvp-morning`; activation remains separate.
+
+## Current post-MVP branch
+
+12 November handover: [the continuation plan](docs/work-plans/mvp-v2-continuation-2026-11-12.md)
+records tested components and the unstarted Runtime Stage 2, funding-observer (T146) and
+schema-19 Working (T147) designs. Editor/review workflow is the next user discussion;
+broader cleanup must preserve ongoing/recoverable work and Activity evidence.
+
+17–18 November (Claude): T147 is implemented with independent Go; the Show filter and
+default-on Text highlighting are implemented; saving a new UCloud key reconnects
+automatically (B452). The standalone funding observer (T146) is implemented with independent
+Go (unwired). Runtime Stage 2 (T144) is implemented disabled with independent Go after three
+review defects were fixed. All are combined on `claude/v2-integration`, not loaded. User decisions: [editor/review decisions](docs/work-plans/editor-review-decisions-2026-11-12.md).
+
+18 November browser baseline (Claude): the first full browser run on v2 code failed 105
+cases. Fixed, test-only unless noted: the notes overlap (B455, CSS); fresh-profile
+first-use setup now pre-completed unless a module is marked `first_use` (B457, ~70 cases);
+journeys built on retired direct OpenAI moved onto a checked native UCloud model; 20 stale
+Settings/runtime/consent cases updated (B458). Tests can no longer reach a real host
+(B456). After these fixes the full browser suite passed on `claude/v2-integration`
+(668 passed); `test_release_profile` fails on this branch only because it packages the MVP
+profile. Settings design findings, decided by the user 19 November (`claude/settings-findings`):
+the Protected approval box is hidden for UCloud, which may serve both classifications, and
+shows only for a connection saved as not allowed so it can be undone (V227); choosing the
+open tab again first asks before discarding unsaved UCloud or Hugging Face entries, while a
+clean tab still reloads and retries as before (V228); always saving words_speakers for UCloud
+is correct because the Transcriber app always identifies speakers (closed, no change).
+
+19 November (Claude): `claude/v2-integration` is loaded on the user's real library after a
+verified backup. Preview feedback fixed on `claude/v2-preview-fixes`: setup returns on each
+load while no UCloud key is saved (ADR 0171 amendment), a centred Create a project button on
+the empty home page, and project deletion from the home page (B460).
+On `claude/funding-wakeup` (not merged) the unwired funding observer's deadline wake-up no
+longer relies on a Windows-only socket close: it first shuts each connection down through its
+own duplicate descriptor, which also reaches a stalled TLS handshake (ADR 0178 amendment,
+B465). Windows-verified (272 funding tests); Linux only by a stdlib probe; macOS pending.
+
+The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
+tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
+It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime
+generation Stage 1 is verified separately at `401769e`, with later recovery stages still open.
+
+- [x] **Automatic native startup reconnection (T141), verified locally 12 November.**
+  `codex/mvp-v2-native-reconnect` resumes exact submitted singleton/batch allocations with
+  durable Stop and no new allocation/upload/followup. Final 76 focused cases and independent
+  review pass; earlier 444 passes/one platform skip remain qualified prior-source evidence.
+  [Verification](docs/verification-2026-11-12-native-startup-reconnection.md).
+  Not loaded or real-provider accepted. Fresh singleton generic-curated failures, historical
+  generic failures, uncertain submissions and cleanup-only obligations remain manual.
+
+- [ ] **Isolated Runtime recovery (T144), authorized stability work.** Stage1 on
+  `codex/mvp-v2-runtime-generations` from reviewed observation checkpoint `857a727` implements
+  only bounded registry/selection/path data and candidate CAS, default disabled; [46 distinct
+  synthetic cases and independent review pass](docs/verification-2026-11-12-runtime-generations-stage1.md).
+  Promotion, readiness, preparation and execution remain held. Later stages must bind the actual
+  durable preparation owner, exclusive folder receipt and all accepted compute/generation
+  carry before controlled live acceptance. Keep old locks/environments untouched; CPU/CUDA
+  targets stay separate and promoted environments cannot receive new model downloads.
+  Stage 2 (disabled owner/folder/readiness-promotion slice) is implemented on
+  `codex/mvp-v2-runtime-protocol`: builder `e9dd23d`, independent review `229865a`, defect
+  fix `600141f` (B453); combined on `claude/v2-integration` with all switches off.
+  - [x] Disabled supersession of a settled failed candidate (`claude/runtime-supersession`,
+    19 November, synthetic only). Independent review is still required before enablement.
+  - [ ] Strict comparison with UCloud's normalised specification:
+    [designed](docs/proposals/runtime-strict-specification-comparison-2026-11-19.md);
+    needs authorized real UCloud job replies.
+  - [ ] Real create-folder reply shapes and a frozen Terminal script-parameter record
+    (both need real UCloud evidence and the user's authorization).
+  Admission/carry/execution/repair/capture/restore/CPU and live acceptance remain (ADR 0176).
+
+- [x] **Existing sole-result Working on schema 19 (T147).** `codex/mvp-v2-existing-working`
+  accepts only 18/18 and 19/19 pairs, never reads or writes review marks, and skips any
+  recording with doubtful native-recovery evidence (ADR 0179). Builder `1b4d566`; independent
+  tester Go `f484571` (171 focused cases). Not loaded. Undecodable stored text no longer aborts
+  the pass (B454): unreadable failed-job settings skip that recording, unreadable owner links
+  or owner rows refuse the pass as `native_evidence_unverifiable` (`claude/v2-followups`).
+
+- [x] **CBS Runtime preparation observation stability (T143), authorized 12 November.** Reproduce and
+  fix standalone transient-monitor/terminal-publication and late-Stop completion races on
+  `codex/mvp-v2-runtime-reliability`. ADR 0175 requires typed bounded observations, one durable
+  Activity/allocation and no new preparation/lock/cache mutation. Independent design review
+  passed with the typed-reader/atomic-success conditions; 117 distinct final synthetic passes
+  and independent code/evidence Go qualify this local slice. It is not loaded in the preview.
+  The historical retained lock is unresolved; separate immutable-generation work and controlled
+  UCloud acceptance are needed before claiming the environment is ready.
+  [Verification and limits](docs/verification-2026-11-12-runtime-observation.md).
+  [Reliability plan](docs/work-plans/mvp-v2-reliability-2026-11-12.md).
+
+The user authorized selected follow-up work on local `codex/post-mvp-work`, descended from
+clean public main `708a27b`. The current morning checkpoint is `codex/post-mvp-morning`,
+including the reviewed isolated timing-policy work. **Do not merge/push it to main, update Desktop main, publish or
+reload the installed MVP.** Frontend changes stay within explicit requests; broader choices
+await the colleague's feedback. The installed/published baseline remains MVP 0.1.0.
+
+The [seventeen-item evidence audit](docs/audits/post-mvp-hidden-tasks-2026-11-10.md) is the
+current classification of hidden work. Delivered native retrieval/recovery, concurrency
+controls, background exports, deletion and server fencing need acceptance/performance checks,
+not duplicate implementations. Real-device/provider, model-quality and institutional gates
+remain open. Missing-output reruns have a [design only](docs/proposals/native-failed-output-recovery-2026-11-10.md);
+no new transcription or remote cleanup was performed. Focused branch verification is recorded
+separately from the published release receipt.
+The segmented full backend gate now covers 5,526 unique cases: 5,500 passed, 26 skipped;
+independent inventory/outcome audit passes. Relevant provider browser regression finished with
+25 distinct passes. The isolated `codex/post-mvp-timing-hints` child now passes its complete
+5,600-case backend inventory: 5,574 passed, 26 skipped, independent Go. Both remain local;
+see [child verification](docs/verification-2026-11-10-timing-hints.md).
 
 ## Colleague MVP — 11 November 2026
 
@@ -21,7 +133,7 @@ editor/export reliability changes, load one labelled tested build and reserve to
 acceptance and blocking fixes. **MVP 0.1.0 was activated and verified**, including exact served
 asset bytes and unchanged database/originals. That development instance has since been stopped
 normally for the user's fresh uv-tool installation. The new installation completed with copy
-mode and serves MVP 0.1.0 from its installed tool environment; functional acceptance remains
+mode and was verified serving MVP 0.1.0 from its installed tool environment; functional acceptance remains
 pending. See the [release receipt](docs/verification-2026-11-10-mvp-release.md).
 
 10 November user acceptance: double-click/Text controls, manual Checked/Needs review and Next
@@ -94,6 +206,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   **Parked until after MVP by the user on 10 November.** The separate preview server/tab is
   closed; its test library and unmerged, unpushed source remain. Do not resume or integrate it
   without a new request. Prioritize the core app and release/installation/documentation review.
+  On 19 November the user chose "Hidden in v2"; see Spelling integration and acceptance below.
 
 - [x] **Background export preparation implemented and verified offline:** project/recording ZIPs
   continue in Activity after Export Settings closes. Ready downloads stream without a browser
@@ -153,8 +266,17 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Reliability and existing workflows
 
-- [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — parked by user.** Do not resume
-  CBS Runtime work or start its UCloud jobs until the user requests it. Resolve the live `runtime-busy`
+- [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — stability before PII integration.**
+  User priority, 11 November. On 20 November the user added Runtime implementation and testing
+  to the post-v2 plan: it opens the way to other transcription models and to the AI-assisted
+  coding work. Live preparation and paid test jobs still need approval each time. The morning branch implements verified exact host/shell stamp
+  validation and PREPARE=1 legacy-reader/retained-lock refusal before new job submission
+  (ADR 0172), plus the separately reviewed configured-model preparation plan (ADR 0173).
+  These fixes do not reclaim the historical lock or establish live Runtime acceptance.
+  Live preparation/jobs and generation activation remain held. The branch adds exact acquired
+  lock-release guards without reclaim (ADR 0168), with synthetic ownership-change regressions.
+  [Investigation and disabled-generation review](docs/proposals/post-mvp-runtime-preparation-2026-11-10.md).
+  Resolve the live `runtime-busy`
   preparation failure safely: the retained lock's recorded owner is terminal, but neither safe
   removal nor an isolated replacement generation is established. The isolated-generation work
   is a disabled prototype, not a deployed fix. Preserve the failed job's evidence and remote
@@ -180,6 +302,17 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Preserve already-frozen jobs and avoid duplicate transcription during retry/restart.
   Automatic splitting/sorting is not implemented; agree a measured strategy and separate
   architecture decision before implementation. This discussion stays outside MVP.
+  On 12 November the user asked to design parallel MIG splitting, CPU fallback and availability
+  together. Check 1/2/3/4-mig.1g products (counts of identical 1g devices) and verified scheduler
+  status semantics as lower-bound signals, not summed/reserved capacity. Compare same-model
+  total queue/startup/ASR/alignment/speaker/transfer time and cost before any fallback.
+  [Published CPU/GPU evidence and limits](docs/evaluations/whisperx-cpu-gpu-speed-2026-11-12.md).
+  The user then agreed the v2 fallback rule for **both native and CBS Runtime**: usable,
+  sufficient GPU hours means 1g MIG even if queued; known absent/insufficient GPU funding
+  permits exact `cpu-amd-zen5-8-vcpu` only with CPU funding and model compatibility. Unknown
+  funding is not zero. Affordability estimates/units and Runtime CPU preparation require
+  reviewed implementation; this rule is documented, not enabled in the preview. See
+  [funding policy (T145)](docs/decisions/0177-funding-based-compute-fallback.md).
 - [ ] **Old UCloud obligations (T80/T80b).** Inspect and safely recover or explicitly dispose
   remaining legacy single-job and batch cleanup obligations; retain unresolved journals and
   user-visible controls. Emptying UCloud Trash or discarding unpreserved output requires the
@@ -203,11 +336,23 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   malformed-diagnostic regressions. Same-allocation existing-output recovery and verified
   cleanup passed the user's real rc6 acceptance on 10 November; missing-output resubmission
   remains open.
-- [ ] **MVP UCloud handoff acceptance.** Verify that an accepted native job continues after app
-  shutdown and that relaunch plus explicit Reconnect/Retry retrieves results from the same saved
-  allocation, without another submission. Keep automatic status reconnection within a session;
-  do not add general automatic startup recovery until its separate design is accepted.
-  The synthetic actual-queue shutdown/reopen/Retry check passes; a real handoff remains unverified.
+- [x] **MVP UCloud handoff acceptance — one Windows overnight batch, 12 November.** The user
+  closed the app while a 12-file native job queued/processed overnight, reopened the preview
+  and confirmed explicit Retry succeeded. Read-only local evidence shows the
+  same recorded allocation, all 12 members completed, 12 newly saved results and the prior
+  12 retained (24 total); the observed remote state is SUCCESS. This qualifies that served
+  Windows batch, not early retrieval while running, every failure phase, or other devices.
+- [ ] **Automatic startup reconnect — loading and real acceptance (T141).** On reopening,
+  resume monitoring/retrieval for already-submitted native singleton/batch allocations with a
+  confirmed saved remote ID. Preserve saved siblings and frozen identities, back off bounded
+  transient reads and keep unmet authentication/ownership obligations visible. Explicit Stop/
+  Cancel stays authoritative. Do not create replacement jobs, replay uncertain submissions,
+  steal preparation locks or discard unresolved output. Historical failures and cleanup-only
+  actions are separate policies. Implementation passed its final 76-case gate and independent
+  review, then the assembled candidate passed 193 cases. Earlier 444/one-skip evidence remains
+  source-qualified; this item now tracks loading/real acceptance. It is not loaded yet.
+  Historical generic failures and fresh singleton errors already curated to generic
+  errors remain manual; no error-text inference is used to grant automatic recovery.
 - [ ] **Activity and transcription audit (T104/T108/T109).** Complete the remaining deep audit
   and integrated verification of batch grouping, admission, per-file progress, Retry/Stop,
   uncertain submission, cancellation, cleanup and restart. The user has confirmed grouped
@@ -252,6 +397,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   recordings and video remain. Compare optional UCloud preparation for larger batches, including
   upload/download time, privacy approval, remote cleanup, resource charges and recovery, before
   choosing a policy.
+- [ ] **Very large library stress test — requested 20 November, after MVP v2.** Check that the
+  app does not crash or hang with a very large set of recordings, using a public Hugging Face
+  speech dataset (any language) in a throwaway library. Choose the dataset with a verified
+  licence, pinned revision and hashes; download it outside the repository, never in routine
+  tests. Import its reference transcripts as results so scale costs no transcription; transcribe
+  only a small subset. Cover upload, media preparation, lists, Activity, editor, search, export,
+  backup/restore and deletion. Human check H15b in the
+  [release checklist](docs/testing/human-release-checklist.md).
 - [ ] **Local processing concurrency across task types.** Implemented on
   `claude/local-concurrency` (ADR 0146, T111): Settings → Local Processing → Parallel local
   tasks with automatic media = logical CPUs − 2 in 2..8, inspection = CPUs/2 in 2..4, API 6 and
@@ -277,18 +430,28 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   and tested synthetically. Complete remaining crash, platform, filesystem and live acceptance;
   keep unresolved deletion/cleanup visible. Real Cloud Files, Mac and power-loss behavior are
   not established by those tests.
+- [ ] **Project deletion in Activity — decided 20 November, post-v2.** Testing MVP v2 the
+  user deleted a 12-recording project; the Delete dialog could still be closed while the final
+  step ran, so the open project stayed visible until a refresh removed it. Today the open
+  dialog drives deletion (it re-sends Delete each second while jobs stop; closing it abandons
+  the request). User decisions: Delete hands off at once to an Activity item "Deleting project
+  …" with stages (stopping jobs, removing from the library, removing files); the server owns
+  the deletion, independently of the dialog. Only that project becomes inactive (greyed,
+  "Deleting…", not openable or editable); a user inside it lands on the project list; the rest
+  of the app stays usable. Activity offers **Keep project** until the point of no return
+  (stopped jobs stay stopped). If the app closes before that point the project is kept and
+  Activity notes the unfinished deletion; nothing resumes automatically. After it, deletion
+  stays permanent and recovery relies on backups ("Recently deleted" and automatic pre-delete
+  backups were not chosen). No quick fix for v2: the full version only, in post-v2 work. Needs
+  its own ADR (job semantics); apply the same model to recording deletes where it fits.
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and
-  real Windows/Mac/UCloud acceptance. **Post-MVP simplification:** remove the Remove from list
-  (hide-library) action and its explanatory text; keep Open and Delete permanently. Review how
-  previously hidden libraries remain accessible when retiring the feature. Removing a hide
-  preference must never delete library files or imply permanent-deletion consent.
-  **Post-MVP deletion-preview layout fix:** keep the confirmation label readable across the
-  available width, place a usable full-width name input below it, and separate explanatory
-  notes from that field. Wrap long paths cleanly and verify wide/narrow dialogs; the current
-  preview can squeeze the label into a vertical column and the input into a tiny box.
-  Preserve typed-name confirmation, deletion blockers and file-ownership safeguards.
+  real Windows/Mac/UCloud acceptance. **Post-MVP branch:** Remove from list and its explanation
+  are retired; old hidden entries remain accessible with Open/Delete without changing stored
+  preferences. The deletion preview clears the floated note, separates paths/counts and keeps
+  the typed-name field full width. Wide/narrow browser checks preserve confirmation, blockers
+  and file-ownership safeguards. No real library was deleted by these tests.
   The simplified UCloud backup flow uses a uniquely
   configured project and a location selector; exact destination and recovery fencing remain
   internal (ADR0139). Broader integration and real transfer acceptance remain open.
@@ -382,7 +545,21 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   (ADR 0148), verified with synthetic backend/browser/restore checks. Validate real-user use;
   Next to review now visits Not checked/Needs review, skips Checked and wraps independently
   of model hints, with focused browser and draft-safety verification.
-  Review filtering and coordination with future re-transcription tags remain open.
+  The Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing word timing)
+  is implemented and browser-verified; Next to review follows it (T148). Real-user acceptance
+  and coordination with any future re-transcription tags remain open.
+- [ ] **Word timing in review and Activity — decided 20 November, post-v2.** Testing MVP v2
+  the user found passages with missing or rebuilt timing hard to locate, and a per-passage
+  "Add word timing" job vanished from Activity when it finished (finished realignments are
+  hidden as routine; the ready timing is added only when the recording is next open with no
+  draft or dialog). User decisions: in results meant to have word timing, a passage missing it
+  is automatically **Needs review**, so Next to review finds it (untimed-by-design results, such
+  as speakers-only, are not flagged); when timing is added or rebuilt for a passage it becomes
+  **Needs review** again, even if it was Checked, with the reason shown ("timing added");
+  finished word-timing jobs stay in Activity with their outcome (added, ready until the
+  recording is opened, not added because the passage changed, or failed) until cleared.
+  Automatic marks need a truthful system actor and their own ADR (passage review is manual
+  metadata today, ADR 0148); preserve the passage-hash binding, stale-Checked rule and drafts.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
@@ -396,16 +573,25 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   editable passage while replaying it, without a separate duplicate playback panel. Preserve
   the draft, typing focus, cursor/selection and undo; use available valid word timing without
   inventing times for new words or blocking editing. Review scrolling and responsiveness on
-  long passages. This editable-word following is planned, not implemented in the MVP.
+  long passages. **MVP v2 (user decision 12 November):** highlighting is on by default with no
+  setting; a differing draft keeps highlighting provably unchanged prefix/suffix words and
+  never times new or changed words; Follow playback waits while typing (T149). Browser-verified
+  on Chromium/Windows; Mac/Firefox/IME/screen-reader and real-user acceptance remain. This does
+  not settle the broader editor design.
   **Released MVP 0.1.0:** the fresh timing-independent manual policy (ADR 0166) preserves proven
   unchanged/replacement intervals and leaves inserted or ambiguous words untimed, without
   blocking wording changes. ADR 0156 retains the older conservative generation for history.
   Automatic timing estimates and the broader redesign remain post-MVP;
   any future estimate must be labelled and distinct from aligned/verified timing.
-- [ ] **Legacy alignment-hint provenance.** Same-result realignment of an unmarked passage can
-  retain older alignment-fit hints. Design an explicitly versioned remedy without changing
-  frozen jobs or lost-reply recovery; explain individually suppressed manual-timing hints in
-  the editor. Marked maps are protected under ADR 0137.
+- [x] **Realignment alignment-hint provenance — local child only.** ADR 0169 now seals the
+  fresh host policy and invalidates whole-passage source alignment-fit hints after actual
+  timing replacement/adoption, including omitted words. Exact legacy transforms, raw evidence,
+  Working fences and lost replies remain. Structural carry and contained authority checks are
+  covered. The complete child gate is **5,574 passed, 26 skipped**, independently reviewed;
+  the earlier 393-case evidence gap was closed by a frozen rerun. No historical backfill or
+  automatic alignment. Cloud historical transformation and ordinary merge full transformation
+  remain `not_checked`. Branch `codex/post-mvp-timing-hints` stays unmerged and uninstalled.
+  [Verification and limits](docs/verification-2026-11-10-timing-hints.md).
 - [ ] **Track and roll back manual edits.** Make changes such as text edits, merges, splits and
   deletions easy to inspect and roll back. Existing result-version history provides a starting
   point; Undo merge now restores proven unmodified merges while keeping unrelated current edits
@@ -413,22 +599,59 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   restoration passed lifecycle/API/browser/portable checks and is loaded in rc3. Broader passage-level undo
   remains open; preserve other
   edits, timing, speakers, concurrency safety and an auditable history.
+  User direction 12 November: one **Undo last change** whose label names the next step
+  (instead of separate undo buttons), undo recorded as history, a Git-like change list with
+  word-level diffs and later a branch view of results/versions with the Working marker.
+  19 November the user chose every recommended answer of the
+  [design proposal](docs/proposals/history-undo-2026-11-18.md). Slice 1 is implemented on
+  `claude/undo-last-change` (ADR 0180, T150): toolbar **Undo last change** / **Redo** with live
+  labels, exact predecessor restoration of every saved content change, one Redo until the next
+  change, reach to the result's start; review marks stay outside Undo. It is hidden in the
+  MVP profile until the user decides whether MVP v2 shows it. Slice 2 (ADR 0181, T151): the
+  History change list with word-level "What changed", undone/redone tags and "Revert this
+  change" for proven older merges, splits and deletions, replacing the per-passage controls
+  when the feature is on. Slice 3 (ADR 0182, T152): a Branches tab drawing results as lanes
+  with branch points, merge edges, Working and undo markers. All three are hidden in MVP;
+  remaining: the user's choice for MVP v2 and a real-library look before loading.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
-- [ ] **Spelling integration and acceptance — post-MVP, parked by user.** The local DA/en-GB preview above is implemented
-  and independently tested; integrate only after user approval. Danish suggestions remain
-  disabled after measured timeouts. Broader languages, representative quality/platform checks,
-  dictionary updates and institutional licence review remain open. Preserve recording language,
-  private vocabulary, draft/timing guards and saved opt-out. The
+  **Parked by the user 12 November:** same-model re-runs add little. If revived, prefer the
+  NVIDIA Parakeet UCloud model (`nvidia/parakeet-tdt-0.6b-v3`) only where the catalog confirms
+  the passage language, warn on identical model/language, and offer per-passage suggestions
+  that start as Needs review, never automatic replacements.
+- [ ] **Spelling integration and acceptance — ported to v2, hidden in MVP.** The user decided
+  "Hidden in v2" on 19 November: the local DA/en-GB preview above is re-applied to v2 (branch
+  claude/spelling-hidden, T155, [ADR 0185](docs/decisions/0185-local-passage-spelling.md))
+  behind the `spelling` release-profile feature: on in full, hidden and refused in MVP while
+  existing private vocabulary stays readable/removable. Settings rows moved to 12/13 (B464).
+  Danish suggestions remain disabled after measured timeouts. Remaining: the user's choice to
+  show it, broader languages, representative quality/platform checks, dictionary updates and
+  institutional licence review (Spylls ships an MPL-2.0 LICENSE although its metadata says MIT).
+  Preserve recording language, private vocabulary, draft/timing guards and saved opt-out. The
   [original design](docs/proposals/offline-spelling-2026-11-05.md) retains the wider future plan.
+  On 12 November the user proposed underlines directly in the Text editor with on-demand
+  alternatives instead of the separate spelling panel. Right-click/keyboard access is the
+  recommendation; the trigger remains undecided. Preserve double-click selection, caret,
+  native Undo, timing and local-only processing; no UI integration is authorized by this proposal
+  and the hidden v2 port keeps the reviewed panel.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
   explicit provider policy and review behavior; assess privacy, costs and recovery before rollout.
-- [ ] **Anonymisation — parked pending a new decision.** No production in-app detector, model
-  or review workflow exists. When explicitly resumed, turn
-  the reviewed design and synthetic demo into a workflow with evaluated detectors, researcher
+- [ ] **Anonymisation — parked pending CBS Runtime stability and a later user decision.**
+  The app should eventually start the model on demand using the UCloud API key; review,
+  redaction/pseudonym and mapping-custody decisions remain open. No adapter/workflow
+  implementation is authorized while parked. User direction on
+  11 November: use the UCloud hosting project's anonymisation model. Its catalogue identifies
+  **PII-Tracer** (`perplexity-ai/PII-Tracer-vLLM`), a PII token classifier with a `/v1/pii`
+  adapter; evaluate it on Danish/English transcripts and design the Transcriber integration.
+  Historical synthetic hosting checks do not establish interview accuracy. The direct-identifiers-only
+  scope question remains unanswered. No production in-app detector, model or review workflow
+  exists. Local synthetic examples remain review/evaluation scaffolding. The branch expands explicit
+  entity-label linking and export-canary tests; a six-case DA/EN fixture exposes detection gaps,
+  not real accuracy. [Offline evaluation](docs/evaluations/anonymisation-offline-2026-11-10.md).
+  Turn the reviewed design and synthetic demo into a workflow with evaluated detectors, researcher
   span review, separate derived results, pseudonym decisions and export-leak tests. Resolve
   key custody/retention and scope before using real research data; text-only redaction does not
   anonymise audio or metadata. [Design](docs/proposals/anonymisation-local-prototype-2026-10-30.md) ·
@@ -478,8 +701,15 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   separated from actual billing. Keep future milestones/phases current under AGENTS.md;
   leave Claude and combined AI totals pending until its figures are supplied.
 
-- [ ] **Installation and deployment (T92/T94/T106).** The primary guide now uses a versioned
-  GitHub wheel plus lock-derived runtime constraints through uv tool install, without Git.
+- [ ] **Installation and deployment (T92/T94/T106/T139).** The local preview branch now
+  documents a uv-managed Python environment in `<home>/CBS Transcriber/App/.venv`, installed
+  from a versioned GitHub wheel and matching runtime constraints without Git. The earlier
+  uv-tool route remains documented for existing installations and method-specific removal.
+  The new private Windows probe installed all 135 packages and passed module help, four core
+  smoke checks, private COM/no-overwrite and stopped-environment repair. Full environment
+  removal was blocked by automatic approval review and remains unverified; the environment
+  is retained. No manual preview install is required from the user. Mac, actual shortcut
+  clicks and the colleague's Access denied issue remain unverified.
   Installed-package/source shortcuts and the locked source fallback exist. A fresh isolated
   Windows environment resolved and installed all 135 packages and passed all four installed-
   app smoke checks; a native COM launcher was verified in a disposable folder without an
@@ -501,26 +731,113 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 
 ## Planned later or explicitly deferred
 
-- [ ] **Post-MVP README simplification and uninstall guide.** Shorten the main README around
-  ordinary-user installation, starting, updating and removal; move technical/reference detail
-  into linked docs. Make uninstall steps prominent: stop the app, run
-  `uv tool uninstall cbs-transcriber`, and remove its optional shortcut. Explain which library,
-  recording, model-cache and credential data remain, with separate explicit cleanup guidance.
-  A brief uninstall paragraph already exists; review its clarity and placement after MVP.
+- [ ] **Possible later version: UCloud speaker-count options — undecided.** The Transcriber
+  app accepts minimum/maximum speaker counts (and speaker merging). Offering them in Settings
+  or per request is an idea for a later version only; the user has not decided it.
+
+- [ ] **Native UCloud batches: earlier uploads, upload/batch limits and full-GPU choice —
+  decided 19 November.** Done on `claude/native-batch` (T153, ADR 0183; synthetic mocked
+  checks only): each file uploads as soon as its own original inspection passes, failed files
+  are dropped with their own outcome and only the UCloud submission waits for every file;
+  Settings → UCloud has "Files uploaded at once per batch" (1–8, default 4; upload speed
+  depends on the network, not CPU cores) and "UCloud Transcriber batches at once" (1–4,
+  default 2); Activity's batch card uses plain wording ("Waiting in UCloud's queue for a GPU ·
+  12 min", "Transcribing on UCloud · 5 of 12 files reported done · last log 14:05").
+  Remaining: a live UCloud batch run, and the full-GPU choice — when no 1g MIG is free,
+  Activity asks per batch whether to use a full GPU, stating its higher credit use; nothing
+  switches without that click (amends ADR 0124). Detecting "no MIG free" needs UCloud capacity
+  or queue evidence before activation.
+  Full-GPU ask: proposed design only in [ADR 0184](docs/decisions/0184-native-full-gpu-ask.md)
+  (V233/T154; not implemented or reviewed). User decisions 19 November: ask as soon as two
+  capacity reads agree the MIG is full and a full B200 is free (no queue-time threshold),
+  preferably before the POST; a queued MIG is cancelled and proven never started first; Retry
+  returns to the MIG; hidden in MVP v2. Read-only live evidence is permitted once implemented;
+  cancelling a queued job or a paid full-GPU test each need separate approval.
+
+- [x] **Post-MVP branch README simplification and uninstall guide.** The short main guide
+  links focused install/review/export/provider/storage/development guides retaining unique detail.
+  Install pins, copy mode, shortcuts, uninstall and retained data/credentials remain explicit.
+  Local outgoing and incoming README links pass; this is not a new published release.
+
+- [x] **MVP v2 preview readiness — resumed 12 November (T139/T140).** Finish the local-folder
+  guide and isolated Windows installation/removal probe, modestly enlarge transcript/editor
+  text and run a focused immutable candidate gate under the actual MVP profile. Preserve
+  draft, caret, selection, overlay wrapping, playback and existing review/export/recovery.
+  The assembled candidate qualifies 56 unique MVP browser passes, eight native recovery
+  passes and 23 backend/launcher passes, retaining original failures and scoped remedies.
+  Two fixture expectations were corrected and a one-line post-alignment Follow fix keeps
+  words visible after a short-window resize. **MVP v2 preview 1** is loaded using the
+  existing development environment after preservation checks, without a user reinstall or
+  public-main/release change. The user's overnight batch remains in the same library with
+  exact stored allocation/parameters; Activity offers explicit Retry to reconnect it.
+  Follow-up font feedback is implemented: passage/editor 15 px, passage actions 12 px with
+  24 px minimum height, sidebar text 13 px/headings 14 px. An independently reviewed 23-case
+  MVP browser gate covers wrapping, action bounds, sidebar, playback, caret/undo and speakers;
+  it overlaps earlier coverage and is not added to its distinct total.
+  [Verification and limits](docs/verification-2026-11-12-mvp-v2-preview.md).
+  [Preview plan and UCloud scheduling findings](docs/work-plans/mvp-v2-preview-2026-11-12.md).
+
+- [x] **Preview feedback refinements — 12 November (T140/T142).** Balance passage text at
+  15 px, enlarge passage actions and Recording details/Speakers, move first-use connection
+  setup into a separate dialog and highlight genuinely missing UCloud/HF credentials. Keep
+  typing/focus/undo, responsive wrapping, existing-key retention, pending-save and late-reply
+  fences. Independent review passed: 39 fresh MVP/9 fresh full-profile cases, with explicit
+  unaffected-case qualification and original failures retained. Verified bytes are served on
+  preview ports 8765/8766 without restarting the app or refreshing a user tab.
 
 - [ ] **Post-MVP explanatory-text review.** Review feature-description and information boxes
   across the app; shorten long text, remove repetition and use plain, action-focused wording.
   Keep essential instructions, consequences and recovery guidance clear; move secondary detail
   to help where useful. Review the proposed copy for non-technical users before applying it.
+  Three reviewed boxes (Library, preparation, concurrency) are shortened on the branch;
+  broader wording/frontend choices await colleague feedback.
 
-- [ ] **Post-MVP empty start-page redesign.** When the current library has no projects, show
+- [x] **Post-MVP branch empty start-page change.** When the current library has no projects, show
   just the CBS Transcriber logo/title in the main area. Use the user's
   [supplied CBS logo](docs/design-assets/cbs-logo-white-on-blue.png) as the artwork reference,
   retaining the requested reversed colours: blue artwork/text on the light background.
-  Remove the promotional headings,
-  waveform, feature labels and large blue welcome panel. Keep project creation accessible
-  through the existing navigation. Review the layout before implementation; the existing-
-  project overview is outside this empty-state change.
+  The unchanged official blue vertical SVG supplies that treatment without editing the PNG.
+  Promotional headings, waveform, feature labels and welcome panel are removed. Existing
+  project creation stays accessible at narrow widths too; synthetic browser checks pass.
+  Existing project-overview layout is unchanged; installed MVP remains unchanged.
+
+- [ ] **Deactivate direct OpenAI backend — decided 11 November.** Remove OpenAI-hosted
+  service setup and models from ordinary user choices, and refuse new direct OpenAI
+  transcription requests. Retain the shared OpenAI-compatible client/protocol code, endpoint
+  configuration and relevant tests for a possible future UCloud transcription service using
+  that protocol. Do not delete saved results/history, credentials or configuration evidence.
+  Define existing queued/running work and Retry behavior before activating this change;
+  hiding the UI alone is insufficient. Keep native UCloud Transcriber unchanged and do not
+  activate the separately deferred Custom/UCloud vLLM UI. Morning implementation has component
+  review Go under ADR 0170 and complete assembled synthetic coverage. Activation is still
+  pending. Local raw/chunk finalization and accepted-request drain
+  remain available, while missing-part requests refuse without new direct service calls.
+
+- [ ] **First-launch front-page connection setup — requested 11 November.** Let a first-time
+  user enter the UCloud API key and an optional Hugging Face access token directly on the
+  front page. Reuse the existing Settings validation and secure credential-storage flow;
+  keep credentials editable later in Settings. This is first-use onboarding, not a prompt
+  on every empty project/library. UCloud-only setup starts no preparation. The later explicit
+  HF choice queues access/configured-model preparation in Activity (ADR 0173), without an
+  inline download-capable Check call. Implementation/source review are complete on the
+  isolated morning branch; complete backend coverage and 67 relevant browser cases pass,
+  with no installed update. Activation and real-user acceptance remain open.
+
+- [ ] **HF access and configured-model preparation in Activity.** Explicit nonempty primary
+  HF Save should check access and model terms, then prepare configured local/UCloud assets
+  with cache reuse, Stop, token/plan fences and truthful partial states. Use the existing
+  durable remote owner and a versioned model plan beyond base readiness; do not claim all
+  models ready from a base stamp. Parent task is server-lifetime; remote recovery stays
+  durable. Implemented/source-reviewed under ADR 0173; complete synthetic regression is
+  verified on the branch, with no live preparation/download acceptance. At least
+  one enabled CBS Runtime profile is required for cloud preparation; native flags do not
+  select those weights. No live downloads/jobs are part of development checks.
+
+- [ ] **Stable install-latest entry point.** Morning branch adds a dependency-free bootstrap
+  resolving one approved stable GitHub release's versioned wheel, matching constraints and
+  digests, retaining uv copy mode and project isolation. Mocked installer and complete branch
+  regression pass. Current MVP commands stay available;
+  the stable script URL is not active until separately authorized release publication.
 
 - [ ] **Optional post-MVP idea: branded shortcut icons.** Consider automatically assigning a
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
@@ -533,10 +850,30 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Keep Settings available for setup and preserve saved results, active jobs and recovery
   controls when a provider is unconfigured or temporarily unavailable. Verify fresh installs,
   successful setup and later connection changes with mocked checks; no test transcription.
+  Implemented on the separate branch under ADR 0167; focused backend/browser/restore checks
+  and independent review pass. The full backend inventory is verified; the additional
+  provider browser regression has 25 verified parent cases; the morning changes now have
+  67 distinct qualified browser passes. Real-provider/device acceptance is separate.
 
-- [ ] **AI-assisted analysis and NVivo roadmap (T38/T88b/T88c).** The manual codebook/evidence
-  prototype exists; shared UCloud/OpenAI analysis, researcher-reviewed coding/summaries,
-  topic discovery, aspect sentiment/stance and expanded NVivo exports remain planned.
+- [ ] **Language-focused transcription model catalogue — longer term, added 11 November.**
+  Expand the existing catalogue rather than introduce a parallel list. Cover the languages
+  relevant to CBS users, keeping Danish/English prominent; agree the wider priority list.
+  Record pinned model/runtime, supported task/backend, language evidence, licence/access
+  terms, word timing/speaker capabilities, measured quality, memory, throughput and cost on
+  the app's 1g MIG setup. Separate candidate/sized/tested models and preserve limits for long
+  recordings and batches; parameter count or multilingual branding alone does not prove fit.
+  Keep ordinary model choices simple. Representative quality/MIG tests need separate scope;
+  no model downloads or provider runs are authorized by this roadmap item.
+
+- [ ] **AI-assisted qualitative coding, topic generation/search and NVivo roadmap
+  (T38/T88b/T88c).** Added to the later-release discussion on 12 November: suggest codes for
+  transcript passages, generate candidate topics/themes across selected recordings, and
+  find supporting passages by topic. Status: exploratory, not started; outside the current
+  MVP v2 commitment unless reprioritised. The manual codebook/evidence prototype exists;
+  it does not implement model-driven coding, topic generation or topic search. Agree the
+  workflow, inference provider and researcher review before implementation; preserve source
+  transcripts and distinguish AI suggestions from approved coding. Summaries, aspect
+  sentiment/stance and expanded NVivo exports remain separate planned parts of this roadmap.
   [Roadmap](docs/ai-analysis-nvivo-roadmap.md).
 - [ ] **Automatic second-pass word alignment (T93a).** Explicitly deferred as later fine-tuning;
   do not add a default extra inference pass now.

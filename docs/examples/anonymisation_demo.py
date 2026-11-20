@@ -1,6 +1,6 @@
 """Disposable synthetic design example, not an application anonymisation feature.
 
-No file/library input, persistence, inference, providers or re-identification key. The
+No file/library input, persistence, inference, providers or persisted re-identification key. The
 caller-owned objects below model a trusted source snapshot, not a public input parser.
 """
 
@@ -82,27 +82,45 @@ def suggest(snapshot, known_literals=()):
     )
 
 
-def derive(snapshot, expected_binding, spans, decisions, speaker_labels):
+def derive(snapshot, expected_binding, spans, decisions, speaker_labels, *, entity_labels=None):
     """Construct a private receipt and separate allowlisted text-only derived preview."""
     payload, binding = _verify(snapshot)
     if binding != expected_binding:
         raise ValueError("Source version or Working designation changed.")
     if len(spans) != len(decisions):
         raise ValueError("Every suggestion needs one explicit decision.")
+    entity_labels = {} if entity_labels is None else entity_labels
+    if not isinstance(entity_labels, dict) or any(
+        not isinstance(entity, str)
+        or not entity.strip()
+        or not isinstance(label, str)
+        or not label.strip()
+        for entity, label in entity_labels.items()
+    ):
+        raise ValueError("Review every entity identity and nonempty display label.")
+    if len(set(entity_labels.values())) != len(entity_labels):
+        raise ValueError("Distinct demo entities need distinct reviewed labels.")
     replacements = {}
     for hit, decision in zip(spans, decisions, strict=True):
         if hit != span(snapshot, hit["passage"], hit["start"], hit["end"], hit["category"]):
             raise ValueError("Suggestion does not match the exact source.")
         if decision == {"action": "keep"}:
             continue
-        if (
-            set(decision) != {"action", "text"}
-            or decision["action"] != "replace"
-            or not isinstance(decision["text"], str)
-            or not decision["text"].strip()
+        if set(decision) == {"action", "entity"} and decision["action"] == "replace":
+            entity = decision["entity"]
+            if not isinstance(entity, str) or entity not in entity_labels:
+                raise ValueError("Choose an explicitly reviewed entity label.")
+            replacement = entity_labels[entity]
+        elif (
+            set(decision) == {"action", "text"}
+            and decision["action"] == "replace"
+            and isinstance(decision["text"], str)
+            and decision["text"].strip()
         ):
-            raise ValueError("Choose explicit Keep or nonempty Replace text.")
-        replacements.setdefault(hit["passage"], []).append((hit, decision["text"]))
+            replacement = decision["text"]
+        else:
+            raise ValueError("Choose explicit Keep or nonempty Replace text/entity.")
+        replacements.setdefault(hit["passage"], []).append((hit, replacement))
     source_voices = list(dict.fromkeys(segment["speaker"] for segment in payload["segments"]))
     if set(speaker_labels) != set(source_voices) or any(
         not isinstance(label, str) or not label.strip() for label in speaker_labels.values()
@@ -137,6 +155,7 @@ def derive(snapshot, expected_binding, spans, decisions, speaker_labels):
                 "spans": spans,
                 "decisions": decisions,
                 "speaker_labels": speaker_labels,
+                "entity_labels": entity_labels,
                 "ruleset": RULESET,
                 "output_sha256": hashlib.sha256(
                     json.dumps(
@@ -150,8 +169,9 @@ def derive(snapshot, expected_binding, spans, decisions, speaker_labels):
     return {"shareable": public, "private_receipt": private}
 
 
-def synthetic_source():
-    text = "🙂 SYNTHETIC_PERSON_ALPHA skrev til demo@example.invalid.\r\nBevar e\u0301 og Ø."
+def synthetic_source(text=None):
+    if text is None:
+        text = "🙂 SYNTHETIC_PERSON_ALPHA skrev til demo@example.invalid.\r\nBevar e\u0301 og Ø."
     payload = {
         "format": "cbs-result-snapshot-v1",
         "segments": [

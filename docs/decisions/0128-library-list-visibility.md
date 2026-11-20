@@ -2,6 +2,12 @@
 
 Proposed 3 November 2026. Extends ADR 0051.
 
+10 November post-MVP branch update: the current Library UI retires the hide/show controls
+and hidden disclosure, displaying all discovered entries without rewriting preferences.
+The API and identity-bound preference behavior below remain for legacy-client compatibility;
+this historical UI description is not a requirement to restore those controls. Permanent
+deletion keeps its separate preview/ownership safeguards (ADR 0144).
+
 The library chooser discovers earlier defaults as well as saved recent paths. A removed
 entry therefore needs an explicit, durable suppression; deleting it from the recent list
 alone would make the next discovery restore it. `hidden-libraries.json` in the app folder

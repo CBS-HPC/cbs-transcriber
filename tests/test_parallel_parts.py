@@ -2,10 +2,11 @@ import threading
 from collections import Counter
 
 import pytest
+from admission_support import COMPATIBLE_API_URL
 
 from cbs_transcriber.jobs import JobQueue
 from cbs_transcriber.media import Cancelled
-from cbs_transcriber.providers import OPENAI_URL, Settings
+from cbs_transcriber.providers import Settings
 
 
 def parallel_job(client, credentials, monkeypatch, parts=3):
@@ -15,12 +16,12 @@ def parallel_job(client, credentials, monkeypatch, parts=3):
     store.execute(
         "UPDATE recordings SET status='ready',duration=2700 WHERE id=?", (recording["id"],)
     )
-    credentials.keys[OPENAI_URL] = "synthetic-key"
+    credentials.keys[COMPATIBLE_API_URL] = "synthetic-key"
     job = store.add_job(
         recording["id"],
         "transcribe",
         {
-            "settings": Settings(concurrent_chunks=2).model_dump(),
+            "settings": Settings(base_url=COMPATIBLE_API_URL, concurrent_chunks=2).model_dump(),
             "revision": 0,
         },
     )

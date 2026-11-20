@@ -2,6 +2,10 @@
 
 - [0128 — Reversible library list visibility](0128-library-list-visibility.md) (proposed)
 - [0144 — Permanent deletion of an inactive library](0144-permanent-library-deletion.md) (proposed)
+- [0176 — Isolated Runtime generation recovery](0176-isolated-runtime-generation-recovery.md) (disabled Stages 1–2 and settled-candidate supersession; activation held)
+- [0177 — Funding-based CPU fallback](0177-funding-based-compute-fallback.md) (agreed; not implemented)
+- [0178 — Bounded project-funding observations](0178-bounded-project-funding-observation.md) (implemented, unwired; cross-platform wake-up amended 19 November)
+- [0184 — Ask before a full GPU when no native 1g MIG is free](0184-native-full-gpu-ask.md) (proposed design with the user's decisions; not implemented, no live evidence)
 
 Accepted architecture decisions. New decisions get the next number; supersede an old
 record explicitly rather than rewriting its historical rationale.
@@ -169,5 +173,20 @@ record explicitly rather than rewriting its historical rationale.
 - [0164 — Reuse host canonical JSON facts with fresh byte bindings](0164-host-canonical-json-facts.md)
 - [0165 — Share live hint requests and repaint decorations](0165-hint-request-and-paint-reuse.md)
 - [0166 — Keep manual wording and splitting independent of word timing](0166-timing-independent-manual-editing.md)
+- [0167 — Checked connections for new transcription](0167-checked-provider-new-work.md)
+- [0168 — Release only the acquired preparation lock](0168-owned-preparation-lock-release.md)
+- [0169 — Versioned source alignment-fit hint invalidation](0169-versioned-timing-hint-invalidation.md)
+- [0170 — Deactivate direct OpenAI while retaining compatible transport](0170-deactivate-direct-openai-service.md)
+- [0171 — First-use UCloud and optional Hugging Face setup](0171-first-use-credential-setup.md)
+- [0172 — Runtime stamp proof and retained-lock preflight](0172-runtime-readiness-and-preparation-preflight.md)
+- [0173 — HF access and configured-model preparation in Activity](0173-huggingface-background-preparation.md)
+- [0174 — Native startup reconnection](0174-native-startup-reconnection.md)
+- [0175 — Runtime preparation observation recovery](0175-runtime-preparation-observation-recovery.md)
+- [0179 — Existing sole-result Working on schema 19](0179-existing-working-schema19.md) (design Go; unimplemented)
+- [0180 — Undo last change by exact predecessor restoration](0180-undo-last-change.md) (slice 1 implemented; hidden in the MVP profile)
+- [0181 — History change list and Revert this change](0181-history-change-list.md) (slice 2 implemented; hidden in the MVP profile)
+- [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; hidden in the MVP profile)
+- [0183 — Native batch early uploads, limits and plain status](0183-native-batch-early-uploads-limits-status.md)
+- [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

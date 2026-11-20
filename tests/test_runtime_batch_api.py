@@ -82,6 +82,16 @@ def add_profile(store, credentials, model, *, provider_type="ucloud", applicatio
         (identifier, model, settings.model_dump_json(), now()),
     )
     credentials.set(providers.credential_scope(settings), "synthetic-not-a-real-key", False)
+    # This API fixture configures an explicitly checked synthetic connection. Preserve
+    # its raw profile/frozen defaults; only save the server-issued operational receipt.
+    from cbs_transcriber import provider_connection
+
+    checks = provider_connection.Checks()
+    proof = checks.issue(
+        settings, "synthetic-not-a-real-key", checks.begin(settings), models=[settings.model]
+    )
+    with store.connection() as db:
+        checks.save(db, proof, settings, "synthetic-not-a-real-key")
     return providers.profile(store, identifier)
 
 

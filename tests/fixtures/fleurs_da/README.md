@@ -57,6 +57,6 @@ References: [WER metric](https://huggingface.co/spaces/evaluate-metric/wer/blob/
 
 ## Running
 
-See the [evaluation instructions](../../../README.md#reference-evaluation) for offline
+See the [evaluation instructions](../../../docs/development.md#reference-evaluation) for offline
 scoring and opt-in transcription through the running app. Automated tests mock model output;
 passing them establishes pipeline correctness, not measured recognition accuracy.

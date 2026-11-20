@@ -19,7 +19,9 @@ from cbs_transcriber import providers
 def bash_executable():
     candidates = [shutil.which("bash")]
     if os.name == "nt":
-        candidates.append(str(Path.home() / "AppData/Local/Programs/Git/bin/bash.exe"))
+        # The real home: conftest gives Path.home() a temporary folder (B459).
+        home = Path(os.path.expanduser("~"))
+        candidates.append(str(home / "AppData/Local/Programs/Git/bin/bash.exe"))
         candidates.append("C:/Program Files/Git/bin/bash.exe")
     return next(
         (
@@ -102,12 +104,11 @@ def test_preparation_rechecks_stamp_after_claim_and_preserves_lock_inode(bash, t
     execute(
         bash,
         tmp_path,
-        functions(script)
+        functions(script).replace("take_lock() {", "take_lock_without_stamp() {", 1)
         + """
 flock() { return 0; }
 take_lock() {
-  mkdir "$LOCK" || return 1
-  HOLDING_LOCK=1
+  take_lock_without_stamp || return 1
   printf '%s' '{"requirements_sha256":"DIGEST"}' > "$RT/stamp.json"
 }
 install_runtime() { touch "$RUN/destructive-install"; }
@@ -159,6 +160,71 @@ prepare
     )
     assert (lock / "owner").read_text(encoding="utf-8") == "other-generation"
     assert not (run / "destructive-install").exists()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        'printf foreign > "$LOCK/owner"',
+        'mv "$LOCK/owner" "$RUN/previous-owner"; printf "%s\\n" "$GENERATION" > "$LOCK/owner"',
+        'mv "$LOCK" "$RUN/previous-lock"; mkdir "$LOCK"; '
+        'printf "%s\\n" "$GENERATION" > "$LOCK/owner"',
+        'mv "$LOCK" "$RUN/previous-lock"; ln -s "$RUN/previous-lock" "$LOCK"',
+        'mv "$LOCK/owner" "$RUN/previous-owner"; ln -s "$RUN/previous-owner" "$LOCK/owner"',
+        'printf evidence > "$LOCK/unexpected"',
+        'mkdir "$LOCK/.unexpected"',
+        'rm "$LOCK/owner"',
+    ],
+    ids=[
+        "owner-bytes-changed",
+        "owner-marker-replaced",
+        "directory-replaced",
+        "directory-symlink",
+        "owner-symlink",
+        "extra-file",
+        "extra-hidden-directory",
+        "owner-missing",
+    ],
+)
+def test_lock_release_preserves_changed_or_unverified_ownership(bash, tmp_path, change):
+    if os.name == "nt" and "ln -s" in change:
+        pytest.skip("Git Bash may emulate symlinks; native link checks require Linux.")
+    script, runtime, run = generated(tmp_path)
+    execute(
+        bash,
+        tmp_path,
+        functions(script)
+        + """
+take_lock || exit 1
+CHANGE
+release_lock
+[ -d "$LOCK" ] || exit 1
+[ "$HOLDING_LOCK" = 0 ] || exit 1
+""".replace("CHANGE", change),
+    )
+    assert (runtime / ".prepare-lock").is_dir()
+    if "unexpected" in change:
+        assert (runtime / ".prepare-lock/owner").read_text(encoding="utf-8") == "synthetic\n"
+    assert not (run / "destructive-install").exists()
+
+
+def test_lock_release_removes_only_its_unchanged_owner_once(bash, tmp_path):
+    script, runtime, _ = generated(tmp_path)
+    execute(
+        bash,
+        tmp_path,
+        functions(script)
+        + """
+take_lock || exit 1
+release_lock
+[ ! -e "$LOCK" ] || exit 1
+mkdir "$LOCK" || exit 1
+printf foreign > "$LOCK/owner"
+release_lock
+[ -d "$LOCK" ] || exit 1
+""",
+    )
+    assert (runtime / ".prepare-lock/owner").read_text(encoding="utf-8") == "foreign"
 
 
 def test_standalone_preparation_reports_busy_without_touching_unowned_lock(bash, tmp_path):

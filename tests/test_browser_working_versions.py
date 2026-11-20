@@ -1,5 +1,7 @@
 """Explicit Working versions survive review switches, drafts and historical restoration."""
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
@@ -59,6 +61,13 @@ def test_current_working_action_is_compact_aligned_and_keyboard_accessible(page,
     page.locator("#working-version-apply").click()
     expect(page.locator("#working-version-dialog")).to_be_hidden()
     expect(page.locator("#working-version-status")).to_contain_text("Working transcript: Reviewed")
+    # The Working result is a suffix tag in the list; the sentence stays for tooltip/screen readers.
+    expect(page.locator("#result-select option:checked")).to_contain_text("· Working")
+    expect(page.locator("#result-select option:checked")).not_to_contain_text("version")
+    expect(page.locator("#working-version-status")).to_have_class("field-note sr-only")
+    expect(page.locator("#result-select")).to_have_attribute(
+        "title", re.compile("^Working transcript: Reviewed")
+    )
     assert store.recording(rid)["result_roles"]["working"]["version_id"] == version["id"]
     assert store.recording(rid)["active_transcript_id"] == result["id"]
 
@@ -109,6 +118,8 @@ def test_mark_historical_working_version_leaves_review_and_notes_draft_unchanged
     page.locator("#passage-0 [data-action='save-edit']").click()
     expect(page.locator("#passage-0 .passage-text")).to_have_text("Another later edit.")
     expect(page.locator("#working-version-status")).to_contain_text("Version 1")
+    # An older Working version of this result names its version in the tag.
+    expect(page.locator("#result-select option:checked")).to_contain_text("· Working (version 1)")
 
 
 def test_mark_current_preview_detects_concurrent_role_choice(page, local_app):

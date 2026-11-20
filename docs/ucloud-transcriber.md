@@ -8,6 +8,19 @@ documentation is CC BY 4.0. No other project's `.env` is read.
 
 ## Configure
 
+For resource planning, see [Aarhus University's Transcriber guide](https://interactivehpc.au.dk/en/about-interactive-hpc/applications/translate-to-english-transcriber)
+and our [CPU/GPU measurements and limits](evaluations/whisperx-cpu-gpu-speed-2026-11-12.md).
+The AU measurement concerns native Transcriber; it does not establish every CBS Runtime
+model's CPU speed or memory needs.
+
+**Agreed MVP v2 compute rule — not implemented in the current preview:** use 1g MIG when
+the selected project has usable, sufficient GPU hours, including waiting in its queue.
+Fallback to `cpu-amd-zen5-8-vcpu` only for absent/exhausted or demonstrably insufficient GPU
+funding, with usable CPU funding and a compatible model. The user applies this rule to both
+native Transcriber and CBS Runtime. Busy/full hardware or an unknown quota check is not
+evidence of missing GPU resources. Freeze each accepted job's choice across retry/restart;
+full-run affordability estimates and Runtime CPU preparation still need implementation/proof.
+
 1. Open Settings → **UCloud**. Enter your API token and choose
    **Connect UCloud**, or simply Save. The server defaults to `https://cloud.sdu.dk`.
 2. The app discovers resource-enabled projects, Transcriber Batch, funded compatible GPUs
@@ -66,12 +79,23 @@ they do not allocate compute or upload research recordings.
 
 Select the recordings, Provider **UCloud** and the desired **(Transcriber)** model. Compatible
 members of one selection share a unique `cbs-batch-<batch-id>` folder and one native allocation,
-with separate local results. Different model/connection selections remain separate. The immutable
-originals are uploaded, then the native job starts. Upload negotiation supports WebSocket V2 and legacy chunked HTTP.
+with separate local results. Different model/connection selections remain separate. Each
+immutable original is uploaded as soon as its own original inspection passes; the native job is
+submitted once every selected file is uploaded or excluded. A file whose inspection fails is
+excluded with its own reason and is never uploaded (ADR 0183). Upload negotiation supports WebSocket V2 and legacy chunked HTTP.
 The uploaded file's reported size is checked before submission. Session tokens/URLs are
 transient, and control-plane credentials are never forwarded to transfer endpoints.
 
-Activity shows native state and **Open UCloud job**. One unambiguous original JSON output is
+**Settings → UCloud → Advanced settings** sets **Files uploaded at once per batch** (1–8,
+default 4; upload speed depends on your network, not this computer's processors) and **UCloud
+Transcriber batches at once** (1–4, default 2; a single-file run counts as one). Both save on
+change. Running batches continue with the limits they started with.
+
+Activity shows plain progress, for example "Waiting in UCloud's queue for a GPU · 12 min" (time
+since this app first saw the queued state), "Transcribing on UCloud · 5 of 12 files reported
+done · last log 14:05" and the number of transcripts actually saved. Log notes are observations
+only: "reported done" is not a saved transcript. Each file is listed with its stage, including
+files still being inspected and excluded files, and **Open UCloud job**. One unambiguous original JSON output is
 downloaded after success, preserved locally and normalized through the existing importer.
 Word timing and speaker labels are available when the returned JSON supplies them. Existing
 reviewed results and their active selection are preserved.
@@ -108,7 +132,7 @@ reviewed results and their active selection are preserved.
   [verified on 28 October](verification-2026-10-28-native-recovery.md), preserving earlier research
   versions. This does not validate every UCloud project/application version.
 
-Independent selections may run concurrently. Within one native selection, the application
+Independent selections may run concurrently, up to **UCloud Transcriber batches at once**. Within one native selection, the application
 processes the shared input set; the local app does not impose native part parallelism.
 
 The app does not require an HF token for this native provider: model access and diarization

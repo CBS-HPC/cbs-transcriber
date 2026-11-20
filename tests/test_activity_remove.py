@@ -222,17 +222,16 @@ def test_unresolved_native_selection_stays_in_activity(client, lease, credential
     # The sibling still waits for its allocation decision, so the request stays visible.
     for job in accepted:
         assert hide(client, job["id"]).status_code == 409
+    assert client.get("/api/activity").json()["hidden"] == {}
     intent = store.job(accepted[0]["id"])["params"]["input_intent"]
     input_admission.cancel(store, accepted[0]["id"], epoch=intent["epoch"], phase=intent["phase"])
-    # Both files are terminal, but the admission worker has not resolved the selection yet.
-    assert {row["job_id"] for row in input_admission.obligations(store)} == {
-        job["id"] for job in accepted
-    }
-    for job in accepted:
-        response = hide(client, job["id"])
-        assert response.status_code == 409
-        assert "selection" in response.json()["detail"]
-    assert client.get("/api/activity").json()["hidden"] == {}
+    # The transaction that ends the last file settles an early selection (ADR 0183): with no
+    # admitted file there is no owner, and the request may now leave Activity as one card.
+    assert input_admission.obligations(store) == []
+    assert not store.all("SELECT id FROM native_batch_runs")
+    response = hide(client, accepted[0]["id"])
+    assert response.status_code == 200, response.text
+    assert set(response.json()["hidden"]) == {job["id"] for job in accepted}
 
 
 def test_needs_confirmation_request_hides_every_file_together(

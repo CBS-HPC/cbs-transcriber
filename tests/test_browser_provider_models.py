@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from admission_support import checked_connection
 from playwright.sync_api import expect
 from test_browser import create_project, import_recording
 from test_browser import local_app as local_app
@@ -42,6 +43,7 @@ def test_v78_provider_and_model_controls_cover_bulk_and_editor_with_notes_only_c
         remember=False,
         enabled_models=[model["model"] for model in ucloud_models()],
     )
+    checked_connection(app.state.store, app.state.credentials, configured["id"])
     native = [
         p
         for p in app.state.store.all("SELECT * FROM providers")
@@ -57,9 +59,9 @@ def test_v78_provider_and_model_controls_cover_bulk_and_editor_with_notes_only_c
     page.on("dialog", lambda dialog: dialog.accept())
     page.goto(local_app.url)
     create_project(page, "Provider models")
-    expect(page.locator("#bulk-provider-kind")).to_contain_text("OpenAI")
+    expect(page.locator("#bulk-provider-kind option[value=openai]")).to_have_count(0)
     expect(page.locator("#bulk-provider-kind")).to_contain_text("UCloud")
-    expect(page.locator("#bulk-provider")).to_contain_text("gpt-transcribe")
+    expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
     page.locator("#bulk-provider-kind").select_option("ucloud")
     expect(page.locator("#bulk-provider option")).to_have_count(UCLOUD_MODELS)
     page.locator("#bulk-provider").select_option(ids["small"])
@@ -86,8 +88,7 @@ def test_v78_provider_and_model_controls_cover_bulk_and_editor_with_notes_only_c
     page.screenshot(path="test-results/recording-cards-notes-only.png")
     card.locator("[data-open]").click()
     expect(page.locator("#file-provider")).to_have_value(ids["medium"])
-    page.locator("#file-provider-kind").select_option("openai")
-    expect(page.locator("#file-provider option")).to_have_count(1)
+    expect(page.locator("#file-provider-kind option[value=openai]")).to_have_count(0)
     page.locator("#file-provider-kind").select_option("ucloud")
     page.locator("#file-provider").select_option(ids["base"])
     page.locator("#back-library").click()
@@ -120,8 +121,11 @@ def test_v78_protected_model_choices_keep_explicit_denials(page, local_app):
                 "product": {"id": "gpu-nvidia-b200-1-gpu", "category": "gpu", "provider": "ucloud"},
             },
         ),
+        api_key="synthetic-protected-native-key",
+        remember=False,
         enabled_models=[model["model"] for model in ucloud_models()],
     )
+    checked_connection(app.state.store, app.state.credentials, native["id"])
     denied = next(
         row
         for row in app.state.store.all("SELECT * FROM providers")

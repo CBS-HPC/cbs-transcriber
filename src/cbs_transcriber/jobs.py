@@ -686,6 +686,10 @@ class JobQueue:
         self.workers = [self]
         self.coordinator = self
         self.control_job_ids = set()
+        from .store import new_id
+
+        self.native_lifecycle = new_id()
+        self.native_reconnect = {}
         self.runtime_preparation_gate = threading.BoundedSemaphore(2)
         self.runtime_transfer_gate = threading.BoundedSemaphore(2)
         # Coordinator-owned claim state (ADR 0146), read and written under the claim lock.
@@ -706,6 +710,8 @@ class JobQueue:
                 local_concurrency.LANES[lane][0]: count
                 for lane, count in local_concurrency.effective(concurrency).items()
             }
+            # Settings → UCloud "batches at once" gates native claims the same way (ADR 0183).
+            self.lane_limits["transcribe-native"] = local_concurrency.native_saved(store).batches
             maximum = {kind: limit for kind, limit in local_concurrency.LANES.values()}
             self.workers.extend(
                 JobQueue(store, credentials, kind=worker_kind, lock=self.lock)
@@ -745,7 +751,15 @@ class JobQueue:
                     input_admission.recover(self.store, job_ids=[row["id"]])
             except (ValueError, KeyError):
                 pass  # Preserve invalid proof; do not strand healthy siblings behind it.
-        self.store.recover_jobs()
+        try:
+            # Early native selections settle when their last file has an outcome; settle
+            # any that an earlier version left with only terminal files (ADR 0183).
+            input_admission.settle(self.store)
+        except (ValueError, KeyError, sqlite3.Error):
+            pass
+        self.native_reconnect.update(
+            self.store.recover_jobs(native_startup_lifecycle=self.native_lifecycle)
+        )
         from . import runtime_preparation
 
         runtime_preparation.recover(self.store)
@@ -836,6 +850,21 @@ class JobQueue:
     def lane_limit_settings(self):
         limits = self.coordinator.lane_limits
         return {lane: limits.get(kind) for lane, (kind, _) in local_concurrency.LANES.items()}
+
+    def set_native_batch_limit(self, batches):
+        """Apply Settings → UCloud "batches at once" to new native claims (ADR 0183).
+
+        Running native batches and single-file runs continue when the limit is lowered."""
+        coordinator = self.coordinator
+        if type(batches) is not int or not 1 <= batches <= local_concurrency.NATIVE_WORKERS:
+            raise ValueError("Choose between one and four UCloud Transcriber batches at once.")
+        with coordinator.lock:
+            coordinator.lane_limits["transcribe-native"] = batches
+        coordinator.notify()
+        return batches
+
+    def native_batch_limit(self):
+        return self.coordinator.lane_limits.get("transcribe-native")
 
     def _claimed(self):
         return bool(self.active_id or self.active_batch_id or self.active_ids)
@@ -986,12 +1015,12 @@ class JobQueue:
                         child_id = children[0]["id"]
                         if allowed is not None and child_id not in allowed:
                             raise ValueError("Cancellation scope changed to include a follow-up.")
-                for worker in self.coordinator.workers:
-                    if worker.active_id == identifier or identifier in worker.active_ids:
-                        worker.cancel_event.set()
                 job = self.store.request_job_cancellation(identifier)
                 if job["state"] == "completed":
                     return None
+                for worker in self.coordinator.workers:
+                    if worker.active_id == identifier or identifier in worker.active_ids:
+                        worker.cancel_event.set()
         if runtime_id:
             from .runtime_batches import cancel
 
@@ -1316,6 +1345,26 @@ class JobQueue:
         if "input_intent" in job["params"]:
             raise ValueError("Input preparation must finish before a producer can run.")
         recording = self.store.recording(job["recording_id"])
+        from . import native_startup
+
+        reconnect = native_startup.authority(self, job)
+        if reconnect is not None:
+            native_startup.guard(self.store, reconnect)
+            settings = providers.Settings.model_validate(job["params"]["settings"])
+            providers.require_approval(
+                self.store, recording["project_id"], job["params"].get("provider_id"), settings
+            )
+            key = self.credentials.get(providers.credential_scope(settings))
+            providers.require_key(settings, key)
+            if job["params"].get("native_batch_id"):
+                from .native_batch import run_batch
+
+                run_batch(self, job, reconnect=reconnect)
+            else:
+                from .ucloud_native import run_transcription
+
+                run_transcription(self, job, recording, settings, key, reconnect=reconnect)
+            return
         directory = self.store.directory(recording["id"])
         if job["kind"] == "media":
             self.store.update_job(identifier, message="Preparing browser playback…", progress=0.1)

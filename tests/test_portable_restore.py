@@ -76,6 +76,59 @@ def test_complete_new_library_preserves_original_and_archives_jobs(package, tmp_
     assert hashlib.sha256(source.read_bytes()).hexdigest() == result["source_database_sha256"]
 
 
+def test_connection_receipt_is_preserved_as_source_without_restoring_readiness(
+    package, client, credentials, tmp_path
+):
+    from cbs_transcriber import provider_connection, providers
+
+    source = package[1]
+    profile = providers.profile(source, providers.default_provider_id(source))
+    settings = providers.Settings(
+        provider_type="custom",
+        base_url="https://compatible.invalid/v1",
+        model="synthetic-checked-model",
+        capability="json",
+    )
+    key = "synthetic-checked-provider"
+    credentials.keys[providers.credential_scope(settings)] = key
+    checks = provider_connection.Checks()
+    token = checks.issue(settings, key, checks.begin(settings), models=[settings.model])
+    providers.save_profile(
+        source,
+        credentials,
+        profile["name"],
+        settings,
+        identifier=profile["id"],
+        connection_check=token,
+        connection_checks=checks,
+    )
+    assert providers.public_profile(source, credentials, profile["id"])["connection_ready"]
+    with source.library_lock():
+        saved = capture.capture_library(
+            source,
+            client.app.state.queue,
+            tmp_path / "checked-packages",
+            gate=capture.CaptureGate(),
+        )
+    target = destination(tmp_path, "unchecked-restore")
+    result = restore.restore_library(
+        saved["folder"],
+        expected_commit_sha256=saved["commit_sha256"],
+        target=target,
+        live_root=source.root,
+    )
+    assert result["state"] == "complete"
+    preservation = target / "preservation" / result["operation_id"] / "source.sqlite3"
+    with sqlite3.connect(preservation) as db:
+        assert db.execute("SELECT value FROM settings WHERE id=10").fetchone() is not None
+    restored = Store(target)
+    assert restored.all("SELECT value FROM settings WHERE id=10") == []
+    assert not any(
+        profile["connection_ready"]
+        for profile in providers.public_profiles(restored, credentials)["providers"]
+    )
+
+
 @pytest.mark.parametrize("old_version", [13, 14, 15, 16])
 def test_old_schema_restore_initializes_language_inheritance_without_changing_source(
     tmp_path, monkeypatch, wav_bytes, old_version

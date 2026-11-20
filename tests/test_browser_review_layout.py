@@ -100,6 +100,11 @@ def assert_review_header_edges(page, comparison=False):
     toolbar = page.locator(".editor-actions").bounding_box()
     assert search["x"] >= toolbar["x"] - 1
     assert search["x"] + search["width"] <= toolbar["x"] + toolbar["width"] + 1
+    # With room on its row the search ends where the transcript panel ends (user request 20
+    # Nov); a row already wider than the panel keeps the default width and never wraps more.
+    grown = page.locator("#transcript-search").evaluate("input => input.style.width")
+    right, panel_right = search["x"] + search["width"], panel["x"] + panel["width"]
+    assert abs(right - panel_right) < 2 if grown else right >= panel_right - 2
     assert abs(versions["x"] + versions["width"] - panel["x"] - panel["width"]) < 2
     assert abs(versions["y"] - compare["y"]) < 2
     assert abs(versions["height"] - compare["height"]) < 2
@@ -174,8 +179,12 @@ def test_review_controls_below_title_and_comparison_tracks_live_results(page, lo
     expect(page.locator("#save-status")).to_be_visible()
     expect(page.locator("#save-status")).to_have_text("Unsaved changes")
     page.locator("#passage-1 [data-action=save-edit]").click()
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(page.locator("#save-status")).to_have_attribute("data-quiet", "true")
+    expect(page.locator("#save-status")).to_have_text(
+        "Passage saved. Some words have no verified timing after this edit. "
+        "Only identifiable existing words retain their timing."
+    )
+    expect(page.locator("#save-status")).to_have_attribute("data-quiet", "false")
+    assert store.recording(rid)["segments"][1]["text"] == "Reviewed synthetic passage."
     expect(page.locator("#compare-result")).to_be_disabled()
     for width in (1711, 1600, 1440, 1100):
         page.set_viewport_size({"width": width, "height": 900})

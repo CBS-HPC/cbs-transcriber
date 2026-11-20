@@ -394,9 +394,14 @@ def test_monitor_rate_limits_and_persists_sanitized_historical_notes_without_com
         fields = native_batch.status_fields(store, store.job(jobs[0]["id"]))
         assert all(member["state"] == "running" for member in fields["ucloud_batch_members"])
         notes = {member["job_id"]: member["message"] for member in fields["ucloud_batch_members"]}
-        assert "Log reported: processing finished" in notes[members[0]["job_id"]]
-        assert "Log reported: processing started" in notes[members[1]["job_id"]]
-        assert "Last log: model loading reported" in fields["ucloud_batch_message"]
+        assert "UCloud log: finished" in notes[members[0]["job_id"]]
+        assert "transcript not saved yet" in notes[members[0]["job_id"]]
+        assert "UCloud log: started" in notes[members[1]["job_id"]]
+        # V229: plain batch sentence, counts from the log are "reported", never "saved".
+        message = fields["ucloud_batch_message"]
+        assert message.startswith("Transcribing on UCloud · 1 of 2 files reported done")
+        assert "last log " in message and "saved" not in message
+        assert "model loading" not in message and "timezone" not in message
         assert SECRET not in json.dumps(fields) and "duration:" not in json.dumps(fields)
         assert not any(store.results(recording["id"]) for recording in recordings)
         clock[0] += seconds
@@ -437,7 +442,7 @@ def test_historical_note_projection_preserves_specific_messages_and_validated_co
         member for member in fields["ucloud_batch_members"] if member["job_id"] == jobs[0]["id"]
     ]
     assert member["message"].startswith("Keep this specific recovery message")
-    assert ("Log reported:" in member["message"]) == (state != "completed")
+    assert ("UCloud log: started" in member["message"]) == (state != "completed")
     assert SECRET not in json.dumps(fields)
     assert store.job(jobs[0]["id"])["message"] == "Keep this specific recovery message"
 

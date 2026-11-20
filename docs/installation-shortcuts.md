@@ -1,84 +1,95 @@
-# Optional launchers for wheel and source installations
+# Shortcuts for local, tool and source installations
 
-After [installing the app](../README.md#install-and-start-windows-and-macos), create a Desktop
-launcher with the same command in **Windows PowerShell** or **macOS Terminal**:
+The recommended post-MVP local layout is `<user home>/CBS Transcriber/App/.venv`.
+[Fresh installation](installation.md) creates a Desktop launcher after package installation
+and the module help check. It exits before starting the server. Creation is explicit;
+ordinary startup does not create another shortcut.
+
+To create or retry only the shortcut, use the exact installed Python from any folder.
+
+Windows PowerShell:
+
+```powershell
+& "$env:USERPROFILE\CBS Transcriber\App\.venv\Scripts\python.exe" -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp
+```
+
+macOS Terminal:
+
+```bash
+"$HOME/CBS Transcriber/App/.venv/bin/python" -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp
+```
+
+Windows creates **CBS Transcriber.lnk** in the system's current-user Desktop folder,
+including a redirected/localised OneDrive Desktop. macOS creates
+`~/Desktop/CBS Transcriber.command`. A synced shortcut does not install the environment
+on another computer; its destination belongs to this installation.
+
+Omit `--shortcut-location desktop` for the Windows Start menu Programs folder or
+`~/Applications` on Mac. Both current launchers use system-default icons; custom CBS icons
+remain an optional, unimplemented idea.
+
+## What opening the shortcut does
+
+The launcher uses this environment's Python with `-m cbs_transcriber`, its installation
+working folder and saved options. It does not call the global `cbs-transcriber.exe` or
+run uv synchronization. No activation, dependency installation or model download occurs
+merely from opening it. Normal app behavior and its port/library checks still apply.
+
+The app normally opens a browser at http://127.0.0.1:8765. Keep the terminal open;
+**Ctrl+C** stops it. A launcher neither reuses nor stops an already-running app copy.
+
+The shortcut remains bound to this installation. Recreate it after moving/replacing an
+environment; recreate virtual environments rather than copying them to a new path or PC.
+Existing same-name files and symlinks are refused. Check the old destination, remove only
+the intended `.lnk`/`.command` file and retry creation. Removing the shortcut does not remove
+the app or research data. See [uninstall choices](uninstall.md).
+
+## Saved options
+
+Creation retains `--profile`, `--port`, `--no-browser`, `--choose-library`, `--data-dir` and
+`--projects-dir`. Add them to the creation command, for example `--port 8766 --no-browser`.
+Explicit data/project paths become absolute when the shortcut is created. Credentials and
+current environment-variable values are not copied into it; normal app defaults apply
+when no data path is provided.
+
+## Existing uv-tool or source installs
+
+For a uv-tool installation whose console command runs, its existing explicit command is:
 
 ```text
 cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp
 ```
 
-Windows creates `CBS Transcriber.lnk` on your Desktop; macOS creates
-`~/Desktop/CBS Transcriber.command`. Creation exits without starting another app instance.
-Omit `--shortcut-location desktop` for the default destinations listed below.
+If that `.exe` command is denied on Windows, first diagnose the tool's actual interpreter
+without reinstalling:
 
-For a developer/source installation, run this from its installed app folder instead:
-
-```text
-uv run --locked cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp
+```powershell
+$appPython = Join-Path (uv tool dir) 'cbs-transcriber\Scripts\python.exe'
+& $appPython -m cbs_transcriber --help
 ```
 
-This explicit action creates one launcher for the current user, then exits without opening a
-library or starting a server. Installation and ordinary startup never create launchers.
+Only if the interpreter/module check succeeds, use that exact `$appPython` with the shortcut
+arguments above. The existing shortcut function validates the installed distribution and
+interpreter for either wheel-environment layout. Success does not establish CBS policy
+approval or prove all dependencies work.
 
-| Platform | Default destination | Launcher |
-| --- | --- | --- |
-| Windows x64 | Your Start menu's Programs folder | `CBS Transcriber.lnk` |
-| Apple Silicon/macOS 14+ or Intel Mac | `~/Applications` | `CBS Transcriber.command` |
-
-For a Start menu or home Applications launcher instead, run:
+For an already installed developer/source checkout, use its separate locked workflow:
 
 ```text
-cbs-transcriber --create-shortcut --profile mvp
+uv run --locked python -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp
 ```
 
-Windows resolves the system's current-user folder, including redirected/localised Desktop
-folders; macOS uses `~/Desktop`. Managed computers may restrict PowerShell, Windows Script Host
-or script execution. Ask CBS IT if creation or launch is blocked; this flow does not change
-computer policy.
+## Permissions and verification limits
 
-Version 0.1.0 leaves the launcher's icon at the system default; it does not automatically
-assign a CBS icon. Automatic branded icons are an optional post-MVP investigation, with no
-commitment to implement them. The shortcut command above works with the current default icon.
+Managed PCs may restrict Python, PowerShell, Windows Script Host, executables or scripts.
+If creation or launch is blocked, retain the exact error/target/time and ask CBS IT or the
+maintainer. This guide changes no security policy and does not establish that relocating
+an environment solves Access denied.
 
-Open the Windows launcher from Start or Desktop. On macOS, open `CBS Transcriber.command`
-from your home Applications folder or Desktop in Terminal. Keep the terminal open;
-**Ctrl+C** stops the app. Normal port/library-lock checks still apply: a launcher neither
-reuses nor stops an already-running app.
+Windows uses [WSH COM shortcuts](https://learn.microsoft.com/en-us/powershell/scripting/samples/creating-.net-and-com-objects--new-object-).
+Mac uses an executable shell script opened in Terminal; see [Apple's Terminal guide](https://support.apple.com/en-lamr/guide/terminal/apdd100908f-06b3-4e63-8a87-32e71241bab4/mac).
+Neither is a signed installer, notarized Mac `.app`, automatic updater or system service.
 
-The launcher binds this installation's Python interpreter and starts
-`python -m cbs_transcriber` directly. A wheel/tool installation is checked against its actual
-installed distribution; a source installation must retain its source folder and `.venv`.
-Clicking performs no uv dependency synchronization or model download. Moving/removing the
-installed environment breaks its launcher, so recreate after moving/replacing an installation.
-
-Supported saved options are `--profile`, `--port`, `--no-browser`, `--choose-library`,
-`--data-dir` and `--projects-dir`. For example:
-
-```text
-cbs-transcriber --create-shortcut --profile mvp --port 8766 --no-browser
-```
-
-Explicit data/project paths become absolute at creation. Provider settings, credentials and
-current environment-variable values are not copied into the launcher. Without explicit
-paths, the app's normal library/project defaults apply.
-
-An existing same-name file or symlink is refused. To recreate or remove a launcher, delete
-only the named `.lnk` or `.command` file. Your installation, libraries, projects and recordings
-remain. Uninstall a uv tool separately with `uv tool uninstall cbs-transcriber` after stopping
-it; remove the obsolete launcher too.
-
-This is a per-user launcher, not a signed/notarized macOS `.app`, packaged installer, automatic
-updater or system service. Real clean-device Windows/Mac relaunch acceptance remains pending.
-Intel Mac launchers do not add unsupported local inference or Apple GPU execution.
-
-The Windows mechanism follows Microsoft's
-[WSH COM shortcut documentation](https://learn.microsoft.com/en-us/powershell/scripting/samples/creating-.net-and-com-objects--new-object-).
-The macOS launcher is an executable shell script; see Apple's
-[Terminal guide](https://support.apple.com/en-lamr/guide/terminal/apdd100908f-06b3-4e63-8a87-32e71241bab4/mac).
-
-The original source-launcher verification on 30 October 2026 passed 58 focused synthetic/mock
-checks. On 10 November, 37 focused source/tool/launcher/profile checks and independent review
-passed. A fresh isolated installed wheel created a real Windows COM shortcut in its disposable
-tool folder: interpreter, arguments/MVP profile, working folder and no-overwrite behavior were
-verified. No actual Desktop/Start menu shortcut was created or clicked. Native Mac execution
-and real clean-device/launcher relaunch acceptance remain unverified.
+Earlier source/tool unit checks and a disposable Windows COM-shortcut creation passed;
+actual Desktop/Start-menu click acceptance, native Mac launch and the new local-folder
+workflow remain separate real-device checks. See [the release evidence](verification-2026-11-10-mvp-release.md).

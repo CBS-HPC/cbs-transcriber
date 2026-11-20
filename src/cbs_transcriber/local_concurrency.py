@@ -3,7 +3,11 @@
 Each lane starts a fixed number of worker threads (its maximum). A lane limit only gates *new*
 claims under the shared claim lock, so lowering it never stops running work and raising it takes
 effect at the next claim. Unset values follow this computer's CPU count. Local WhisperX, UCloud
-enhancement, native UCloud Transcriber and CBS Runtime lanes keep their own fixed limits.
+enhancement and CBS Runtime lanes keep their own fixed limits.
+
+Native UCloud Transcriber has two separate Settings → UCloud limits (ADR 0183): how many of its
+batches (or single-file runs) this app runs at once, gated like the lanes above, and how many
+files one batch uploads at once, read when the batch starts and kept for that run.
 """
 
 import json
@@ -19,8 +23,14 @@ LANES = {
     "admission": ("input-admission", 4),
     "api": ("transcribe-api", 8),
 }
-# Native UCloud Transcriber jobs keep the two concurrent allocations they always had.
-NATIVE_WORKERS = 2
+# Native UCloud Transcriber: the lane starts its maximum number of batch workers; the saved
+# "batches at once" limit gates new claims (ADR 0183). Upload speed depends on the network, not
+# this computer's processors, so neither limit follows the CPU count.
+# 9 local concurrency; 10 checked providers; 11 runtime generations; 12/13 spelling (ADR 0185).
+NATIVE_SETTING = 14
+NATIVE_WORKERS = 4
+NATIVE_UPLOADS_MAX = 8
+NATIVE_DEFAULTS = {"uploads": 4, "batches": 2}
 
 
 class LocalConcurrency(BaseModel):
@@ -102,4 +112,59 @@ def status(store, queue=None):
         "active": queue.lane_limit_settings() if queue is not None else None,
         "maximum": {lane: maximum for lane, (_, maximum) in LANES.items()},
         "logical_cpus": os.cpu_count(),
+    }
+
+
+class NativeLimits(BaseModel):
+    """Settings → UCloud: Transcriber batches at once and files uploaded at once per batch."""
+
+    model_config = ConfigDict(extra="forbid")
+    uploads: int = Field(
+        default=NATIVE_DEFAULTS["uploads"], strict=True, ge=1, le=NATIVE_UPLOADS_MAX
+    )
+    batches: int = Field(default=NATIVE_DEFAULTS["batches"], strict=True, ge=1, le=NATIVE_WORKERS)
+
+
+def _read_native(db):
+    row = db.execute("SELECT value FROM settings WHERE id=?", (NATIVE_SETTING,)).fetchone()
+    if row is None:
+        return NativeLimits()
+    try:
+        return NativeLimits.model_validate_json(row[0])
+    except (ValidationError, ValueError):
+        # Only throughput depends on this row: an unreadable value falls back to the defaults.
+        return NativeLimits()
+
+
+def native_saved(store):
+    if store is None:
+        return NativeLimits()
+    with store.connection() as db:
+        return _read_native(db)
+
+
+def native_save(store, edit):
+    """Replace only the fields the client sent (a PUT body is a NativeLimits), atomically.
+
+    The caller holds the claim lock, so the applied batch limit always matches the saved row."""
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        current = _read_native(db).model_dump()
+        current.update({field: getattr(edit, field) for field in edit.model_fields_set})
+        value = NativeLimits.model_validate(current)
+        db.execute(
+            "INSERT INTO settings(id,value) VALUES (?,?) "
+            "ON CONFLICT(id) DO UPDATE SET value=excluded.value",
+            (NATIVE_SETTING, json.dumps(value.model_dump(), sort_keys=True)),
+        )
+    return value
+
+
+def native_status(store, queue=None):
+    value = native_saved(store)
+    return {
+        **value.model_dump(),
+        "defaults": dict(NATIVE_DEFAULTS),
+        "maximum": {"uploads": NATIVE_UPLOADS_MAX, "batches": NATIVE_WORKERS},
+        "active_batches": queue.native_batch_limit() if queue is not None else None,
     }

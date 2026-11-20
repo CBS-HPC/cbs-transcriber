@@ -36,7 +36,7 @@ from . import (
     deletions,
     enhancement_api,
     enhancement_cloud,
-    huggingface_access,
+    huggingface_tasks,
     input_admission,
     language_preferences,
     libraries,
@@ -44,6 +44,7 @@ from . import (
     local_concurrency,
     original_inspection,
     portable_routes,
+    provider_connection,
     release_profile,
     remote_jobs,
     remote_release,
@@ -116,6 +117,7 @@ from .providers import (
     require_approval,
     require_enabled,
     require_key,
+    require_service_available,
     save_native_allocation,
     save_native_language,
     save_profile,
@@ -664,6 +666,7 @@ class ProviderEdit(Settings):
     remember: bool = True
     ucloud_token: str | None = Field(default=None, max_length=4096)
     hf_token: str | None = Field(default=None, max_length=4096)
+    connection_check: str | None = Field(default=None, max_length=100)
     # Public template/invalid state may be echoed by generic profile clients; it is not a choice.
     native_allocation_choice: Literal["full", "mig1g", "template", "invalid"] | None = None
 
@@ -855,7 +858,13 @@ def clean_name(value):
 
 
 def create_app(
-    data_dir=None, *, start_worker=True, credentials=None, project_parent=None, release=None
+    data_dir=None,
+    *,
+    start_worker=True,
+    credentials=None,
+    project_parent=None,
+    release=None,
+    spelling_cache_dir=None,
 ):
     # An unknown profile refuses startup before the library is opened (ADR 0145).
     release = release_profile.resolve(release)
@@ -865,9 +874,46 @@ def create_app(
     if project_parent:
         store.default_parent = Path(project_parent)
     credentials = credentials or Credentials()
+    connection_checks = provider_connection.Checks()
     queue = JobQueue(store, credentials)
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
+    from .spelling import SpellingService, default_cache_dir
+
+    # Constructing the service creates no storage and starts no worker (ADR 0185).
+    spelling_service = SpellingService(store, spelling_cache_dir or default_cache_dir())
+
+    def hf_cloud_plan():
+        if not release.enabled("cbs_runtime"):
+            return {"status": "disabled"}
+        return runtime_preparation.huggingface_plan(store, credentials)
+
+    def hf_cloud_request(plan, guard):
+        release.require("cbs_runtime")
+        result = runtime_preparation.request_huggingface(store, credentials, plan, guard)
+        queue.notify()
+        return result
+
+    hf_manager = huggingface_tasks.HuggingFaceTasks(
+        store,
+        credentials,
+        start_worker=start_worker,
+        acquire_file_lease=not start_worker,
+        freeze_cloud_plan=hf_cloud_plan,
+        request_cloud=hf_cloud_request,
+        cloud_status=lambda identifier: runtime_preparation.card(
+            runtime_preparation.get(store, identifier)
+        ),
+        cancel_cloud=lambda identifier: runtime_preparation.cancel(store, credentials, identifier),
+    )
+
+    @contextmanager
+    def background_exclusive():
+        # Short admission inhibitors are acquired before queue/snapshot ownership; their
+        # worker drains never run while those locks are held.
+        with hf_manager.exclusive(), export_manager.exclusive():
+            yield
+
     processing_started = False
     profiles_initialized = False
     initialization_lock = threading.Lock()
@@ -912,9 +958,19 @@ def create_app(
             finally:
                 cleanup_error = None
                 try:
-                    export_manager.close()
+                    hf_manager.close()
                 except BaseException as cleanup:
                     cleanup_error = cleanup
+                try:
+                    export_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
+                try:
+                    spelling_service.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
                 try:
                     if processing_started:
                         queue.stop()
@@ -928,12 +984,21 @@ def create_app(
 
     app = FastAPI(title="CBS Transcriber", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.queue, app.state.credentials = store, queue, credentials
-    from . import passage_restore_routes, passage_review_routes
+    from . import (
+        change_undo_routes,
+        passage_restore_routes,
+        passage_review_routes,
+        spelling_routes,
+    )
 
     passage_review_routes.install(app, store)
     passage_restore_routes.install(app, store)
+    change_undo_routes.install(app, store)
+    spelling_routes.install(app, spelling_service, release)
+    app.state.spelling = spelling_service
     app.state.deletions = deletion_requests
     app.state.export_tasks = export_manager
+    app.state.huggingface_tasks = hf_manager
     app.state.profile = release
     # The launcher sets this to restart the server on another library (ADR 0051).
     app.state.switch_library = None
@@ -953,12 +1018,12 @@ def create_app(
         queue,
         credentials,
         mutation_allowed=local_mutation_allowed,
-        capture_guard=export_manager.exclusive,
+        capture_guard=background_exclusive,
     )
 
     @contextmanager
     def export_safe_staging():
-        with export_manager.exclusive(), app.state.portable_capture_gate.promote_mutation():
+        with background_exclusive(), app.state.portable_capture_gate.promote_mutation():
             yield
 
     deletion_requests.staging = export_safe_staging
@@ -1002,6 +1067,7 @@ def create_app(
     def require_runtime_idle(*, project_id=None, recording_ids=None):
         deletion_requests.require_files_idle()
         export_manager.require_idle(project_id=project_id, recording_ids=recording_ids)
+        hf_manager.require_idle()
         try:
             if (
                 project_id is None
@@ -1030,6 +1096,10 @@ def create_app(
 
     @app.exception_handler(ExportConflict)
     async def export_conflict(request, exc):
+        return JSONResponse({"detail": str(exc)}, 409)
+
+    @app.exception_handler(huggingface_tasks.Conflict)
+    async def hf_setup_conflict(request, exc):
         return JSONResponse({"detail": str(exc)}, 409)
 
     @app.exception_handler(input_admission.AdmissionConflict)
@@ -1165,7 +1235,7 @@ def create_app(
         target = libraries.select(body.path, create=body.create, schema=SCHEMA_VERSION)
         if target.path == store.root:
             raise ValueError("This library is already open.")
-        with export_manager.exclusive(), queue.lock:
+        with background_exclusive(), queue.lock:
             # Restarting stops local workers; never interrupt queued or running work silently.
             require_runtime_idle()
             if operational_rows(
@@ -1176,6 +1246,7 @@ def create_app(
                 )
             app.state.switch_library(target)
             export_manager.stop_admission()
+            hf_manager.stop_admission()
         return {"library": str(target.path)}
 
     # Verified local backups (ADR 0061); step 1 towards keeping copies on UCloud.
@@ -1276,7 +1347,7 @@ def create_app(
     def move_project_storage(identifier: str, body: ProjectStorage):
         from .storage import relocate_project
 
-        with export_manager.exclusive(), queue.lock, store.snapshot_lock:
+        with background_exclusive(), queue.lock, store.snapshot_lock:
             store.one("SELECT id FROM projects WHERE id=?", (identifier,))
             if body.expected_storage_path is not None and (
                 str(store.project_folder(identifier)) != body.expected_storage_path
@@ -1486,6 +1557,11 @@ def create_app(
         if body.provider_id:
             selected = profile(store, body.provider_id)
             require_enabled(Settings.model_validate(selected["settings"]))
+            settings = Settings.model_validate(selected["settings"])
+            with store.connection() as db:
+                provider_connection.require_ready(
+                    db, settings, credentials.get(credential_scope(settings))
+                )
             require_approval(
                 store,
                 current["project_id"],
@@ -1658,7 +1734,16 @@ def create_app(
             "action",
             "actor_kind",
         }
-        return [{key: value for key, value in row.items() if key in fields} for row in rows]
+        from .change_list import list_context
+
+        # Bounded allowlisted change metadata only; never text, reasons or receipts (ADR 0181).
+        return [
+            {
+                **{key: value for key, value in row.items() if key in fields},
+                "change": list_context(row["action"], row["context"]),
+            }
+            for row in rows
+        ]
 
     @app.get("/api/recordings/{identifier}/transcripts/{result_id}/versions/{version_id}")
     def transcript_version(identifier: str, result_id: str, version_id: str):
@@ -2335,7 +2420,12 @@ def create_app(
         from . import passage_undo
 
         try:
-            return passage_undo.options(store, identifier, result_id)
+            return passage_undo.options(
+                store,
+                identifier,
+                result_id,
+                steps=app.state.profile.enabled("undo_last_change"),
+            )
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
 
@@ -2649,18 +2739,70 @@ def create_app(
     @app.post("/api/providers/check-models")
     def available_models(body: ProviderEdit):
         settings = Settings.model_validate(body.model_dump())
-        key = body.api_key if body.api_key else credentials.get(settings.base_url)
-        return check_models(settings, key)
+        require_service_available(settings)
+        key = body.api_key if body.api_key is not None else credentials.get(settings.base_url)
+        attempt = connection_checks.begin(settings)
+        observed = provider_connection.observation(store, settings)
+        try:
+            result = check_models(settings, key)
+        except ValueError:
+            if connection_checks.current(attempt):
+                provider_connection.failed(
+                    store,
+                    credentials,
+                    settings,
+                    key,
+                    observed,
+                    generation=(connection_checks.session, attempt[1]),
+                )
+            raise
+        listed = [model["id"] for model in result["models"] if model["listed"]]
+        if result.get("selected_model_listed"):
+            listed.append(settings.model)
+        return result | {
+            "connection_check": connection_checks.issue(settings, key, attempt, models=listed)
+        }
 
     @app.post("/api/providers/check-ucloud")
     def check_ucloud(body: ProviderEdit):
         from .ucloud_native import check_setup
 
         settings = Settings.model_validate(body.model_dump())
+        require_service_available(settings)
         if settings.provider_type != "ucloud":
             raise ValueError("Choose the UCloud Transcriber provider.")
-        key = body.api_key or credentials.get(credential_scope(settings))
-        return check_setup(settings, key)
+        key = (
+            body.api_key
+            if body.api_key is not None
+            else credentials.get(credential_scope(settings))
+        )
+        attempt = connection_checks.begin(settings)
+        observed = provider_connection.observation(store, settings)
+        try:
+            result = check_setup(settings, key)
+        except ValueError:
+            if connection_checks.current(attempt):
+                provider_connection.failed(
+                    store,
+                    credentials,
+                    settings,
+                    key,
+                    observed,
+                    generation=(connection_checks.session, attempt[1]),
+                )
+            raise
+        if result["ready"]:
+            result["connection_check"] = connection_checks.issue(settings, key, attempt)
+        elif connection_checks.current(attempt):
+            provider_connection.failed(
+                store,
+                credentials,
+                settings,
+                key,
+                observed,
+                generation=(connection_checks.session, attempt[1]),
+            )
+        return result
 
     @app.get("/api/providers/catalog")
     def model_catalog():
@@ -2678,20 +2820,54 @@ def create_app(
         settings = fresh_native_settings(
             Settings.model_validate(body.model_dump(exclude_unset=True))
         )
+        require_service_available(settings)
         if settings.provider_type != "ucloud":
             raise ValueError("Choose the UCloud Transcriber provider.")
-        key = body.api_key or credentials.get(credential_scope(settings))
+        key = (
+            body.api_key
+            if body.api_key is not None
+            else credentials.get(credential_scope(settings))
+        )
         requested = body.native_allocation_choice
         if requested not in (None, "full", "mig1g"):
             raise ValueError("Choose full B200 or native 1g MIG for discovery.")
         target = COMPUTE_ID if requested == "full" else MIG_PRODUCT["id"]
-        return discover(
-            settings,
-            key,
-            compute_id=None
-            if settings.ucloud_transcriber.template_job_id and requested is None
-            else target,
-        )
+        attempt = connection_checks.begin(settings)
+        observed = provider_connection.observation(store, settings)
+        try:
+            result = discover(
+                settings,
+                key,
+                compute_id=None
+                if settings.ucloud_transcriber.template_job_id and requested is None
+                else target,
+            )
+        except ValueError:
+            if connection_checks.current(attempt):
+                provider_connection.failed(
+                    store,
+                    credentials,
+                    settings,
+                    key,
+                    observed,
+                    generation=(connection_checks.session, attempt[1]),
+                )
+            raise
+        if result["ready"]:
+            checked = Settings.model_validate(
+                {**settings.model_dump(), "ucloud_transcriber": result["setup"]}
+            )
+            result["connection_check"] = connection_checks.issue(checked, key, attempt)
+        elif connection_checks.current(attempt):
+            provider_connection.failed(
+                store,
+                credentials,
+                settings,
+                key,
+                observed,
+                generation=(connection_checks.session, attempt[1]),
+            )
+        return result
 
     @app.post("/api/providers", status_code=201)
     def create_provider(body: ProviderConfig):
@@ -2717,15 +2893,19 @@ def create_app(
                 ucloud_token=body.ucloud_token,
                 hf_token=body.hf_token,
                 native_allocation_choice=body.native_allocation_choice,
+                connection_check=body.connection_check,
+                connection_checks=connection_checks,
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/providers/default")
     def choose_default_provider(body: ProviderChoice):
         if not body.provider_id:
             raise ValueError("Choose a configured provider.")
-        set_default_provider(store, body.provider_id)
+        set_default_provider(store, body.provider_id, credentials)
         return public_profiles(store, credentials)
 
     @app.put("/api/providers/{identifier}")
@@ -2747,13 +2927,20 @@ def create_app(
                 expected_version=body.expected_version,
                 ucloud_token=body.ucloud_token,
                 hf_token=body.hf_token,
+                connection_check=body.connection_check,
+                connection_checks=connection_checks,
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.delete("/api/providers/{identifier}")
     def remove_provider(identifier: str):
-        delete_profile(store, identifier)
+        try:
+            delete_profile(store, identifier)
+        finally:
+            hf_manager.invalidate()
         return public_profiles(store, credentials)
 
     @app.put("/api/providers/{identifier}/runtime-language")
@@ -2764,6 +2951,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/providers/{identifier}/native-allocation")
     def native_allocation(identifier: str, body: NativeAllocationChoice):
@@ -2773,6 +2962,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/providers/{identifier}/native-language")
     def native_language(identifier: str, body: NativeLanguageChoice):
@@ -2782,6 +2973,8 @@ def create_app(
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     @app.put("/api/settings")
     def update_settings(body: ProviderEdit):
@@ -2796,9 +2989,13 @@ def create_app(
                 expected_version=body.expected_version,
                 ucloud_token=body.ucloud_token,
                 hf_token=body.hf_token,
+                connection_check=body.connection_check,
+                connection_checks=connection_checks,
             )
         except StaleProvider as exc:
             raise HTTPException(409, str(exc)) from None
+        finally:
+            hf_manager.invalidate()
 
     def conflicting_job(recording_id, provider_id, settings, *, original=False):
         active = store.all(
@@ -2831,6 +3028,10 @@ def create_app(
             release.require_provider(settings.provider_type, runtime=bool(whisperx_model(settings)))
             require_enabled(settings)
             require_key(settings, credentials.get(credential_scope(settings)))
+            with store.connection() as db:
+                provider_connection.require_ready(
+                    db, settings, credentials.get(credential_scope(settings))
+                )
             if settings.provider_type == "ucloud" and not whisperx_model(settings):
                 from .ucloud_native import require_compute
 
@@ -2899,7 +3100,7 @@ def create_app(
         if consent is None:
             items = consented_items(items, plans, item, saved)
         with queue.lock:
-            jobs = input_admission.accept(store, items)
+            jobs = input_admission.accept(store, items, credentials=credentials)
         queue.notify()
         return jobs
 
@@ -2923,44 +3124,36 @@ def create_app(
             for current, plan, decision in zip(items, plans, decisions, strict=True)
         ]
 
-    hf_receipts = {}
-
     @app.get("/api/huggingface-settings")
     def huggingface_settings():
-        token = credentials.get(HF_SCOPE)
-        receipt = hf_receipts.get(
-            huggingface_access.token_fingerprint(token), huggingface_access.token_state(token)
-        )
-        # Offline: whether verified speaker files are on this computer right now. A failed
-        # check keeps its reason until the files are there.
-        local = enhancement_api.local_speaker_status()
-        if local["speaker_model_local"] == "verified" or "speaker_model_local" not in receipt:
-            return receipt | local
-        return receipt
+        # Read the current in-memory receipt; polling never scans/downloads model caches.
+        return hf_manager.status()
 
     @app.put("/api/huggingface-settings")
     def update_huggingface_settings(body: HuggingFaceToken):
-        if body.hf_token is not None:
-            token = body.hf_token.strip()
-            if any(c.isspace() or ord(c) < 32 for c in token):
-                raise ValueError("Use a Hugging Face access token without spaces or line breaks.")
-            credentials.set(HF_SCOPE, token, body.remember)
-        return huggingface_settings()
+        result = hf_manager.save(body.hf_token, body.remember)
+        return JSONResponse(
+            result, status_code=202 if body.hf_token and body.hf_token.strip() else 200
+        )
 
-    @app.post("/api/huggingface-settings/check")
+    @app.post("/api/huggingface-settings/check", status_code=202)
     def check_huggingface_settings(body: HuggingFaceToken):
-        token = body.hf_token.strip() if body.hf_token else credentials.get(HF_SCOPE)
-        result = huggingface_access.check_token(token)
-        # The check also prepares the speaker model here (ADR 0057): with access granted it is
-        # downloaded once, retried on transient errors and verified file by file.
-        allowed = result["token_status"] == "valid" and result["speaker_model_access"] == "allowed"
-        result |= enhancement_api.local_speaker_status(token if allowed else None)
-        # This is only a last-check receipt, not lasting authorization for inference.
-        # Credential changes cannot reuse a previous token's successful check.
-        hf_receipts[huggingface_access.token_fingerprint(token)] = result
-        while len(hf_receipts) > 8:
-            hf_receipts.pop(next(iter(hf_receipts)))
-        return result
+        return hf_manager.check(body.hf_token)
+
+    @app.post("/api/huggingface-tasks/{identifier}/cancel")
+    def cancel_huggingface_setup(
+        identifier: Annotated[str, PathParameter(pattern=r"^[a-f0-9]{32}$")],
+    ):
+        result = hf_manager.cancel(identifier)
+        return JSONResponse(
+            result, status_code=202 if result["state"] in {"queued", "running"} else 200
+        )
+
+    @app.post("/api/huggingface-tasks/{identifier}/retry", status_code=202)
+    def retry_huggingface_setup(
+        identifier: Annotated[str, PathParameter(pattern=r"^[a-f0-9]{32}$")],
+    ):
+        return hf_manager.retry(identifier)
 
     @app.get("/api/enhancement-settings")
     def enhancement_settings():
@@ -2970,10 +3163,15 @@ def create_app(
 
     @app.put("/api/enhancement-settings")
     def update_enhancement_settings(body: LocalSettingsEdit):
-        if body.hf_token is not None:
-            credentials.set(HF_SCOPE, body.hf_token, body.remember)
-        preserve = set(ProcessingSettings.model_fields) - body.model_fields_set
-        save_local_settings(store, body, preserve_fields=preserve)
+        try:
+            if body.hf_token is not None:
+                credentials.set(HF_SCOPE, body.hf_token, body.remember)
+            preserve = set(ProcessingSettings.model_fields) - body.model_fields_set
+            save_local_settings(store, body, preserve_fields=preserve)
+        finally:
+            # Legacy aliases never start setup; partial credential writes must still
+            # invalidate superseded work. Plan guards also run at every worker boundary.
+            hf_manager.invalidate()
         return enhancement_settings()
 
     @app.post("/api/enhancement-runtime/check")
@@ -2993,6 +3191,21 @@ def create_app(
         with queue.lock:
             queue.set_lane_limits(local_concurrency.save(store, body))
         return local_concurrency.status(store, queue)
+
+    @app.get("/api/native-batches/settings")
+    def native_batch_settings():
+        """Settings → UCloud: Transcriber batches at once and uploads per batch (ADR 0183)."""
+        return local_concurrency.native_status(store, queue)
+
+    @app.put("/api/native-batches/settings")
+    def update_native_batch_settings(body: local_concurrency.NativeLimits):
+        # Omitted fields keep their saved value. New native claims follow the batch limit at
+        # once and lowering it never stops running work; a running batch keeps the upload
+        # limit it started with. The claim lock orders saves with the applied limit.
+        with queue.lock:
+            saved = local_concurrency.native_save(store, body)
+            queue.set_native_batch_limit(saved.batches)
+        return local_concurrency.native_status(store, queue)
 
     @app.get("/api/local-runtime")
     def local_runtime():
@@ -3605,6 +3818,7 @@ def create_app(
             + retained
             + deletion_requests.file_activity()
             + export_manager.activity()
+            + hf_manager.activity()
         )
 
     @app.post("/api/local-deletions/{identifier}/retry")
@@ -3884,12 +4098,15 @@ def create_app(
                 store.execute(
                     "UPDATE recordings SET status='preparing' WHERE id=?", (current["id"],)
                 )
-            store.update_job(
-                identifier,
-                state="queued",
-                message="Queued for retry",
-                params=job["params"],
-            )
+            from . import native_startup
+
+            if not native_startup.explicit_retry(queue, job):
+                store.update_job(
+                    identifier,
+                    state="queued",
+                    message="Queued for retry",
+                    params=job["params"],
+                )
         queue.notify()
         return {"ok": True}
 

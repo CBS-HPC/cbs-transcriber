@@ -16,6 +16,7 @@ import sqlite3
 import stat
 import sys
 import types
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -28,8 +29,8 @@ PAYLOAD_SHA256 = "7fc37c490bcf1fe0268299f383b9a4951cf1ae351631fd6c5b17ce4cd54656
 ARTIFACTS_SHA256 = "8bccd9ecb0b4b971af7d20c1b33b349c09ff1729e43f7d99ef7b98e40fe810eb"
 CAPTURE_SHA256 = "e383f827430b3af7d19d91561dc675c04b25a87c709573cb9281cd2b4e02d9fe"
 INVENTORY_SHA256 = "fe60f40479739e10ef232d59d81bc897e497d30314eeaccc70f574f392516b73"
-TRANSCRIPTS_SHA256 = "dcfb95696694c42667d8d1f68618866cb8931a346044e2f572d062297d85845b"
-TIMING_SHA256 = "928f6c22a74d5a1287ddab381ef7b1b874a1df69053bb2f5de21d1e05baa0d2c"
+TRANSCRIPTS_SHA256 = "a40875a15031263ddad17446a3332673987dcb9c34f0ff3875fe73e9e656abce"
+TIMING_SHA256 = "f5b680bc30cb74573fbf1e16f77b34514cdd6b4446a705ada19f71cd7c6e173d"
 RUNTIME_SHA256 = "3ffdee5c209f5ea8188cd2a23a1793334c255f359ded8f96a9ec270f422b16e8"
 NATIVE_SHA256 = "480368001624167d89fc8d1577430305e4a4b89b5e5db911ee956885da8d89e6"
 PROVIDER_SHA256 = "c67c2469f32db5e2187d43945c02b29a3d1e80940ffaee1141fcaac1b85915e9"
@@ -223,6 +224,72 @@ def integer(value, *, minimum=0):
 def identifier(value):
     if type(value) is not str or re.fullmatch(r"[a-f0-9]{32}", value) is None:
         fail()
+
+
+SPELLING_VOCABULARY = 13  # Private spelling words (ADR 0185); row 12 preferences stay stripped.
+
+
+def _spelling_vocabulary(semantic):
+    """Retain only bounded private data, never operational spelling preferences."""
+    if semantic.one(f"SELECT id FROM settings WHERE id={SPELLING_VOCABULARY}") is None:
+        return None
+    raw = semantic.text("settings", "value", "id", SPELLING_VOCABULARY, maximum=4 * 1024**2)
+    value = semantic.json(raw)
+    if (
+        type(value) is not dict
+        or set(value) != {"schema", "personal", "projects"}
+        or type(value["schema"]) is not int
+        or value["schema"] != 1
+        or type(value["projects"]) is not dict
+        or len(value["projects"]) > 1024
+    ):
+        fail()
+
+    def scope(item):
+        semantic.guard()
+        if (
+            type(item) is not dict
+            or set(item) != {"revision", "words"}
+            or type(item["revision"]) is not int
+            or not 0 <= item["revision"] < 2**63
+            or type(item["words"]) is not list
+            or len(item["words"]) > 5000
+        ):
+            fail()
+        seen = set()
+        for word in item["words"]:
+            semantic.guard()
+            if type(word) is not str or not 1 <= len(word) <= 128:
+                fail()
+            try:
+                word.encode("utf-8")
+            except UnicodeEncodeError:
+                fail()
+            for index, char in enumerate(word):
+                category = unicodedata.category(char)[0]
+                if category in {"L", "M"}:
+                    if index == 0 and category != "L":
+                        fail()
+                elif (
+                    char not in {"'", "’", "-", "‐", "‑"}
+                    or index == 0
+                    or index + 1 == len(word)
+                    or unicodedata.category(word[index - 1])[0] not in {"L", "M"}
+                    or unicodedata.category(word[index + 1])[0] != "L"
+                ):
+                    fail()
+            key = unicodedata.normalize("NFC", word).casefold()
+            if key in seen:
+                fail()
+            seen.add(key)
+
+    scope(value["personal"])
+    for project_id, words in value["projects"].items():
+        identifier(project_id)
+        if semantic.one("SELECT id FROM projects WHERE id=?", (project_id,)) is None:
+            fail()
+        scope(words)
+    return SPELLING_VOCABULARY, raw
 
 
 def _parent(path):
@@ -506,7 +573,11 @@ def prepare_working(
                 source_db, name, structure["tables"][name], codec, guard, transform
             )
         codec.LIMITS.update(rows=1_000_000, total_bytes=8 * 1024**3)
-        value = codec.digest_table("settings", [(2, default_settings)], guard=guard)
+        settings_rows = [(2, default_settings)]
+        spelling = _spelling_vocabulary(semantic)
+        if spelling is not None:
+            settings_rows.append(spelling)
+        value = codec.digest_table("settings", settings_rows, guard=guard)
         expected["settings"] = {key: value[key] for key in ("rows", "sha256")}
         if first is None:
             row = (default_id, "Unconfigured", safe_provider, request["manifest"]["created_at"])
@@ -525,7 +596,7 @@ def prepare_working(
         # including malformed caches. Immutable source DB, old jobs and receipts stay exact.
         target_db.execute("UPDATE recordings SET status='preparing',original_input=NULL")
         target_db.execute("DELETE FROM settings")
-        target_db.execute("INSERT INTO settings VALUES (?,?)", (2, default_settings))
+        target_db.executemany("INSERT INTO settings VALUES (?,?)", settings_rows)
         target_db.execute("UPDATE runtime_preparations SET archived=1")
         owners = set()
         owner_rows = sum(
@@ -1077,6 +1148,10 @@ class Semantics:
             fail()
         params = self.json(self.text("jobs", "params", "id", job_id))
         job = {"id": job_id, "recording_id": recording_id, "kind": owner[1], "params": params}
+        if "timing_apply_policy" in params and original.get(
+            "timing_apply_policy"
+        ) != self.timing.apply_policy(params):
+            fail()
         try:
             references = self.timing.historical_references(evidence, job)
             required = self.timing.inventory(evidence, job, creation=reference)
@@ -1094,9 +1169,7 @@ class Semantics:
             fail()
         if (
             params["realign_apply_receipt"].get("input_sha256")
-            != hashlib.sha256(
-                canonical({"source": params["source_snapshot"], "output": params["realign_output"]})
-            ).hexdigest()
+            != hashlib.sha256(canonical(self.timing.input_binding(params))).hexdigest()
         ):
             fail()
         source = self.json(
@@ -1198,6 +1271,17 @@ class Semantics:
 
     def job_receipts(self):
         safe = "CASE WHEN json_valid(params) THEN params ELSE 'null' END"
+        for (job_id,) in self.rows(
+            f"SELECT id FROM jobs WHERE json_type({safe},'$.timing_apply_policy') IS NOT NULL"
+        ):
+            row = self.one("SELECT policy FROM working_job_authorities WHERE job_id=?", (job_id,))
+            if row is None or row[0] != "timing":
+                fail()
+            seal = self.json(
+                self.text("working_job_authorities", "role_json", "job_id", job_id, maximum=4096)
+            )
+            if type(seal) is not dict or seal.get("format") != "cbs-timing-job-authority-v2":
+                fail()
         for job_id, recording_id in self.rows(
             f"SELECT id,recording_id FROM jobs WHERE json_type({safe},"
             f"'$.provider_artifact_policy') IS NOT NULL OR json_type({safe},"
@@ -1862,11 +1946,24 @@ class Semantics:
             if job is None or job[0] != recording_id or policy not in {"result", "timing"}:
                 fail()
             raw = self.text("working_job_authorities", "role_json", "job_id", job_id, maximum=4096)
-            role = self.json(raw)
+            sealed = self.json(raw)
+            apply_policy = None
+            if type(sealed) is dict and "format" in sealed:
+                if (
+                    policy != "timing"
+                    or set(sealed) != {"format", "role", "timing_apply_policy"}
+                    or sealed["format"] != "cbs-timing-job-authority-v2"
+                    or sealed["timing_apply_policy"] != "invalidate-source-alignment-fit-v1"
+                ):
+                    fail()
+                apply_policy = sealed["timing_apply_policy"]
+                role = sealed["role"]
+            else:
+                role = sealed
             if type(role) is not dict or set(role) != {"revision", "working"}:
                 fail()
             integer(role["revision"])
-            if role["revision"] >= 2**63 or canonical(role).decode("utf-8") != raw:
+            if role["revision"] >= 2**63 or canonical(sealed).decode("utf-8") != raw:
                 fail()
             working = role["working"]
             if role["revision"] == 0:
@@ -1907,6 +2004,10 @@ class Semantics:
                     fail()
             params = self.json(self.text("jobs", "params", "id", job_id))
             if type(params) is not dict:
+                fail()
+            if ("timing_apply_policy" in params) != (apply_policy is not None) or params.get(
+                "timing_apply_policy"
+            ) != apply_policy:
                 fail()
             intent, acceptance = params.get("input_intent"), params.get("input_acceptance")
             if intent is not None and acceptance is not None:

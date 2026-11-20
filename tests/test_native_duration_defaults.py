@@ -94,7 +94,10 @@ def test_runtime_profile_creation_and_discovery_do_not_adopt_native_default(clie
     monkeypatch.setattr(
         ucloud_discovery,
         "discover",
-        lambda settings, key, **kwargs: {"setup": settings.ucloud_transcriber.model_dump()},
+        lambda settings, key, **kwargs: {
+            "ready": True,
+            "setup": settings.ucloud_transcriber.model_dump(),
+        },
     )
     response = client.post("/api/providers/discover-ucloud", json=fresh_payload(runtime=True))
     assert response.status_code == 200 and response.json()["setup"]["hours"] == 4

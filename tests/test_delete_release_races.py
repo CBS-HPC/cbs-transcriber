@@ -109,7 +109,9 @@ def test_native_survivor_retry_imports_without_recreating_deleted_member(
     raw = folder / ("ucloud-" + survivor["job_id"] + ".json")
     raw.write_text(json.dumps(PAYLOAD), encoding="utf-8")
     monkeypatch.setattr(native_batch.native, "client_for", remote_release._native_client)
-    monkeypatch.setattr(native_batch, "_output_paths", lambda *args: [])
+    monkeypatch.setattr(
+        native_batch, "_output_paths", lambda client, folder, *, guard=None, wait=None: []
+    )
     retry = client.post(f"/api/jobs/{survivor['job_id']}/retry", json={"replace": True})
     assert retry.status_code == 200, retry.text
     assert retry.json()["affected_jobs"] == [survivor["job_id"]]

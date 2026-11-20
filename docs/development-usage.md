@@ -106,6 +106,109 @@ this documentation work occurred after publication and are excluded from the MVP
 
 ## Future checkpoints
 
+The post-publication phase is now open on `codex/post-mvp-work`. Its accounting starts strictly
+after the fixed MVP cutoff above and includes later planning/documentation and implementation.
+Its final cutoff/total remain open. A separate reconciled cumulative checkpoint is available
+through **10 November, 16:20:13 UTC / 17:20:13 Copenhagen**; no MVP counters were changed.
+
+| Post-MVP checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 207,954,580 |
+| Cached input, already included above | 205,716,736 |
+| Uncached input | 2,237,844 |
+| Output | 577,236 |
+| Reasoning output, already included above | 273,476 |
+| Total | **208,531,816** |
+
+All included updates are attributed to `gpt-6.1-sol`: 86,456,758 tokens in the main chat and
+122,075,058 across ten contributing subagent sessions. The audit scanned 183 retained project
+sessions, included 1,023 positive updates and excluded six duplicate snapshots in the window.
+Delta/last-update arithmetic and model/role totals reconcile; replay exactly reproduces the
+frozen MVP baseline, and all frozen prefixes/reports remain unchanged. Detailed source hashes,
+usage-only observations and reproduction scripts remain private.
+
+This checkpoint starts strictly after the MVP cutoff. Later/in-flight observations are not
+included. It is cumulative within the still-open post-MVP phase: **do not add it to later
+cumulative checkpoints**. No post-MVP speed/rate assumption, credit equivalent, actual debit,
+cost or Claude usage is claimed; those values stay null/pending rather than zero.
+
+A later checkpoint covers the same phase through **10 November, 17:47:12.528 UTC /
+18:47:12.528 Copenhagen**:
+
+| Later cumulative checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 388,621,484 |
+| Cached input, already included above | 385,519,360 |
+| Uncached input | 3,102,124 |
+| Output | 927,836 |
+| Reasoning output, already included above | 460,521 |
+| Total | **389,549,320** |
+
+This adds **181,017,504 tokens** in the interval after the earlier cutoff; do not add the two
+cumulative totals. All included updates remain `gpt-6.1-sol`: 126,850,656 main-chat tokens and
+262,698,664 subagent tokens, across the same one main/ten contributing subagent sessions.
+There are 1,628 positive updates and nine excluded duplicate snapshots. Independent replay
+matches the earlier checkpoint and fixed MVP baseline exactly; all 183 current source prefixes
+and prior evidence files were rehashed unchanged. The private aggregate SHA-256 is
+`90d7119678b36e3a370afc563d4206eacc99146119d5f0cde5d2632b9ed5a256`.
+Later work, including final verification/documentation, is excluded. This phase stays open;
+billing, rates, speed and Claude usage remain null/pending.
+
+The morning milestone continues the same phase through **11 November, 10:04:07 UTC /
+11:04:07 Copenhagen**, on local `codex/post-mvp-morning` (base `e445376`), with work in
+progress rather than an installed release. Its last included usage event is 10:04:04.859 UTC.
+
+| Morning cumulative checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 666,158,875 |
+| Cached input, already included above | 657,701,120 |
+| Uncached input | 8,457,755 |
+| Output | 1,587,661 |
+| Reasoning output, already included above | 837,961 |
+| Total | **667,746,536** |
+
+The additional interval after the preceding cutoff contains **278,197,216 tokens**; do not
+add the cumulative totals. All included updates remain `gpt-6.1-sol`: 209,742,397 main-chat
+and 458,004,139 subagent tokens, across one main and ten contributing subagent sessions.
+The retained scope remains 183 sessions, with 2,665 positive updates and 16 excluded duplicate
+snapshots in the cumulative window. The new interval has 1,037 positive updates.
+
+Independent read review reproduced the prior checkpoint, fixed MVP baseline and every
+included token/model/role/day total, and checked all 2,665 positive usage events against
+source counters/timestamps and their own-session metadata. The saved verifier rehashed all
+183 current prefixes; the read reviewer checked its hash-bound evidence without repeating
+the full 2.27 GB scan. All prior reports remain unchanged. The new private aggregate SHA-256 is
+`7ee5a8c15a3b8b47f6c7c5be5dbb09e656c77c88bd8ab042b88266811c93825e`.
+Events after the cutoff are excluded. Deleted or unindexed sessions, other computers and
+cloud-only history may be absent. The phase stays open, subsets are not added twice, and
+post-MVP speed, rates, credit equivalent, actual billing/cost and Claude figures stay unknown.
+
+The 12 November preview/reliability milestone continues that phase through **12 November,
+12:32:09 UTC / 13:32:09 Copenhagen**, with last included event 12:31:52.462 UTC. The local
+checkout was `codex/post-mvp-uninstall-guide` at `dbb3581`; later commits and gates are outside
+this cutoff. This remains work in progress rather than a published v2 release.
+
+| Latest cumulative checkpoint | Recorded tokens |
+| --- | ---: |
+| Input | 1,448,968,353 |
+| Cached input, already included above | 1,429,569,664 |
+| Uncached input | 19,398,689 |
+| Output | 3,195,975 |
+| Reasoning output, already included above | 1,831,953 |
+| Total | **1,452,164,328** |
+
+The additional interval after the 11 November cutoff is **784,417,792 tokens**; do not add
+cumulative totals. All included events remain `gpt-6.1-sol`: 478,351,088 main-chat tokens and
+973,813,240 subagent tokens across one main and 17 contributing subagent sessions. The audit
+scanned 190 retained sessions, counted 5,586 positive updates and excluded 53 duplicate
+snapshots in the phase. All 190 source prefixes and prior evidence were rehashed unchanged.
+The fixed MVP baseline and prior cumulative checkpoints reconcile exactly. Root separately
+summed every included event and last-request counter, checking model/role totals and interval
+arithmetic against the private verifier. Aggregate SHA-256:
+`fca908128780dd4c638ebad57f3c2e630e07da8ab798d408a86ef38cc66bcb55`.
+Later/in-flight work remains excluded and unmeasured; speed/rates, credit equivalent,
+actual billing/cost and Claude usage remain unknown. No raw session records are published.
+
 Add separate non-overlapping phases for post-MVP planning/implementation and subsequent
 releases. Record explicit boundaries, provider/model, input/cache/output categories, scope,
 coverage gaps and rate assumptions. If a cumulative milestone view is useful, label it as

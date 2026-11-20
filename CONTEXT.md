@@ -5,6 +5,7 @@
 | Project | A collection of recordings belonging to one research activity. |
 | Classification | Standard or Protected; Protected projects require saved provider eligibility. |
 | Enabled model | A saved model shown in new-run selectors; independent of Protected approval and without cancelling frozen jobs when disabled. |
+| Checked connection | A saved operational observation of an explicit Settings connection check, bound to connection identity and credentials for new transcription; separate from model capability, institutional approval and frozen recovery. |
 | Provider approval | The user's permission to use an endpoint/model for a project classification; not institutional certification. |
 | Project folder | Chosen managed location for media, sources and readable result snapshots; SQLite remains authoritative. |
 | Recording | An imported audio or video source and its associated transcript. |
@@ -12,6 +13,8 @@
 | Library backup | A verified copy of the library database plus a hashed list of every original recording (ADR 0061). |
 | Runtime cohort | At most eight accepted tasks processed by one child in stage passes, retaining one pinned engine object at a time; late tasks form a new cohort (ADR 0094). |
 | Transcript | The text of a recording, organised into passages and optionally timed words. |
+| Spelling dictionary | Verified public Hunspell files cached on this computer; separate from transcript text and private vocabulary (ADR 0185). |
+| Private spelling vocabulary | Personal words for this library and words scoped to a project, with independent revisions; retained in library backups, excluded from transcript exports and research reports. |
 | Result Trash | Recoverable removal of a saved model/enhancement result from live choices and exports; retained research history and files are not erased. |
 | Provider family | OpenAI, Custom, UCloud vLLM or UCloud Transcriber; the first selector narrows real saved model configurations. |
 | Native model expansion | Additive catalog profiles for one complete server/project connection, sharing the endpoint credential and preserving existing rows. |
@@ -29,6 +32,9 @@
 | Deletion release | A confirmed decision for exact batch-owned folders, kept independently of removed project/job rows so failed cleanup stays actionable; never a new transcription or Trash purge. |
 | Local deletion stage | An exact managed path renamed into a same-volume marked wrapper before logical SQLite deletion; recovery restores live targets or cleans already committed targets, without replaying Delete. |
 | Native batch | One UCloud allocation shared by selected recordings with identical native settings; each recording keeps its own job and result. |
+| Early native selection | Two or more selected native files whose batch exists from the first admitted file; each file uploads once its own inspection passes (ADR 0183). |
+| Dropped file | A file of an early native selection whose inspection or preparation failed; it keeps its own outcome and never joins the allocation. |
+| Sealed batch | An early native batch in which every selected file has joined or been dropped; it admits no more files and may be submitted once its members are uploaded. |
 | Parallel parts | A bounded number of audio parts sent concurrently within one recording job. |
 | Original-input observation | A job's frozen identity, decoder recipe and sample-clock measurements for the immutable managed original; separate from browser playback readiness. |
 | Original inspection cache | Internal schema-13 observation bound to one generation, job and epoch; retains a complete byte identity through retry, separate from executable producer admission and playback readiness. |
@@ -52,8 +58,15 @@
 | Alternative | A retained live saved result or version that is not the Working version; it remains independently editable and restorable. |
 | Role event | An append-only observation marking or clearing an exact Working version, with its local-user or system actor recorded separately from content edits and producer ancestry. |
 | Timing application receipt | The atomic link between one completed timing job and its exact immutable timing successor; separate from the saved result's original producer and source version. |
+| Timing Apply generation | The host-sealed fresh timing policy selecting the exact successor/receipt rules; old missing-policy requests retain their legacy generation, and parameters alone cannot upgrade or downgrade authority (ADR 0169). |
+| Source alignment-fit invalidation | A passage marker suppressing old creation-time alignment word scores after applied timing replacement/adoption, including omitted words; recognition confidence and raw source evidence remain. |
 | Passage / segment | A stretch of transcript with optional start/end times and a speaker label. |
 | Manual passage review | User progress (Not checked, Checked or Needs review) bound to exact saved passage content, independent of uncertainty hints and Working versions. |
+| Change (undo step) | A saved version whose content differs from its predecessor, made by the researcher or applied at their request; no-change saves, Trash/Restore markers, review marks, Working choices and notes are not changes (ADR 0180). |
+| Undo last change / Redo | Appending the exact predecessor of the newest change (Undo) or the exact version the newest Undo removed (Redo) as a new version; history is never rewritten. |
+| What changed | A read-only, bounded word-level comparison of a saved version with its predecessor or another version of the same recording (ADR 0181). |
+| Revert this change | History's reversal of one proven older merge, split or deletion through its exact inverse, keeping later edits elsewhere. |
+| Branch view | A text-free picture of a recording's results as lanes of versions, with verified branch points and merge edges (ADR 0182). |
 | Current word mapping | Word offsets and intervals still belonging to the present text; independent of complete coverage and whether a researcher has edited words. |
 | Passage merge | An explicit adjacent join, retaining source text/timing and recording the chosen speaker and prior version. |
 | Passage split | A Unicode text-boundary edit using real word intervals or a deliberate passage audio position; untimed halves remain untimed. |
@@ -82,7 +95,7 @@
 | Transcription job | One requested operation producing text for a recording. |
 | Chunk / part | A bounded portion of a recording sent in one transcription request. |
 | Library | The user's locally managed projects, recordings, transcripts, and results. |
-| Remove from list | Hides a library from the main list; its files and work are kept (ADR 0128). |
+| Legacy list visibility | Retained hide/show API and identity-bound preferences (ADR 0128). Current Library UI retires Remove from list and displays previously hidden entries; files/work are unchanged. |
 | Permanent library deletion | Deletes an inactive library folder and the external project folders it exclusively owns, after a read-only preview and typed confirmation (ADR 0144). |
 | Deletion reservation | The record in the app folder that blocks opening or recreating a library folder until an interrupted permanent deletion is restored or finished. |
 | NVivo transcript export | A platform-specific timed text file for importing beside media in NVivo Windows or Mac. |

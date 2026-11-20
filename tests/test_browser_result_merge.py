@@ -1,5 +1,6 @@
 """Merge only safe frozen enhancement changes through the real local browser/API."""
 
+import re
 from copy import deepcopy
 
 import pytest
@@ -186,7 +187,10 @@ def test_merge_preview_and_apply_preserve_reviewed_text_notes_and_incoming(page,
     )
     assert store.result_versions(rid, branch["incoming"]["id"]) == incoming_history
     page.locator("#versions-history-tab").click()
-    expect(page.locator("[data-history-version]").first).to_contain_text("merged enhancement")
+    # The History change list (ADR 0181) capitalises the same label.
+    expect(page.locator("[data-history-version]").first).to_contain_text(
+        re.compile("merged enhancement", re.IGNORECASE)
+    )
     page.locator('#history-dialog [data-close="history-dialog"]').last.click()
     # A second preview cannot apply the same updates again.
     open_preview(page, branch)

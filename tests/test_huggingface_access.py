@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from cbs_transcriber import huggingface_access
+from cbs_transcriber import enhancement_api, huggingface_access
 from cbs_transcriber.enhancement import HF_SCOPE
 
 
@@ -70,37 +70,50 @@ def test_empty_offline_invalid_and_default_transport_never_follow_redirects(monk
 
 def test_settings_share_existing_scope_retain_forget_redact_and_bind_checks(client, monkeypatch):
     credentials = client.app.state.queue.credentials
+    manager = client.app.state.huggingface_tasks
+    monkeypatch.setattr(manager, "freeze_cloud_plan", lambda: {"status": "needs_setup"})
+
+    def refuse(*args, **kwargs):
+        pytest.fail("HF Save, Check and GET must not check access or prepare models inline")
+
+    monkeypatch.setattr(huggingface_access, "check_token", refuse)
+    monkeypatch.setattr(manager, "_child", refuse)
+    monkeypatch.setattr(enhancement_api, "local_speaker_status", refuse)
     assert client.get("/api/huggingface-settings").json()["token_status"] == "missing"
     response = client.put("/api/huggingface-settings", json={"hf_token": "hf_FIRST"})
-    assert response.status_code == 200
+    assert response.status_code == 202
+    assert response.json()["token_status"] == "unchecked"
+    assert response.json()["preparation_task"]["state"] == "queued"
     assert credentials.get(HF_SCOPE) == "hf_FIRST"
     assert client.get("/api/enhancement-settings").json()["has_hf_token"]
     assert "hf_FIRST" not in response.text
-    assert client.put("/api/huggingface-settings", json={}).json()["has_token"]
+    for unchanged in ({}, {"hf_token": None}):
+        retained = client.put("/api/huggingface-settings", json=unchanged)
+        assert retained.status_code == 200
+        assert retained.json() == response.json()
     assert credentials.get(HF_SCOPE) == "hf_FIRST"
     assert (
         client.put("/api/huggingface-settings", json={"hf_token": "bad\nsecret"}).status_code == 400
     )
     assert credentials.get(HF_SCOPE) == "hf_FIRST"
 
-    def check(token):
-        return {
-            **huggingface_access.token_state(token),
-            "token_status": "valid",
-            "speaker_model_access": "allowed",
-            "checked_at": "2026-10-22T12:00:00+00:00",
-        }
-
-    monkeypatch.setattr(huggingface_access, "check_token", check)
-    checked = client.post("/api/huggingface-settings/check", json={}).json()
-    assert checked["token_status"] == "valid"
-    assert client.get("/api/huggingface-settings").json() == checked
-    # Checking an unsaved token does not save it or validate a different saved credential.
-    client.post("/api/huggingface-settings/check", json={"hf_token": "hf_UNSAVED"})
+    checked = client.post("/api/huggingface-settings/check", json={})
+    assert checked.status_code == 202
+    assert checked.json() == response.json()
+    assert client.get("/api/huggingface-settings").json() == checked.json()
+    # A different unsaved token requires Save and cannot validate the saved credential.
+    unsaved = client.post("/api/huggingface-settings/check", json={"hf_token": "hf_UNSAVED"})
+    assert unsaved.status_code == 409 and "Save" in unsaved.json()["detail"]
     assert credentials.get(HF_SCOPE) == "hf_FIRST"
-    client.put("/api/huggingface-settings", json={"hf_token": "hf_SECOND"})
+    assert client.get("/api/huggingface-settings").json() == checked.json()
+    assert (
+        client.put("/api/huggingface-settings", json={"hf_token": "hf_SECOND"}).status_code == 202
+    )
+    assert credentials.get(HF_SCOPE) == "hf_SECOND"
     assert client.get("/api/huggingface-settings").json()["token_status"] == "unchecked"
-    client.put("/api/huggingface-settings", json={"hf_token": ""})
+    assert client.put("/api/huggingface-settings", json={"hf_token": ""}).status_code == 200
     assert credentials.get(HF_SCOPE) == ""
     assert client.get("/api/huggingface-settings").json()["token_status"] == "missing"
     assert not client.get("/api/enhancement-settings").json()["has_hf_token"]
+    missing = client.post("/api/huggingface-settings/check", json={})
+    assert missing.status_code == 409 and "Save" in missing.json()["detail"]

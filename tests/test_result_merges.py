@@ -11,6 +11,15 @@ from cbs_transcriber import result_merges
 from cbs_transcriber.transcripts import edit_segment, normalize_segments
 
 
+@pytest.mark.parametrize("format_value", [None, False, [], {}, "unknown-generation"])
+def test_malformed_stored_merge_generations_raise_curated_value_error(format_value):
+    from cbs_transcriber.history import conflict_review_metadata, merge_metadata
+
+    for parser in (merge_metadata, conflict_review_metadata):
+        with pytest.raises(ValueError, match="evidence"):
+            parser({"format": format_value})
+
+
 @pytest.fixture
 def branch(client):
     store = client.app.state.store
@@ -212,7 +221,18 @@ def test_apply_appends_one_exact_successor_preserving_other_evidence(client, bra
     assert head["reason"] == "Literal <review> æøå"
     assert head["context"]["processing"] == ours_head["context"]["processing"]
     evidence = head["context"]["merge"]
-    assert set(evidence) == {"format", "base", "incoming", "creation", "summary"}
+    assert set(evidence) == {
+        "format",
+        "base",
+        "incoming",
+        "creation",
+        "summary",
+        "timing_adoption_policy",
+    }
+    assert evidence["format"] == result_merges.NEW_FORMAT
+    assert evidence["timing_adoption_policy"] == "cbs-transcript-merge-v2"
+    assert all(recording["segments"][index]["alignment_hints_stale"] is True for index in (0, 2))
+    assert "alignment_hints_stale" not in recording["segments"][1]
     assert evidence["base"]["version_id"] == branch["frozen"]["source_version_id"]
     assert evidence["incoming"]["version_id"] == creation["id"]
     assert evidence["creation"] == evidence["incoming"]

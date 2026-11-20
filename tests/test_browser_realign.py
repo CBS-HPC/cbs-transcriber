@@ -1,5 +1,7 @@
 """Edited passages regain word timing automatically when the researcher opts in (T69)."""
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
@@ -91,7 +93,10 @@ def test_realignment_adds_timing_to_the_same_result(page, local_app, monkeypatch
     assert current["segments"][0]["words_current"] is True
     assert [w["word"] for w in current["segments"][0]["words"]] == ["Hej", "hele", "verden."]
     page.locator("#history-open").click()
-    expect(page.locator("[data-history-version]").first).to_contain_text("timing realign")
+    # The History change list (ADR 0181) names it "Added word timing"; MVP keeps the raw name.
+    expect(page.locator("[data-history-version]").first).to_contain_text(
+        re.compile("timing realign|added word timing", re.IGNORECASE)
+    )
     page.locator("#history-dialog [data-close]").first.click()
     # Finished realignments stay out of Activity.
     page.locator("#activity-open").click()

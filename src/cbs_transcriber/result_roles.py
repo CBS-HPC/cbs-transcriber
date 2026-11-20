@@ -18,6 +18,7 @@ from .transcripts import MAX_TRANSCRIPT_BYTES
 
 FORMAT = "cbs-working-version-v1"
 WORKING_POLICY = "cbs-working-role-v1"
+TIMING_AUTHORITY_FORMAT = "cbs-timing-job-authority-v2"
 MAX_ROLE_EVENTS = 1000
 AUTO_ACTIONS = frozenset({"working_auto_first", "working_auto_successor", "working_auto_edit"})
 
@@ -187,7 +188,9 @@ def frozen_roles_equal(left, right):
     )
 
 
-def authorize_job(db, store, job_id, recording_id, policy, expected, source):
+def authorize_job(
+    db, store, job_id, recording_id, policy, expected, source, *, timing_apply_policy=None
+):
     """Record trusted enqueue authority outside the formerly arbitrary job parameters."""
     if policy not in {"result", "timing"}:
         raise ValueError("Invalid Working job policy.")
@@ -210,6 +213,19 @@ def authorize_job(db, store, job_id, recording_id, policy, expected, source):
         raise ValueError("Invalid Working job parameters.") from None
     if not isinstance(params, dict):
         raise ValueError("Invalid Working job parameters.")
+    sealed_role = expected
+    if timing_apply_policy is not None or "timing_apply_policy" in params:
+        if (
+            policy != "timing"
+            or timing_apply_policy != "invalidate-source-alignment-fit-v1"
+            or params.get("timing_apply_policy") != timing_apply_policy
+        ):
+            raise ValueError("Timing application authority requires verified fresh acceptance.")
+        sealed_role = {
+            "format": TIMING_AUTHORITY_FORMAT,
+            "role": expected,
+            "timing_apply_policy": timing_apply_policy,
+        }
     requested_source_hash = source_snapshot_hash(source) if source is not None else None
 
     def source_matches(value):
@@ -306,7 +322,7 @@ def authorize_job(db, store, job_id, recording_id, policy, expected, source):
             job_id,
             recording_id,
             policy,
-            json.dumps(expected, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            json.dumps(sealed_role, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
             source_id,
             digest,
             snapshot_digest,
@@ -378,10 +394,23 @@ def job_authority(db, job_id, recording_id, policy):
         "SELECT role_json FROM working_job_authorities WHERE job_id=?", (job_id,)
     ).fetchone()[0]
     try:
-        role = validate_frozen(json.loads(raw))
+        sealed = json.loads(raw)
+        apply_policy = None
+        if isinstance(sealed, dict) and "format" in sealed:
+            if (
+                policy != "timing"
+                or set(sealed) != {"format", "role", "timing_apply_policy"}
+                or sealed["format"] != TIMING_AUTHORITY_FORMAT
+                or sealed["timing_apply_policy"] != "invalidate-source-alignment-fit-v1"
+            ):
+                raise ValueError()
+            apply_policy = sealed["timing_apply_policy"]
+            role = validate_frozen(sealed["role"])
+        else:
+            role = validate_frozen(sealed)
     except (ValueError, TypeError, RecursionError, json.JSONDecodeError):
         raise ValueError("The frozen Working job authority is invalid.") from None
-    if json.dumps(role, ensure_ascii=False, sort_keys=True, separators=(",", ":")) != raw:
+    if json.dumps(sealed, ensure_ascii=False, sort_keys=True, separators=(",", ":")) != raw:
         raise ValueError("The frozen Working job authority is not canonical.")
     if role["revision"] == 0:
         if role["working"] is not None:
@@ -429,6 +458,7 @@ def job_authority(db, job_id, recording_id, policy):
             raise ValueError("The frozen Working job role has no matching history.")
     return {
         "role": role,
+        **({"timing_apply_policy": apply_policy} if apply_policy is not None else {}),
         "source_version_id": row["source_version_id"],
         "source_payload_sha256": row["source_payload_sha256"],
         "source_snapshot_sha256": row["source_snapshot_sha256"],

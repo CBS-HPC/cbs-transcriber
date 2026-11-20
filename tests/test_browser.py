@@ -8,7 +8,6 @@ import sys
 import threading
 import time
 import wave
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -16,15 +15,34 @@ import httpx
 import pytest
 import uvicorn
 from admission_support import write_original_wav
+from browser_native_support import (
+    NATIVE_KEY,
+    mock_native_runs,
+    restore_native_key,
+    save_ready_native,
+)
 from conftest import MemoryCredentials
 from playwright.sync_api import expect, sync_playwright
 
 from cbs_transcriber.app import create_app
 from cbs_transcriber.media import ffmpeg
-from cbs_transcriber.providers import Settings, default_provider_id, public_profiles, save_profile
+from cbs_transcriber.providers import Settings, public_profiles, save_profile
 from cbs_transcriber.transcripts import normalize_segments
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
+
+FIRST_USE_COMPLETED = "cbs-first-use-completed-v1"
+# Unrelated journeys start as a returning browser that already chose Skip in first-use
+# setup (ADR 0171). Without a saved UCloud key the setup returns on every load, which such a
+# user dismisses each time, so its modal never opens here. Modules marked first_use keep a
+# fresh browser profile and the real dialog.
+RETURNING_BROWSER = (
+    f"try {{ localStorage.setItem('{FIRST_USE_COMPLETED}', '1'); }} catch {{}}\n"
+    "{ const show = HTMLDialogElement.prototype.showModal;\n"
+    "  HTMLDialogElement.prototype.showModal = function () {\n"
+    "    if (this.id !== 'first-use-dialog') return show.call(this);\n"
+    "  }; }"
+)
 
 
 class LocalApp:
@@ -77,18 +95,47 @@ def local_app(tmp_path_factory):
     app.stop()
 
 
+def serve_profile(tmp_path_factory, monkeypatch, profile):
+    """A local app under an explicit release profile, for a module's own local_app fixture."""
+    monkeypatch.setenv("CBS_TRANSCRIBER_PROFILE", profile)
+    app = LocalApp(tmp_path_factory.mktemp("web") / "library")
+    app.start()
+    yield app
+    app.stop()
+
+
 @pytest.fixture
-def page():
+def page(request):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         context = browser.new_context(viewport={"width": 1440, "height": 1000})
+        if request.node.get_closest_marker("first_use") is None:
+            context.add_init_script(RETURNING_BROWSER)
         page = context.new_page()
         yield page
         context.close()
         browser.close()
 
 
+def deny_protected(store, provider_id):
+    """A saved Protected denial, as the API or an older library can record it."""
+    store.execute(
+        "UPDATE providers SET value=json_set(value,'$.approved_for',json('[]')) WHERE id=?",
+        (provider_id,),
+    )
+
+
+def skip_first_use(page):
+    """Dismiss the visible setup dialog as a user, before unrelated home-page actions."""
+    page.wait_for_function("() => firstUse.ready")
+    dialog = page.locator("#first-use-dialog")
+    if dialog.evaluate("node => node.open"):
+        page.locator("#first-use-skip").click()
+        expect(dialog).to_be_hidden()
+
+
 def create_project(page, name):
+    skip_first_use(page)
     expect(page.locator(".nav-heading button")).to_have_count(0)
     page.locator("#sidebar-create").click()
     page.locator("#name-input").fill(name)
@@ -184,7 +231,11 @@ def test_browser_pending_save_blocks_navigation_until_reply(page, local_app):
     expect(page.locator("#recording-title")).to_have_text("First")
     route, response = held.pop()
     route.fulfill(response=response)
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
+    # The untimed passage's new words have no verified timing, which the save reports.
+    expect(page.locator("#save-status")).to_have_text(
+        "Passage saved. Some words have no verified timing after this edit. "
+        "Only identifiable existing words retain their timing."
+    )
     page.evaluate("id => location.hash = '/recordings/' + id", recordings[1]["id"])
     expect(page.locator("#recording-title")).to_have_text("Second")
     expect(page.locator("#passage-0 .passage-text")).to_have_text("Second wording.")
@@ -198,6 +249,7 @@ def test_browser_reconciles_uncertain_job_without_allocating(page, local_app):
     job = store.add_job(recording["id"], "enhance", {"ucloud_run": {"submission_intent": True}})
     store.update_job(job["id"], state="failed", message="Submission outcome unknown.")
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#activity-open").click()
     expect(page.locator(f"[data-reconnect='{job['id']}']")).to_be_visible()
     card = page.locator(".job").first
@@ -363,6 +415,8 @@ def test_browser_review_modes_and_restart(page, local_app, wav_bytes):
     local_app.stop()
     local_app.start()
     page.goto(local_app.url)
+    # The restarted server listens on a new origin, whose first visit shows setup again.
+    skip_first_use(page)
     page.get_by_role("link", name="CBS Research").click()
     page.get_by_role("button", name="interview.v2", exact=True).click()
     expect(page.locator("#passage-0 .passage-text")).to_have_text("🙂 Hej København.")
@@ -553,99 +607,75 @@ def test_browser_enabling_follow_jumps_to_current_replay(page, local_app, wav_by
         page.locator("#audio").evaluate("el => el.pause()")
 
 
-def test_browser_video_switch_and_compatible_transcription(page, local_app, tmp_path):
-    requests = []
-
-    class FakeProvider(BaseHTTPRequestHandler):
-        def do_POST(self):
-            body = self.rfile.read(int(self.headers["Content-Length"]))
-            requests.append((self.path, body))
-            response = json.dumps(
-                {
-                    "text": "Hello CBS.",
-                    "segments": [{"text": "Hello CBS.", "start": 0, "end": 3}],
-                    "words": [
-                        {"word": "Hello", "start": 0, "end": 1},
-                        {"word": "CBS", "start": 1, "end": 3},
-                    ],
-                }
-            ).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
-
-        def log_message(self, *args):
-            pass
-
-    provider = ThreadingHTTPServer(("127.0.0.1", 0), FakeProvider)
-    threading.Thread(target=provider.serve_forever, daemon=True).start()
-    try:
-        path = tmp_path / "research.mp4"
-        ffmpeg(
-            [
-                "-f",
-                "lavfi",
-                "-i",
-                "color=c=0x183e37:s=320x240:r=15:d=3",
-                "-f",
-                "lavfi",
-                "-i",
-                "sine=frequency=440:sample_rate=44100:duration=3",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-shortest",
-                str(path),
-            ]
-        )
-        page.goto(local_app.url)
-        create_project(page, "Video research")
-        import_recording(page, local_app, path.name, path.read_bytes())
-        app = local_app.server.config.app
-        saved = save_profile(
-            app.state.store,
-            app.state.credentials,
-            "Synthetic word timing",
-            Settings(
-                provider_type="openai",
-                base_url=f"http://127.0.0.1:{provider.server_port}/v1",
-                model="whisper-1",
-                capability="words",
-            ),
-            identifier=default_provider_id(app.state.store),
-        )
-        page.reload()
-        page.locator("#file-provider-kind").select_option("openai")
-        page.locator("#file-provider").select_option(saved["id"])
-        page.once("dialog", lambda dialog: dialog.accept())
-        page.locator("#transcribe-one").click()
-        expect(page.locator("#passage-0 .passage-text")).to_have_text("Hello CBS.", timeout=30000)
-        page.locator("#activity-close").click()
-        page.locator("#playback-speed").select_option("1.5")
-        page.locator("#passage-0 [data-word='1']").click()
-        page.locator("#view-mode").select_option("video")
-        expect(page.locator("#video-stage")).to_be_visible()
-        assert abs(page.locator("#video").evaluate("e => e.currentTime") - 1) < 0.2
-        assert page.locator("#video").evaluate("e => e.playbackRate") == 1.5
-        page.get_by_role("button", name="Play", exact=True).click()
-        page.locator("#view-mode").select_option("audio")
-        expect(page.locator("#video-stage")).to_be_hidden()
-        assert page.locator("#audio").evaluate("e => !e.paused")
-        page.get_by_role("button", name="Pause", exact=True).click()
-        assert requests[0][0] == "/v1/audio/transcriptions"
-        assert b"verbose_json" in requests[0][1]
-    finally:
-        provider.shutdown()
-        provider.server_close()
+def test_browser_video_switch_and_compatible_transcription(page, local_app, tmp_path, monkeypatch):
+    # Direct OpenAI is refused (DIRECT_OPENAI_DISABLED): a checked native UCloud model
+    # transcribes the video in process. The former OpenAI-compatible request-format checks
+    # (/v1/audio/transcriptions, verbose_json) have no UCloud equivalent; the native path
+    # instead freezes the unchanged original video for upload.
+    calls = mock_native_runs(
+        monkeypatch,
+        lambda settings, recording: {
+            "text": "Hello CBS.",
+            "segments": [{"text": "Hello CBS.", "start": 0, "end": 3}],
+            "words": [
+                {"word": "Hello", "start": 0, "end": 1},
+                {"word": "CBS", "start": 1, "end": 3},
+            ],
+        },
+    )
+    path = tmp_path / "research.mp4"
+    ffmpeg(
+        [
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x183e37:s=320x240:r=15:d=3",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=44100:duration=3",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+            str(path),
+        ]
+    )
+    page.goto(local_app.url)
+    create_project(page, "Video research")
+    import_recording(page, local_app, path.name, path.read_bytes())
+    rid = page.url.rsplit("/", 1)[-1]
+    app = local_app.server.config.app
+    saved = save_ready_native(app.state.store, app.state.credentials, "Synthetic word timing")
+    page.reload()
+    page.locator("#file-provider-kind").select_option("ucloud")
+    page.locator("#file-provider").select_option(saved["id"])
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#transcribe-one").click()
+    expect(page.locator("#passage-0 .passage-text")).to_have_text("Hello CBS.", timeout=30000)
+    page.locator("#activity-close").click()
+    page.locator("#playback-speed").select_option("1.5")
+    page.locator("#passage-0 [data-word='1']").click()
+    page.locator("#view-mode").select_option("video")
+    expect(page.locator("#video-stage")).to_be_visible()
+    assert abs(page.locator("#video").evaluate("e => e.currentTime") - 1) < 0.2
+    assert page.locator("#video").evaluate("e => e.playbackRate") == 1.5
+    page.get_by_role("button", name="Play", exact=True).click()
+    page.locator("#view-mode").select_option("audio")
+    expect(page.locator("#video-stage")).to_be_hidden()
+    assert page.locator("#audio").evaluate("e => !e.paused")
+    page.get_by_role("button", name="Pause", exact=True).click()
+    assert calls == [("large-v3", rid)]
+    (job,) = app.state.store.all("SELECT params FROM jobs WHERE kind='transcribe'")
+    params = json.loads(job["params"])
+    assert params["provider_id"] == saved["id"]
+    assert params["audio_transport"] == "original"
 
 
 def test_browser_saved_providers_and_comparison(page, local_app, wav_bytes, monkeypatch):
-    requests = []
     store = local_app.server.config.app.state.store
     execute = store.execute
 
@@ -656,165 +686,157 @@ def test_browser_saved_providers_and_comparison(page, local_app, wav_bytes, monk
 
     monkeypatch.setattr(store, "execute", delayed_preference)
 
-    class ComparisonProvider(BaseHTTPRequestHandler):
-        def do_POST(self):
-            body = self.rfile.read(int(self.headers["Content-Length"]))
-            speakers = b"gpt-4o-transcribe-diarize" in body
-            requests.append("speakers" if speakers else "words")
-            if speakers:
-                payload = {
-                    "text": "Hej fra A. Svar fra B.",
-                    "segments": [
-                        {"text": "Hej fra A.", "start": 0, "end": 1.5, "speaker": "A"},
-                        {"text": "Svar fra B.", "start": 1.5, "end": 3, "speaker": "B"},
-                    ],
-                }
-            else:
-                payload = {
-                    "text": "Hej CBS.",
-                    "segments": [{"text": "Hej CBS.", "start": 0, "end": 3}],
-                    "words": [
-                        {"word": "Hej", "start": 0, "end": 1},
-                        {"word": "CBS", "start": 1, "end": 3},
-                    ],
-                }
-            encoded = json.dumps(payload).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(encoded)))
-            self.end_headers()
-            self.wfile.write(encoded)
+    # Direct OpenAI is refused (DIRECT_OPENAI_DISABLED): two models of one checked native
+    # UCloud connection stand in for the former word-timing and speaker-label providers.
+    # Native models declare words_speakers, so the speaker result carries its word timing.
+    def respond(settings, recording):
+        if settings.model == "large-v3-turbo":
+            return {
+                "text": "Hej fra A. Svar fra B.",
+                "segments": [
+                    {
+                        "text": "Hej fra A.",
+                        "start": 0,
+                        "end": 1.5,
+                        "speaker": "A",
+                        "words": [
+                            {"word": "Hej", "start": 0, "end": 0.5},
+                            {"word": "fra", "start": 0.5, "end": 1},
+                            {"word": "A.", "start": 1, "end": 1.5},
+                        ],
+                    },
+                    {
+                        "text": "Svar fra B.",
+                        "start": 1.5,
+                        "end": 3,
+                        "speaker": "B",
+                        "words": [
+                            {"word": "Svar", "start": 1.5, "end": 2},
+                            {"word": "fra", "start": 2, "end": 2.5},
+                            {"word": "B.", "start": 2.5, "end": 3},
+                        ],
+                    },
+                ],
+            }
+        assert settings.model == "large-v3"
+        return {
+            "text": "Hej CBS.",
+            "segments": [{"text": "Hej CBS.", "start": 0, "end": 3}],
+            "words": [
+                {"word": "Hej", "start": 0, "end": 1},
+                {"word": "CBS", "start": 1, "end": 3},
+            ],
+        }
 
-        def log_message(self, *args):
-            pass
-
-    provider = ThreadingHTTPServer(("127.0.0.1", 0), ComparisonProvider)
-    threading.Thread(target=provider.serve_forever, daemon=True).start()
+    calls = mock_native_runs(monkeypatch, respond)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    try:
-        app = local_app.server.config.app
-        words = save_profile(
-            store,
-            app.state.credentials,
-            "Danish words",
-            Settings(
-                provider_type="openai",
-                base_url=f"http://127.0.0.1:{provider.server_port}/v1",
-                model="whisper-1",
-                capability="words",
-            ),
-            identifier=default_provider_id(store),
-        )
-        speakers = next(
-            p
-            for p in public_profiles(store, app.state.credentials)["providers"]
-            if p["model"] == "gpt-4o-transcribe-diarize"
-        )
-        words_id, speakers_id = words["id"], speakers["id"]
-        page.goto(local_app.url)
-        create_project(page, "Provider comparison")
-        import_recording(page, local_app, "comparison.wav", wav_bytes)
-        page.locator("#back-library").click()
-        page.locator("#bulk-provider-kind").select_option("openai")
-        expect(page.locator("#bulk-provider option")).to_have_count(5)
-        page.locator("#bulk-provider").select_option(words_id)
-        page.locator("#select-all").click()
+    app = local_app.server.config.app
+    words = save_ready_native(
+        store,
+        app.state.credentials,
+        "Danish words",
+        enabled_models=["large-v3", "large-v3-turbo"],
+    )
+    speakers = next(
+        p
+        for p in public_profiles(store, app.state.credentials)["providers"]
+        if p["provider_type"] == "ucloud" and p["model"] == "large-v3-turbo"
+    )
+    words_id, speakers_id = words["id"], speakers["id"]
+    page.goto(local_app.url)
+    create_project(page, "Provider comparison")
+    import_recording(page, local_app, "comparison.wav", wav_bytes)
+    page.locator("#back-library").click()
+    page.locator("#bulk-provider-kind").select_option("ucloud")
+    # Exactly the connection's enabled models are offered for new work.
+    expect(page.locator("#bulk-provider option")).to_have_count(2)
+    page.locator("#bulk-provider").select_option(words_id)
+    page.locator("#select-all").click()
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#transcribe-selected").click()
+    expect(page.locator(".recording-card .badge")).to_have_text("Transcript ready", timeout=30000)
+    page.locator("#activity-close").click()
+    page.get_by_role("button", name="comparison", exact=True).click()
+    expect(page.locator("#file-provider-kind")).to_have_value("ucloud")
+    with page.expect_response(
+        lambda response: response.url.endswith("/provider") and response.request.method == "PATCH"
+    ):
+        page.locator("#file-provider").select_option(speakers_id)
+    page.locator("#back-library").click()
+    expect(page.locator("[data-select]:checked")).to_have_count(0)
+    page.locator("#select-all").click()
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#bulk-provider").select_option(speakers_id)
+    page.locator("#transcribe-selected").click()
+    expect(page.locator(".card-results")).to_have_text("2 results", timeout=30000)
+    page.locator("#activity-close").click()
+    page.get_by_role("button", name="comparison", exact=True).click()
+    expect(page.locator("#result-select option")).to_have_count(2)
+    expect(page.locator("#file-provider")).to_have_value(speakers_id)
+    result_ids = page.locator("#result-select option").evaluate_all(
+        "nodes => nodes.map(n => n.value)"
+    )
+    page.locator("#compare-result").select_option(result_ids[1])
+    expect(page.locator("#comparison-panel")).to_be_visible()
+    expect(page.locator("#comparison-transcript")).to_contain_text("Svar fra B.")
+    expect(page.locator("#comparison-transcript textarea")).to_have_count(0)
+    page.evaluate("window.searchWord = document.querySelector('#passage-0 [data-word]')")
+    page.locator("#transcript-search").fill("hej")
+    assert page.evaluate("window.searchWord === document.querySelector('#passage-0 [data-word]')")
+    expect(page.locator("#passage-0 [data-word='0'] mark.search-match")).to_have_text("Hej")
+    expect(page.locator("#comparison-transcript mark.search-match")).to_have_text("Hej")
+    page.locator("#passage-0 [data-word='1']").click()
+    expect(page.locator("#compare-passage-0")).to_have_class("passage active")
+    page.locator("#transcript-search").fill("")
+    page.locator("#playback-speed").select_option("1.5")
+    position = page.locator("#audio").evaluate("e => e.currentTime")
+    page.locator("#result-select").select_option(result_ids[1])
+    expect(page.locator("#transcript")).to_contain_text("Svar fra B.")
+    assert abs(page.locator("#audio").evaluate("e => e.currentTime") - position) < 0.2
+    assert page.locator("#audio").evaluate("e => e.playbackRate") == 1.5
+    page.locator("#compare-result").select_option(result_ids[0])
+    expect(page.locator("#comparison-transcript")).to_contain_text("Hej CBS.")
+    page.locator("#passage-0 [data-action='edit']").click()
+    page.get_by_role("dialog", name="Which transcript should be Working?").get_by_role(
+        "button", name=__import__("re").compile("Keep current Working|Leave unassigned")
+    ).click()
+    page.locator("#passage-0 textarea").fill("Reviewed speaker transcript.")
+    page.locator("#passage-0 [data-action='save-edit']").click()
+    expect(page.locator("#passage-0 .passage-text")).to_have_text("Reviewed speaker transcript.")
+    expect(page.locator("#comparison-transcript")).to_contain_text("Hej CBS.")
+    screenshot = Path("test-results/provider-comparison.png")
+    screenshot.parent.mkdir(exist_ok=True)
+    page.screenshot(path=str(screenshot), full_page=True)
+    page.locator("#export-open").click()
+    with page.expect_download() as download:
+        page.locator("#export-link").click()
+    assert "Reviewed speaker transcript." in Path(download.value.path()).read_text(encoding="utf-8")
+    page.get_by_role("button", name="Close export settings").click()
+    # Select another provider to create another result; compare with the saved-result dropdown.
+    expect(page.get_by_role("button", name="Compare providers…")).to_have_count(0)
+    for count, provider_id in enumerate((words_id, speakers_id), 3):
+        page.locator("#file-provider").select_option(provider_id)
         page.once("dialog", lambda dialog: dialog.accept())
-        page.locator("#transcribe-selected").click()
-        expect(page.locator(".recording-card .badge")).to_have_text(
-            "Transcript ready", timeout=30000
-        )
+        page.locator("#transcribe-one").click()
+        expect(page.locator("#result-select option")).to_have_count(count, timeout=30000)
         page.locator("#activity-close").click()
-        page.get_by_role("button", name="comparison", exact=True).click()
-        expect(page.locator("#file-provider-kind")).to_have_value("openai")
-        with page.expect_response(
-            lambda response: (
-                response.url.endswith("/provider") and response.request.method == "PATCH"
-            )
-        ):
-            page.locator("#file-provider").select_option(speakers_id)
-        page.locator("#back-library").click()
-        expect(page.locator("[data-select]:checked")).to_have_count(0)
-        page.locator("#select-all").click()
-        page.once("dialog", lambda dialog: dialog.accept())
-        page.locator("#bulk-provider").select_option(speakers_id)
-        page.locator("#transcribe-selected").click()
-        expect(page.locator(".card-results")).to_have_text("2 results", timeout=30000)
-        page.locator("#activity-close").click()
-        page.get_by_role("button", name="comparison", exact=True).click()
-        expect(page.locator("#result-select option")).to_have_count(2)
-        expect(page.locator("#file-provider")).to_have_value(speakers_id)
-        result_ids = page.locator("#result-select option").evaluate_all(
-            "nodes => nodes.map(n => n.value)"
-        )
-        page.locator("#compare-result").select_option(result_ids[1])
-        expect(page.locator("#comparison-panel")).to_be_visible()
-        expect(page.locator("#comparison-transcript")).to_contain_text("Svar fra B.")
-        expect(page.locator("#comparison-transcript textarea")).to_have_count(0)
-        page.evaluate("window.searchWord = document.querySelector('#passage-0 [data-word]')")
-        page.locator("#transcript-search").fill("hej")
-        assert page.evaluate(
-            "window.searchWord === document.querySelector('#passage-0 [data-word]')"
-        )
-        expect(page.locator("#passage-0 [data-word='0'] mark.search-match")).to_have_text("Hej")
-        expect(page.locator("#comparison-transcript mark.search-match")).to_have_text("Hej")
-        page.locator("#passage-0 [data-word='1']").click()
-        expect(page.locator("#compare-passage-0")).to_have_class("passage active")
-        page.locator("#transcript-search").fill("")
-        page.locator("#playback-speed").select_option("1.5")
-        position = page.locator("#audio").evaluate("e => e.currentTime")
-        page.locator("#result-select").select_option(result_ids[1])
-        expect(page.locator("#transcript")).to_contain_text("Svar fra B.")
-        assert abs(page.locator("#audio").evaluate("e => e.currentTime") - position) < 0.2
-        assert page.locator("#audio").evaluate("e => e.playbackRate") == 1.5
-        page.locator("#compare-result").select_option(result_ids[0])
-        expect(page.locator("#comparison-transcript")).to_contain_text("Hej CBS.")
-        page.locator("#passage-0 [data-action='edit']").click()
-        page.get_by_role("dialog", name="Which transcript should be Working?").get_by_role(
-            "button", name=__import__("re").compile("Keep current Working|Leave unassigned")
-        ).click()
-        page.locator("#passage-0 textarea").fill("Reviewed speaker transcript.")
-        page.locator("#passage-0 [data-action='save-edit']").click()
-        expect(page.locator("#passage-0 .passage-text")).to_have_text(
-            "Reviewed speaker transcript."
-        )
-        expect(page.locator("#comparison-transcript")).to_contain_text("Hej CBS.")
-        screenshot = Path("test-results/provider-comparison.png")
-        screenshot.parent.mkdir(exist_ok=True)
-        page.screenshot(path=str(screenshot), full_page=True)
-        page.locator("#export-open").click()
-        with page.expect_download() as download:
-            page.locator("#export-link").click()
-        assert "Reviewed speaker transcript." in Path(download.value.path()).read_text(
-            encoding="utf-8"
-        )
-        page.get_by_role("button", name="Close export settings").click()
-        # Select another provider to create another result; compare with the saved-result dropdown.
-        expect(page.get_by_role("button", name="Compare providers…")).to_have_count(0)
-        for count, provider_id in enumerate((words_id, speakers_id), 3):
-            page.locator("#file-provider").select_option(provider_id)
-            page.once("dialog", lambda dialog: dialog.accept())
-            page.locator("#transcribe-one").click()
-            expect(page.locator("#result-select option")).to_have_count(count, timeout=30000)
-            page.locator("#activity-close").click()
-        expect(page.locator("#passage-0 .passage-text")).to_have_text(
-            "Reviewed speaker transcript."
-        )
-        url = page.url
-        local_app.stop()
-        local_app.start()
-        page.goto(local_app.url + url[url.index("/#") :])
-        expect(page.locator("#result-select option")).to_have_count(4)
-        expect(page.locator("#passage-0 .passage-text")).to_have_text(
-            "Reviewed speaker transcript."
-        )
-        expect(page.locator("#file-provider")).to_have_value(speakers_id)
-        assert sorted(requests) == ["speakers", "speakers", "words", "words"]
-        assert not errors
-    finally:
-        provider.shutdown()
-        provider.server_close()
+    expect(page.locator("#passage-0 .passage-text")).to_have_text("Reviewed speaker transcript.")
+    url = page.url
+    local_app.stop()
+    local_app.start()
+    restore_native_key(local_app.server.config.app)
+    page.goto(local_app.url + url[url.index("/#") :])
+    expect(page.locator("#result-select option")).to_have_count(4)
+    expect(page.locator("#passage-0 .passage-text")).to_have_text("Reviewed speaker transcript.")
+    expect(page.locator("#file-provider")).to_have_value(speakers_id)
+    assert sorted(model for model, _ in calls) == [
+        "large-v3",
+        "large-v3",
+        "large-v3-turbo",
+        "large-v3-turbo",
+    ]
+    assert not errors
 
 
 def test_browser_project_heading_rename_preserves_drafts_and_ignores_late_reply(page, local_app):
@@ -1053,70 +1075,110 @@ def test_browser_provider_tabs_project_storage_and_policy(
     wav_bytes,
     monkeypatch,
 ):
+    """Direct OpenAI is retired (V212, ADR 0170): UCloud is the only provider tab."""
+    from cbs_transcriber.catalog import ucloud_models
+    from cbs_transcriber.ucloud_native import MIG_PRODUCT
+
+    app = local_app.server.config.app
     checked = []
     parent = local_app.root.parent / "Chosen projects"
     monkeypatch.setattr("cbs_transcriber.storage.choose_folder", lambda: str(parent))
 
-    def model_list(settings, key):
+    def discover(settings, key, *, compute_id=None):
         checked.append((settings.base_url, key))
-        return {
-            "models": [
-                {"id": "whisper-1", "name": "Whisper", "listed": True},
-                {"id": "gpt-transcribe", "name": "GPT Transcribe", "listed": False},
-            ],
-            "note": "No audio uploaded. Visibility does not verify billing.",
-        }
+        setup = settings.ucloud_transcriber.model_dump()
+        setup.update(
+            project_id=setup["project_id"] or "synthetic-project",
+            application={"name": "transcriber-batch", "version": "1.12"},
+            product=dict(MIG_PRODUCT),
+            storage_path="/synthetic-drive/recordings",
+        )
+        return {"ready": True, "setup": setup, "choices": {}, "note": "Ready to save."}
 
-    monkeypatch.setattr("cbs_transcriber.app.check_models", model_list)
+    monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
+    # Reopening a connected UCloud tab runs a read-only Runtime probe; keep it offline.
+    monkeypatch.setattr(
+        "cbs_transcriber.enhancement_api.runtime_prepared", lambda *_: {"prepared": None}
+    )
     page.goto(local_app.url)
-    expect(page.locator("#bulk-provider-kind")).to_have_value("openai")
-    expect(page.locator("#bulk-provider")).to_contain_text("gpt-transcribe")
+    skip_first_use(page)
+    # The retired direct service's bootstrap model is never offered for new work.
+    expect(page.locator("#bulk-provider-kind option")).to_have_count(1)
+    expect(page.locator("#bulk-provider-kind")).to_have_value("")
+    expect(page.locator("#bulk-provider")).not_to_contain_text("gpt-transcribe")
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_count(4)
+    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab", name="UCloud", exact=True)).to_have_attribute(
+        "aria-selected", "true"
+    )
     expect(page.locator("#provider-preset")).not_to_be_visible()
     expect(page.locator("#provider-advanced")).not_to_have_attribute("open", "")
-    expect(page.locator("#check-models")).to_be_visible()
+    expect(page.locator("#check-models")).to_be_hidden()
+    expect(page.locator("#connect-ucloud")).to_be_visible()
     page.locator("#api-key").fill("draft-synthetic-key")
-    page.locator("#check-models").click()
-    expect(page.locator("#model-check-results")).to_be_visible()
-    expect(page.locator("#model-check-results")).to_contain_text("Not listed")
-    assert checked == [("https://api.openai.com/v1", "draft-synthetic-key")]
-    assert not local_app.server.config.app.state.credentials.keys
+    page.locator("#connect-ucloud").click()
+    expect(page.locator("#ucloud-check-results")).to_be_visible()
+    expect(page.locator("#ucloud-check-results")).to_contain_text("Ready to save")
+    assert checked == [("https://cloud.sdu.dk", "draft-synthetic-key")]
+    # A connection check never stores the draft key.
+    assert not app.state.credentials.keys
     page.locator("#api-key").fill("")
-    expect(page.locator("#model-check-results")).to_be_empty()
+    expect(page.locator("#ucloud-check-results")).to_be_empty()
     provider_advanced(page)
+    runtime_offered = page.evaluate("featureOn('cbs_runtime')")
     choices = page.locator("#provider-model-options [data-enabled-model]")
-    expect(choices).to_have_count(5)
-    for name in (
-        "OpenAI gpt-transcribe",
-        "OpenAI gpt-4o-transcribe",
-        "OpenAI gpt-4o-mini-transcribe",
-        "OpenAI gpt-4o-transcribe-diarize (Speaker Labels)",
-        "OpenAI whisper-1 (Word timing)",
-    ):
-        page.get_by_role("checkbox", name=name, exact=True).check()
-    page.get_by_role("checkbox", name="OpenAI gpt-4o-mini-transcribe", exact=True).uncheck()
+    expect(choices).to_have_count(
+        len([m for m in ucloud_models() if runtime_offered or m.get("engine") != "whisperx"])
+    )
+    for model in ("large-v3", "large-v3-turbo", "small"):
+        page.locator(f'[data-enabled-model="{model}"]').check()
+    page.locator('[data-enabled-model="small"]').uncheck()
+    enabled = choices.evaluate_all(
+        "items => items.filter(i => i.checked).map(i => i.dataset.enabledModel)"
+    )
+    assert sorted(enabled) == ["large-v3", "large-v3-turbo"]
+    page.locator("#api-key").fill("synthetic-ucloud-key")
+    # Save checks the key it stores.
     page.get_by_role("button", name="Save settings").click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
-    expect(page.locator("#bulk-provider option")).to_have_count(4)
-    expect(page.locator("#bulk-provider")).not_to_contain_text("gpt-4o-mini-transcribe")
+    assert checked[1:] == [("https://cloud.sdu.dk", "synthetic-ucloud-key")]
+    assert app.state.credentials.get("ucloud-control:https://cloud.sdu.dk") == (
+        "synthetic-ucloud-key"
+    )
+    expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
+    expect(page.locator("#bulk-provider option")).to_have_text(
+        ["whisper/large-v3 (Transcriber)", "whisper/large-v3-turbo (Transcriber)"]
+    )
+    expect(page.locator("#bulk-provider")).not_to_contain_text("whisper/small")
     page.locator("#settings-open").click()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator("#ucloud-panel")).to_contain_text("Transcriber Batch")
+    expect(page.locator("#key-status")).to_have_text("Connection checked")
     expect(page.locator("#provider-name")).to_be_disabled()
     expect(page.locator("#provider-name")).not_to_be_visible()
     expect(page.locator("#base-url")).to_have_value("https://cloud.sdu.dk")
     expect(page.get_by_role("button", name="Save settings")).to_be_visible()
-    page.get_by_role("tab", name="UCloud", exact=True).press("Home")
-    expect(page.get_by_role("tab", name="OpenAI API")).to_be_focused()
+    page.get_by_role("tab", name="UCloud", exact=True).press("End")
+    expect(page.get_by_role("tab", name="Local Processing", exact=True)).to_be_focused()
+    page.keyboard.press("Home")
+    expect(page.get_by_role("tab", name="UCloud", exact=True)).to_be_focused()
     expect(page.locator("#provider-fields")).to_be_visible()
     screenshot = Path("test-results/provider-settings.png")
     screenshot.parent.mkdir(exist_ok=True)
     page.screenshot(path=str(screenshot))
+    # New UCloud configurations default to Protected. While allowed, the box is hidden
+    # (user decision 19 November); a saved denial still applies to that model only.
     provider_advanced(page)
-    page.locator('[name="approved-for"][value="protected"]').check()
-    page.get_by_role("button", name="Save settings").click()
+    approval = page.locator('[name="approved-for"][value="protected"]')
+    expect(approval).to_be_checked()
+    expect(approval).to_be_hidden()
+    expect(page.locator("#provider-policy-summary")).to_have_text(
+        "Allowed for Standard and Protected projects."
+    )
+    deny_protected(app.state.store, page.locator("#settings-provider").input_value())
+    page.get_by_role("button", name="Close settings").click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
+    page.reload()
     page.locator("#sidebar-create").click()
     page.locator("#name-input").fill("Protected research")
     page.locator("#project-classification").select_option("protected")
@@ -1125,8 +1187,9 @@ def test_browser_provider_tabs_project_storage_and_policy(
     page.locator("#name-form").get_by_role("button", name="Save", exact=True).click()
     expect(page.locator("#project-title")).to_have_text("Protected research")
     expect(page.locator("#project-rename")).to_be_visible()
-    expect(page.locator("#bulk-provider option")).to_have_count(1)
-    expect(page.locator("#bulk-provider")).to_contain_text("gpt-transcribe")
+    expect(page.locator("#bulk-provider option")).to_have_text(
+        ["whisper/large-v3-turbo (Transcriber)"]
+    )
     import_recording(page, local_app, "protected.wav", wav_bytes)
     expect(page.locator("#file-provider option")).to_have_count(1)
     expect(page.locator("#original-link")).to_have_attribute(
@@ -1164,17 +1227,36 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#project-edit-storage")).to_have_value(str(moved_folder))
     expect(page.locator("#project-edit-note")).to_contain_text("Save to apply changes")
     close_project_settings(page)
+    # Settings edits the model chosen for transcription; revoke the remaining approval.
+    turbo = next(
+        p
+        for p in public_profiles(app.state.store, app.state.credentials)["providers"]
+        if p["provider_type"] == "ucloud" and p["model"] == "large-v3-turbo"
+    )
+    page.locator("#bulk-provider").select_option(turbo["id"])
+    expect(page.locator("#bulk-provider")).to_be_enabled()
     page.locator("#settings-open").click()
-    page.get_by_role("tab", name="OpenAI API", exact=True).click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
+    expect(page.locator("#settings-provider")).to_have_value(turbo["id"])
     provider_advanced(page)
-    page.locator('[name="approved-for"][value="protected"]').uncheck()
-    page.get_by_role("button", name="Save settings").click()
-    expect(page.locator("#settings-dialog")).not_to_be_visible()
+    expect(approval).to_be_hidden()
+    page.get_by_role("button", name="Close settings").click()
+    deny_protected(app.state.store, turbo["id"])
+    page.reload()
     expect(page.locator("#bulk-provider")).to_contain_text("No approved providers")
+    # A connection saved as not allowed shows its box again, so the choice can be undone.
+    page.locator("#settings-open").click()
+    expect(page.locator("#settings-dialog")).to_be_visible()
+    provider_advanced(page)
+    expect(approval).to_be_visible()
+    expect(approval).not_to_be_checked()
+    expect(page.locator("#provider-policy-summary")).to_contain_text("Not allowed")
+    page.get_by_role("button", name="Close settings").click()
     page.locator("#select-all").click()
     expect(page.locator("#transcribe-selected")).to_be_disabled()
     assert (moved_folder / "project.json").exists()
     assert not list(parent.iterdir())
+    before = app.state.store.all("SELECT * FROM providers ORDER BY id")
     with httpx.Client(base_url=local_app.url, headers={"X-CBS-Request": "1"}) as client:
         response = client.post(
             "/api/providers",
@@ -1184,17 +1266,20 @@ def test_browser_provider_tabs_project_storage_and_policy(
                 "model": "gpt-4o-transcribe-diarize",
             },
         )
-        assert response.status_code == 201
+        assert response.status_code == 400
+        assert "Direct OpenAI service is disabled" in response.json()["detail"]
+    assert app.state.store.all("SELECT * FROM providers ORDER BY id") == before
     page.goto(local_app.url)
     expect(page.locator("#project-title")).to_have_text("Protected research renamed")
     expect(page.locator("#bulk-provider")).to_contain_text("No approved providers")
     create_project(page, "Standard model labels")
-    page.locator("#bulk-provider-kind").select_option("openai")
-    expect(page.locator("#bulk-provider")).to_contain_text(
-        "gpt-4o-transcribe-diarize (Speaker Labels)"
+    expect(page.locator("#bulk-provider-kind option")).to_have_count(1)
+    expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
+    expect(page.locator("#bulk-provider option")).to_have_text(
+        ["whisper/large-v3 (Transcriber)", "whisper/large-v3-turbo (Transcriber)"]
     )
-    expect(page.locator('#bulk-provider-kind option[value="custom"]')).to_have_count(0)
-    expect(page.locator('#bulk-provider-kind option[value="ucloud-vllm"]')).to_have_count(0)
+    for kind in ("openai", "custom", "ucloud-vllm"):
+        expect(page.locator(f'#bulk-provider-kind option[value="{kind}"]')).to_have_count(0)
 
 
 def test_browser_native_ucloud_setup_and_transcription(page, local_app, wav_bytes, monkeypatch):
@@ -1205,7 +1290,9 @@ def test_browser_native_ucloud_setup_and_transcription(page, local_app, wav_byte
 
     def check_setup(settings, key):
         checked.append((settings.ucloud_transcriber.template_job_id, key))
+        # check_setup reports readiness explicitly (ADR 0167 connection checks).
         return {
+            "ready": True,
             "application": dict(ucloud_native.MIG_APPLICATION),
             "product": dict(ucloud_native.MIG_PRODUCT),
             "parameters": [],
@@ -1256,6 +1343,7 @@ def test_browser_native_ucloud_setup_and_transcription(page, local_app, wav_byte
 
     monkeypatch.setattr("cbs_transcriber.ucloud_discovery.discover", discover)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#settings-open").click()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     provider_advanced(page)
@@ -1359,6 +1447,7 @@ def test_browser_local_enhancement_keeps_source_and_saves_new_result(
 
     monkeypatch.setattr("cbs_transcriber.enhancement.run_worker", enhance)
     page.goto(local_app.url)
+    skip_first_use(page)
     page.locator("#sidebar-create").click()
     page.locator("#name-input").fill("Local protected enhancement")
     page.locator("#project-classification").select_option("protected")
@@ -1627,9 +1716,8 @@ def test_browser_long_untimed_enhancement_shows_partial_timing(local_app, page, 
 def test_browser_ucloud_enhancement_setup_and_separate_result(
     page, local_app, wav_bytes, monkeypatch
 ):
-    from cbs_transcriber import enhancement, enhancement_api, providers, runtime_compute
+    from cbs_transcriber import enhancement, enhancement_api, runtime_compute
     from cbs_transcriber.enhancement_worker import write_json
-    from cbs_transcriber.providers import Settings, save_profile
 
     calls, checks, asked = [], [], []
     app = local_app.server.config.app
@@ -1651,24 +1739,19 @@ def test_browser_ucloud_enhancement_setup_and_separate_result(
             "runtime_compute_policy": runtime_compute.POLICY,
         },
     )
-    save_profile(
+    # Direct OpenAI is refused (DIRECT_OPENAI_DISABLED). The transcription model is this same
+    # checked UCloud connection, saved (as through the API) with segment timing only, so word
+    # timing is a missing feature that the UCloud enhancement adds as a separate result.
+    provider_id = save_ready_native(
         app.state.store,
         app.state.credentials,
-        "UCloud",
-        Settings(
-            provider_type="ucloud",
-            base_url="https://cloud.sdu.dk",
-            model="large-v3",
-            ucloud_transcriber={
-                "project_id": "ucloud-project",
-                "storage_path": "/drive/cbs",
-                "application": {"name": "transcriber", "version": "1.12"},
-                "product": {"id": "gpu-nvidia-b200-1-gpu", "category": "gpu", "provider": "ucloud"},
-            },
-        ),
-        api_key="synthetic-cloud-key",
-        remember=False,
-    )
+        "Synthetic passages",
+        capability="segments",
+        ucloud_transcriber={
+            "project_id": "ucloud-project",
+            "product": {"id": "gpu-nvidia-b200-1-gpu", "category": "gpu", "provider": "ucloud"},
+        },
+    )["id"]
 
     def prepared(store, credentials):
         checks.append(True)
@@ -1682,7 +1765,7 @@ def test_browser_ucloud_enhancement_setup_and_separate_result(
         frozen = job["params"]["ucloud_api"]
         assert frozen["settings"]["ucloud_transcriber"]["project_id"] == "ucloud-project"
         assert frozen["prepare_runtime"] and "cloud_settings" not in job["params"]
-        assert queue.credentials.get("ucloud-control:https://cloud.sdu.dk") == "synthetic-cloud-key"
+        assert queue.credentials.get("ucloud-control:https://cloud.sdu.dk") == NATIVE_KEY
         request = json.loads((folder / "request.json").read_text())
         assert {"runtime_python", "prepare_runtime"}.isdisjoint(request["options"])
         calls.append(job["params"]["source_snapshot"]["id"])
@@ -1708,38 +1791,36 @@ def test_browser_ucloud_enhancement_setup_and_separate_result(
         validate()
 
     monkeypatch.setattr("cbs_transcriber.enhancement_api.run_api", execute)
-
-    def transcribe(*args):
-        return {"segments": [{"text": "Hej København.", "start": 0, "end": 3}]}
-
-    monkeypatch.setattr(providers, "transcribe_file", transcribe)
-    with httpx.Client(base_url=local_app.url, headers={"X-CBS-Request": "1"}) as client:
-        response = client.post(
-            "/api/providers",
-            json={
-                "name": "Synthetic passages",
-                "provider_type": "openai",
-                "base_url": "http://127.0.0.1:9/v1",
-                "model": "synthetic-model",
-                "capability": "segments",
-            },
-        )
-        assert response.status_code == 201
-        provider_id = response.json()["id"]
+    transcribed = mock_native_runs(
+        monkeypatch,
+        lambda settings, recording: {
+            "segments": [{"text": "Hej København.", "start": 0, "end": 3}]
+        },
+    )
     page.goto(local_app.url)
     create_project(page, "Cloud enhancement")
     import_recording(page, local_app, "cloud-enhance.wav", wav_bytes)
     rid = page.url.rsplit("/", 1)[-1]
+
     # Provider Settings → UCloud shows the connection and checks the runtime read-only.
-    page.locator("#settings-open").click()
-    page.get_by_role("tab", name="UCloud", exact=True).click()
+    # Settings opens on the only provider tab, UCloud; clicking it again would start a
+    # second, racing read-only probe, so the count waits for each probe's own reply.
+    def runtime_check(response):
+        return response.url.endswith("/api/enhancement-api/check")
+
+    with page.expect_response(runtime_check):
+        page.locator("#settings-open").click()
+    expect(page.get_by_role("tab", name="UCloud", exact=True)).to_have_attribute(
+        "aria-selected", "true"
+    )
     panel = page.locator("#runtime-preparation-panel")
     expect(page.locator("#enhance-cloud-connection")).to_contain_text("ucloud-project")
     expect(panel).not_to_contain_text("SSH template")
     expect(panel.locator("input[type=password]")).to_have_count(0)
     expect(page.locator("#enhance-cloud-check-result")).to_contain_text("not prepared yet")
     assert checks == [True]
-    page.locator("#enhance-cloud-check").click()
+    with page.expect_response(runtime_check):
+        page.locator("#enhance-cloud-check").click()
     expect(page.locator("#enhance-cloud-check-result")).to_contain_text("not prepared yet")
     assert checks == [True, True]
     screenshot = Path("test-results/ucloud-enhancement-settings.png")
@@ -1748,7 +1829,7 @@ def test_browser_ucloud_enhancement_setup_and_separate_result(
     page.get_by_role("button", name="Close settings", exact=True).click()
     assert not app.state.store.all("SELECT id FROM jobs WHERE kind='enhance'")
     # Explicit UCloud processing is chosen in the transcription settings (ADR 0059).
-    page.locator("#file-provider-kind").select_option("openai")
+    page.locator("#file-provider-kind").select_option("ucloud")
     page.locator("#file-provider").select_option(provider_id)
     page.locator('#file-features [data-transcription-feature="word_timing"]').check()
     page.locator("#transcribe-one").click()
@@ -1769,7 +1850,7 @@ def test_browser_ucloud_enhancement_setup_and_separate_result(
         page.locator("#activity-open").click()
     prepare = page.locator('#jobs [data-input-action="prepare"]')
     expect(prepare).to_be_visible(timeout=15000)
-    assert len(asked) == 1 and calls == []
+    assert len(asked) == 1 and calls == [] and transcribed == []
     assert app.state.store.results(rid) == []
     prepare.click()
     assert len(asked) == 2 and "pinned UCloud runtime" in asked[1]
@@ -1788,6 +1869,7 @@ def test_browser_ucloud_enhancement_setup_and_separate_result(
     page.locator("#result-select").select_option(enhanced)
     expect(page.locator("#timing-badge")).to_have_text("Word timing")
     assert calls == [original]
+    assert transcribed == [("large-v3", rid)]
 
 
 def test_browser_deferred_vllm_keeps_saved_results_and_frozen_jobs(page, local_app, wav_bytes):
@@ -1837,9 +1919,8 @@ def test_browser_deferred_vllm_keeps_saved_results_and_frozen_jobs(page, local_a
     expect(page.locator('#file-provider-kind option[value="ucloud-vllm"]')).to_have_count(0)
     expect(page.locator(f'#file-provider option[value="{saved["id"]}"]')).to_have_count(0)
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_text(
-        ["OpenAI API", "UCloud", "Hugging Face", "Local Processing"]
-    )
+    # Direct OpenAI is retired (V212); deferred vLLM never gets its own tab back.
+    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
     expect(page.locator("#ucloud-vllm-setup")).not_to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator("#ucloud-panel")).to_contain_text("Transcriber Batch")
@@ -1997,7 +2078,8 @@ def test_browser_unattended_batch_transcribes_then_adds_only_missing_features(
     local_app,
     monkeypatch,
 ):
-    from cbs_transcriber import enhancement, providers
+    from cbs_transcriber import enhancement
+    from cbs_transcriber.providers import set_default_provider
 
     runtime = {
         "ready": True,
@@ -2013,7 +2095,8 @@ def test_browser_unattended_batch_transcribes_then_adds_only_missing_features(
     monkeypatch.setattr(enhancement, "check_runtime", lambda options, **kw: runtime)
     calls = []
 
-    def transcribe(*args):
+    def transcribe(settings, recording):
+        assert settings.provider_type == "ucloud" and settings.capability == "words"
         calls.append("asr")
         return {
             "segments": [{"text": "Hej CBS.", "start": 0, "end": 3}],
@@ -2033,9 +2116,10 @@ def test_browser_unattended_batch_transcribes_then_adds_only_missing_features(
             recording["id"], source["segments"], {}, "Enhanced", {}, job_id=job["id"]
         )
 
-    monkeypatch.setattr(providers, "transcribe_file", transcribe)
+    mock_native_runs(monkeypatch, transcribe)
     monkeypatch.setattr(enhancement, "run_enhancement", enhance)
-    store = local_app.server.config.app.state.store
+    app = local_app.server.config.app
+    store = app.state.store
     project = store.create_project("Overnight batch")
     recordings = [store.create_recording(project["id"], name) for name in ("One.wav", "Two.wav")]
     for recording in recordings:
@@ -2043,9 +2127,13 @@ def test_browser_unattended_batch_transcribes_then_adds_only_missing_features(
         store.execute(
             "UPDATE recordings SET status='ready',duration=3 WHERE id=?", (recording["id"],)
         )
-    with httpx.Client(base_url=local_app.url, headers={"X-CBS-Request": "1"}) as client:
-        client.put("/api/settings", json={"api_key": "synthetic", "remember": False})
+    # Direct OpenAI is refused (DIRECT_OPENAI_DISABLED): the default model is a checked native
+    # UCloud profile with word timing only (as saved through the API), so speaker labels are
+    # the one missing feature. Both selected recordings share one mocked native allocation.
+    saved = save_ready_native(store, app.state.credentials, "Synthetic words", capability="words")
+    set_default_provider(store, saved["id"], app.state.credentials)
     page.goto(local_app.url)
+    skip_first_use(page)
     # The runtime is chosen and checked once in Provider Settings → Processing (ADR 0059).
     open_processing(page)
     page.locator("#enhance-python").fill(sys.executable)
@@ -2106,6 +2194,12 @@ def test_browser_unattended_batch_transcribes_then_adds_only_missing_features(
     inspections = store.all("SELECT state FROM jobs WHERE kind='source-inspect'")
     assert len(inspections) == 2 and all(job["state"] == "completed" for job in inspections)
     assert len(store.all("SELECT id FROM jobs")) == 6
+    batches = {
+        json.loads(job["params"]).get("native_batch_id")
+        for job in store.all("SELECT params FROM jobs WHERE kind='transcribe'")
+    }
+    assert len(batches) == 1 and None not in batches
+    assert store.native_batch(batches.pop())["state"] == "completed"
     for recording in recordings:
         active = store.recording(recording["id"])["active_transcript_id"]
         assert store.result(recording["id"], active)["source"]["kind"] == "provider"

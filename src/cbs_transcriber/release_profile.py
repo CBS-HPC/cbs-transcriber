@@ -33,8 +33,11 @@ FEATURES = {
     "restore_ui": "Restoring a backup",
     "custom_providers": "Setting up a custom or UCloud vLLM provider",
     "activity_diagnostics": "Inline Activity routing details",
+    "undo_last_change": "Undo last change, Redo, the History change list and branch view",
+    "spelling": "Local spelling assistance",
 }
-PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES)}
+# MVP v2 shows Undo last change, History and Branches (user decision, 20 November 2026).
+PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES) - {"undo_last_change"}}
 LABEL = re.compile(r"[A-Za-z0-9 ._()+-]{1,40}")
 HIDDEN_PROVIDER_TYPES = {"custom": "custom_providers", "ucloud-vllm": "custom_providers"}
 
@@ -67,6 +70,16 @@ GUARDED_ROUTES = tuple(
         ("PUT", r"/api/library/portable-retention", "cloud_backup"),
         ("POST", r"/api/library/portable-retention/(?:preview|apply)", "cloud_backup"),
         ("POST", r"/api/library/portable-restore", "restore_ui"),
+        (
+            "POST",
+            rf"/api/recordings/{_ID}/transcripts/{_ID}/(?:undo|redo)-last",
+            "undo_last_change",
+        ),
+        # Spelling (ADR 0185): enabling/changing preferences, checks, suggestions and public
+        # dictionary retrieval. Reads, dictionary removal and vocabulary removals stay open;
+        # vocabulary additions are refused in the handler.
+        ("PUT", r"/api/spelling/settings", "spelling"),
+        ("POST", rf"/api/recordings/{_ID}/spelling/(?:check|suggest|dictionary)", "spelling"),
     )
 )
 

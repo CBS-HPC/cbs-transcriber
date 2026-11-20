@@ -83,7 +83,10 @@ def test_v84_activity_uses_shared_batch_state_and_safe_per_file_outcomes(client,
     for row in rows:
         assert row["ucloud_batch_state"] == "running"
         assert row["ucloud_batch_progress"] == 0.65
-        assert row["ucloud_batch_message"] == batch["message"]
+        # V229: one plain shared sentence; "saved" counts local results only.
+        assert row["ucloud_batch_message"] == (
+            "UCloud finished · downloading transcripts · 1 of 4 saved"
+        )
         assert row["ucloud_batch_created"] == batch["created"]
         assert row["ucloud_batch_updated"] == batch["updated"]
         assert row["ucloud_batch_unresolved"] is True

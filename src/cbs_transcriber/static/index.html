@@ -26,9 +26,13 @@
     <link rel="stylesheet" href="/static/app.css" />
     <script src="/static/library.js" defer></script>
     <script src="/static/app.js" defer></script>
+    <script src="/static/spelling.js" defer></script>
     <script src="/static/background_exports.js" defer></script>
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
+    <script src="/static/change_steps.js" defer></script>
+    <script src="/static/history_changes.js" defer></script>
+    <script src="/static/history_graph.js" defer></script>
     <script src="/static/conflict_review.js" defer></script>
     <script src="/static/portable.js" defer></script>
   </head>
@@ -129,7 +133,7 @@
           <div class="page-heading">
             <div class="project-heading-main">
               <div class="project-title-row">
-                <h1 id="project-title">Make room for the conversation.</h1>
+                <h1 id="project-title"></h1>
                 <button
                   id="project-rename"
                   type="button"
@@ -141,10 +145,7 @@
                   <span aria-hidden="true">✎</span>
                 </button>
               </div>
-              <p id="project-description">
-                Bring your recordings and transcripts together in one calm
-                workspace.
-              </p>
+              <p id="project-description" hidden></p>
               <details
                 id="project-notes-panel"
                 class="description-notes"
@@ -163,23 +164,17 @@
               </details>
             </div>
           </div>
-          <div id="welcome" class="welcome-card">
-            <div class="welcome-art" aria-hidden="true">
-              <span></span><span></span><span></span><span></span><span></span
-              ><span></span><span></span><span></span><span></span>
-            </div>
-            <span class="eyebrow">FROM RECORDING TO UNDERSTANDING</span>
-            <h2>Every conversation has a story.</h2>
-            <p>
-              Create a project, add a recording, and find the words that matter.
-            </p>
-            <button id="welcome-create" class="button primary">
-              Create your first project <span aria-hidden="true">↗</span>
+          <div id="welcome" class="empty-library-brand">
+            <img
+              src="/static/brand/cbs-logo-vertical.svg"
+              alt="Copenhagen Business School"
+              width="134"
+              height="250"
+            />
+            <h1>Transcriber</h1>
+            <button id="welcome-create" class="button primary" type="button">
+              ＋ Create a project
             </button>
-            <div class="welcome-features">
-              <span>◉ Audio & video</span><span>▤ UCloud imports</span
-              ><span>↓ NVivo export</span>
-            </div>
           </div>
           <div id="project-content" hidden>
             <div class="library-toolbar">
@@ -317,6 +312,25 @@
                   Versions
                 </button>
               </div>
+              <!-- Undo last change / Redo (ADR 0180), directly under Versions. -->
+              <div class="change-steps" data-feature="undo_last_change">
+                <button
+                  id="undo-last"
+                  class="button change-step"
+                  type="button"
+                  disabled
+                >
+                  ↶ Undo
+                </button>
+                <button
+                  id="redo-last"
+                  class="button change-step"
+                  type="button"
+                  disabled
+                >
+                  ↷ Redo
+                </button>
+              </div>
               <p id="working-version-status" class="field-note"></p>
             </div>
           </div>
@@ -424,6 +438,20 @@
                   role="status"
                   hidden
                 ></div>
+                <label
+                  id="transcript-filter-label"
+                  class="transcript-filter"
+                  hidden
+                  >Show
+                  <select id="transcript-filter" aria-label="Show passages">
+                    <option value="all" selected>All</option>
+                    <option value="not_checked">Not checked</option>
+                    <option value="needs_review">Needs review</option>
+                    <option value="checked">Checked</option>
+                    <option value="uncertain">Uncertain</option>
+                    <option value="missing_timing">Missing word timing</option>
+                  </select></label
+                >
                 <button
                   id="next-uncertain"
                   class="button"
@@ -432,6 +460,12 @@
                 >
                   Next to review
                 </button>
+                <span
+                  id="transcript-filter-note"
+                  class="transcript-filter-note"
+                  role="status"
+                  hidden
+                ></span>
                 <div
                   id="uncertainty-controls"
                   class="uncertainty-controls"
@@ -742,12 +776,10 @@
           </button>
         </div>
         <p class="settings-note">
-          A library holds projects, transcripts and their history. Opening
-          another library restarts the app; finish or cancel queued and running
-          jobs first. The library you open is remembered for next time.
-          <strong>Remove from list</strong> only hides a library.
-          <strong>Delete permanently</strong> first shows exactly what would be
-          deleted and kept; nothing is deleted until you confirm.
+          A library contains your projects, transcripts and history. Finish or
+          cancel jobs before switching; opening another library restarts the app
+          and is remembered next time. Delete permanently shows a preview and
+          asks you to confirm before removing anything.
         </p>
         <ul class="library-list" data-library-list></ul>
         <section
@@ -1261,6 +1293,14 @@
             </div>
           </div>
         </fieldset>
+        <button
+          type="button"
+          class="button subtle"
+          id="spelling-project-vocabulary"
+          data-feature="spelling"
+        >
+          Project vocabulary
+        </button>
         <p id="project-edit-note" role="status"></p>
         <div
           id="project-save-unconfirmed"
@@ -1304,6 +1344,40 @@
         </p>
         <button id="project-delete" type="button" class="button danger">
           Delete Project
+        </button>
+      </div>
+    </dialog>
+    <!-- Private spelling vocabulary (ADR 0185): hidden in the MVP profile. -->
+    <dialog
+      id="spelling-vocabulary-dialog"
+      aria-labelledby="spelling-vocabulary-title"
+      data-feature="spelling"
+    >
+      <div class="dialog-heading">
+        <h2 id="spelling-vocabulary-title">Vocabulary</h2>
+      </div>
+      <p class="field-note">
+        One word or name per line. These entries stay private in this library.
+      </p>
+      <label
+        >Vocabulary<textarea
+          id="spelling-vocabulary-text"
+          spellcheck="false"
+          maxlength="200000"
+          rows="10"
+        ></textarea>
+      </label>
+      <p id="spelling-vocabulary-status" class="field-note" role="status"></p>
+      <div class="dialog-actions">
+        <button type="button" class="button" id="spelling-vocabulary-cancel">
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="button primary"
+          id="spelling-vocabulary-save"
+        >
+          Save vocabulary
         </button>
       </div>
     </dialog>
@@ -1393,15 +1467,13 @@
             >Recording classification<select id="project-classification">
               <option value="">Choose the classification…</option>
               <option value="standard">Standard</option>
-              <option value="protected">
-                Protected · approved providers only
-              </option>
+              <option value="protected">Protected</option>
             </select></label
           >
           <p class="settings-note">
-            Protected projects can transcribe only with providers you explicitly
-            approve for their classification. Local import, review and export
-            remain available.
+            UCloud can transcribe Standard and Protected projects. A connection
+            saved as not allowed for Protected data is not offered for Protected
+            projects. Local import, review and export remain available.
           </p>
           <label
             >Project storage folder<input
@@ -1643,7 +1715,26 @@
         </button>
       </div>
       <div class="settings-tabs" role="tablist" aria-label="Versions">
-        <button type="button" role="tab" aria-selected="true">History</button>
+        <button
+          id="history-list-tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+        >
+          History
+        </button>
+        <!-- Branch view (ADR 0182): results as lanes, versions as nodes. -->
+        <button
+          id="history-graph-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          tabindex="-1"
+          data-feature="undo_last_change"
+          title="Each saved result and its versions, with where they branched and merged"
+        >
+          Branches
+        </button>
         <button
           id="results-manage"
           type="button"
@@ -1655,7 +1746,56 @@
           Results
         </button>
       </div>
-      <p class="settings-note">
+      <section
+        id="history-graph"
+        class="history-graph"
+        data-feature="undo_last_change"
+        aria-label="Branch view"
+        hidden
+      >
+        <p class="settings-note">
+          Each saved result is a row of its versions, oldest on the left. A
+          result made from another branches from the exact version it used;
+          merges are drawn from the version they took updates from. A dashed
+          start means the source version is unknown. Click a version to see what
+          changed; click a grouped run to expand it.
+        </p>
+        <p id="history-graph-status" role="status"></p>
+        <div class="history-graph-scroll">
+          <svg
+            id="history-graph-svg"
+            role="group"
+            aria-label="Results and versions"
+          ></svg>
+        </div>
+        <section id="history-graph-detail" aria-label="Selected version" hidden>
+          <h3 id="history-graph-title"></h3>
+          <p id="history-graph-meta" class="settings-note"></p>
+          <div id="history-graph-changes" class="history-changes"></div>
+          <div class="history-graph-actions">
+            <button
+              id="history-graph-review"
+              class="button"
+              type="button"
+              hidden
+            >
+              Open for review
+            </button>
+            <button
+              id="history-graph-compare"
+              class="button"
+              type="button"
+              hidden
+            >
+              Compare with current
+            </button>
+            <button id="history-graph-working" class="button" type="button">
+              Mark this version Working
+            </button>
+          </div>
+        </section>
+      </section>
+      <p id="history-list-note" class="settings-note">
         Read-only saved states. Inspecting a version leaves your current result,
         playback and unsaved edits unchanged. Earlier history before a legacy
         observation is unknown.
@@ -1677,6 +1817,23 @@
         <h3 id="history-preview-title"></h3>
         <p id="history-preview-meta" class="settings-note"></p>
         <p id="history-hash" class="history-hash"></p>
+        <!-- History change list (ADR 0181): what this version changed, and proven reverts. -->
+        <div data-feature="undo_last_change">
+          <h4 class="history-subtitle">What changed</h4>
+          <div
+            id="history-changes"
+            class="history-changes"
+            aria-label="What changed in this version"
+          ></div>
+          <p id="history-revert-note" class="field-note" hidden>
+            Restores the passages exactly as they were before this change. Later
+            edits elsewhere are kept, and History keeps both versions.
+          </p>
+          <button id="history-revert" class="button" type="button" hidden>
+            Revert this change
+          </button>
+          <h4 class="history-subtitle">Full text</h4>
+        </div>
         <div id="history-text" class="history-text"></div>
         <a id="history-export" class="button" download
           >↓ Download this version as text</a
@@ -2360,6 +2517,67 @@
       </form>
     </dialog>
     <dialog
+      id="first-use-dialog"
+      class="settings-dialog first-use-dialog"
+      aria-labelledby="first-use-title"
+      aria-describedby="first-use-description"
+    >
+      <form id="first-use-setup" class="first-use-setup">
+        <div class="dialog-heading">
+          <h2 id="first-use-title">Connect UCloud</h2>
+          <button
+            id="first-use-close"
+            type="button"
+            class="icon-button"
+            aria-label="Close setup"
+          >
+            ×
+          </button>
+        </div>
+        <p id="first-use-description">
+          Save your UCloud connection to transcribe recordings. You can also do
+          this later in Settings.
+        </p>
+        <label
+          >UCloud API key
+          <input
+            id="first-use-ucloud-key"
+            type="password"
+            autocomplete="off"
+            maxlength="4096"
+            required
+            autofocus
+          />
+        </label>
+        <label
+          >Hugging Face token (optional)
+          <input
+            id="first-use-hf-token"
+            type="password"
+            autocomplete="off"
+            maxlength="4096"
+          />
+        </label>
+        <p class="field-note">
+          Saving the optional token checks access and prepares configured models
+          when allowed in Settings. Follow progress in Activity.
+        </p>
+        <label class="checkbox-label"
+          ><input id="first-use-remember" type="checkbox" checked />Remember
+          credentials in the OS credential store</label
+        >
+        <p id="first-use-status" role="status"></p>
+        <div class="dialog-actions">
+          <button id="first-use-skip" type="button" class="button">
+            Skip for now
+          </button>
+          <button id="first-use-save" type="submit" class="button primary">
+            Connect and save
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
       id="settings-dialog"
       class="settings-dialog"
       aria-labelledby="settings-title"
@@ -2397,7 +2615,10 @@
             id="tab-openai"
             data-provider-tab="openai"
             aria-controls="provider-fields"
-            aria-selected="true"
+            aria-selected="false"
+            tabindex="-1"
+            hidden
+            disabled
           >
             OpenAI API
           </button>
@@ -2407,8 +2628,7 @@
             id="tab-ucloud"
             data-provider-tab="ucloud"
             aria-controls="provider-fields"
-            aria-selected="false"
-            tabindex="-1"
+            aria-selected="true"
           >
             UCloud
           </button>
@@ -2446,7 +2666,9 @@
             WhisperX word timing uses public alignment models and needs no
             token. Speaker labels use the gated pyannote model: a read token and
             accepted model terms are needed only to download it. Cached models
-            run offline. The token is never sent with recordings.
+            run offline. Saving checks access and prepares configured models
+            when allowed in Settings; follow progress in Activity. The token is
+            never sent with recordings.
           </p>
           <label
             >Hugging Face read token<span
@@ -2476,7 +2698,14 @@
           <p id="hf-settings-result" class="settings-note" role="status"></p>
           <div class="dialog-actions">
             <button type="button" id="hf-settings-check" class="button">
-              Check token</button
+              Check saved token</button
+            ><button
+              type="button"
+              id="hf-settings-activity"
+              class="button"
+              hidden
+            >
+              View Activity</button
             ><button type="button" class="button" data-close="settings-dialog">
               Close</button
             ><button type="button" id="hf-settings-save" class="button primary">
@@ -2535,15 +2764,45 @@
           <button id="enhance-check" class="button" type="button">
             Check this computer again
           </button>
+          <!-- Local spelling (ADR 0185): hidden in the MVP profile. -->
+          <section id="spelling-settings" data-feature="spelling">
+            <h3 class="settings-subhead">Local spelling</h3>
+            <p class="field-note">
+              Only the open passage is checked. Text and private vocabulary stay
+              on this computer. Browser spellcheck stays off.
+            </p>
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-enabled" />Check spelling in
+              passage edits</label
+            >
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-auto-download" />Download
+              public spelling dictionaries when needed</label
+            >
+            <button type="button" class="button" id="spelling-settings-save">
+              Save spelling settings
+            </button>
+            <button
+              type="button"
+              class="button subtle"
+              id="spelling-personal-vocabulary"
+            >
+              Personal vocabulary
+            </button>
+            <p
+              id="spelling-settings-status"
+              class="field-note"
+              role="status"
+            ></p>
+            <ul id="spelling-installed" class="spelling-dictionaries"></ul>
+          </section>
           <details id="local-concurrency" class="enhance-rules">
             <summary>Parallel local tasks</summary>
             <p class="settings-note">
-              How many files this computer works on at once in each step. More
-              parallel tasks finish large batches sooner but use more processor
-              and memory, so other programs may feel slower meanwhile. Changes
-              apply to the next file a step starts; running files continue.
-              Provider requests also count against your provider's rate limits;
-              a rate-limited part stops its file until you retry it.
+              Set how many files each step handles at once. Higher limits use
+              more processor and memory and may slow other apps. Changes affect
+              new work; running files continue. Stay within your provider's rate
+              limits. Retry a file if a part is rate-limited.
             </p>
             <div class="form-columns">
               <label
@@ -2964,16 +3223,13 @@
               role="status"
             ></p>
             <p id="enhance-cloud-check-help" class="field-note">
-              When enabled, Check UCloud again can prepare the base CBS Runtime
-              and baseline public caches. Progress and Stop are in Activity.
-              Opening this tab only checks readiness. Additional selected ASR
-              profiles and gated speaker models are checked separately when
-              requested. Preparation may download several GB, take 20 minutes or
-              longer and incur UCloud charges. No recording is uploaded until
-              ready; your Hugging Face token stays on this computer. When
-              disabled, the app asks once per request. Automatic placement never
-              prepares. The connection shown above is the saved CBS Runtime
-              connection; save UCloud connection changes first.
+              Opening this tab only checks readiness. With preparation enabled,
+              Check UCloud again can download the base runtime and public
+              models. This may take 20+ minutes, several GB and UCloud credits;
+              use Activity to follow or stop it. Other models are checked when
+              requested. Recordings wait until ready; your Hugging Face token
+              stays here. Otherwise, each request asks first. Automatic never
+              prepares. Save connection changes first.
             </p>
           </fieldset>
           <div class="form-columns" id="response-options">
@@ -3050,6 +3306,42 @@
           </fieldset>
           <details id="provider-advanced">
             <summary>Advanced settings</summary>
+            <div id="native-limits-panel" hidden>
+              <div class="form-columns">
+                <label
+                  >Files uploaded at once per batch<input
+                    id="native-upload-limit"
+                    form="native-limits-form"
+                    type="number"
+                    min="1"
+                    max="8"
+                    step="1"
+                    value="4"
+                    required
+                    disabled
+                    aria-describedby="native-limits-note native-limits-status"
+                /></label>
+                <label
+                  >UCloud Transcriber batches at once<input
+                    id="native-batch-limit"
+                    form="native-limits-form"
+                    type="number"
+                    min="1"
+                    max="4"
+                    step="1"
+                    value="2"
+                    required
+                    disabled
+                    aria-describedby="native-limits-note native-limits-status"
+                /></label>
+              </div>
+              <p id="native-limits-note" class="field-note">
+                Upload speed depends on your network, not this computer's
+                processors. A single-file run counts as one batch. Changes apply
+                to new batches; running batches keep their limits and continue.
+              </p>
+              <p id="native-limits-status" class="field-note" role="status"></p>
+            </div>
             <div id="runtime-capacity-panel" data-feature="cbs_runtime" hidden>
               <label
                 >Simultaneous UCloud runtime allocations<input
@@ -3088,6 +3380,7 @@
         </fieldset>
       </form>
       <form id="runtime-capacity-form" hidden></form>
+      <form id="native-limits-form" hidden></form>
       <form id="local-concurrency-form" hidden></form>
     </dialog>
     <input

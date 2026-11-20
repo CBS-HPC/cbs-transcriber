@@ -21,6 +21,10 @@ from .ucloud_native import (
 )
 
 OPENAI_URL = "https://api.openai.com/v1"
+DIRECT_OPENAI_DISABLED = (
+    "Direct OpenAI service is disabled in this version of CBS Transcriber. "
+    "Choose UCloud in Settings for new transcription."
+)
 OPENAI_AUTO_LANGUAGE_ERROR = (
     "Leave the OpenAI language hint blank for automatic language detection; do not enter 'auto'."
 )
@@ -98,6 +102,23 @@ def _uses_openai_language_hint(settings):
         settings.provider_type == "openai"
         or urlparse(settings.base_url).hostname == "api.openai.com"
     )
+
+
+def direct_openai(settings):
+    """App service policy, independent of the retained compatible request protocol."""
+    if settings.provider_type == "openai":
+        return True
+    hostname = urlparse(settings.base_url).hostname or ""
+    try:
+        hostname = hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        pass
+    return hostname.rstrip(".").casefold() == "api.openai.com"
+
+
+def require_service_available(settings):
+    if direct_openai(settings):
+        raise ValueError(DIRECT_OPENAI_DISABLED)
 
 
 class Settings(BaseModel):
@@ -378,14 +399,18 @@ def stored_version(name, value):
 
 
 def public_profile(store, credentials, identifier):
+    from . import provider_connection
+
     raw = store.one("SELECT * FROM providers WHERE id=?", (identifier,))
     settings = Settings.model_validate_json(raw["value"])
+    key = credentials.get(credential_scope(settings)) if settings.base_url else ""
     result = {
         "id": raw["id"],
         "version": stored_version(raw["name"], raw["value"]),
         "name": raw["name"],
         **settings.model_dump(),
-        "has_key": bool(settings.base_url and credentials.get(credential_scope(settings))),
+        "has_key": bool(key),
+        **provider_connection.public_state(store, settings, key),
     }
     if any(
         json.loads(raw["value"]).get(key) is True
@@ -442,6 +467,7 @@ def save_runtime_language(store, credentials, identifier, language, expected_ver
             )
         payload = json.loads(row["value"])
         settings = Settings.model_validate(payload)
+        require_service_available(settings)
         if settings.provider_type != "ucloud" or not whisperx_model(settings):
             raise ValueError("Choose an existing CBS Runtime / WhisperX model configuration.")
         if (fixed := fixed_runtime_language(settings)) and language != fixed:
@@ -474,6 +500,7 @@ def save_native_language(store, credentials, identifier, language, expected_vers
             raise StaleProvider("These settings changed. Reopen Settings; nothing was saved.")
         payload = json.loads(row["value"])
         settings = Settings.model_validate(payload)
+        require_service_available(settings)
         if settings.provider_type != "ucloud" or whisperx_model(settings):
             raise ValueError("Choose an existing UCloud Transcriber model configuration.")
         if payload.get("language") != language or "language" not in payload:
@@ -497,6 +524,7 @@ def save_native_allocation(store, credentials, identifier, allocation, expected_
         raise StaleProvider("These settings changed. Reopen Settings; nothing was saved.")
     payload = json.loads(row["value"])
     settings = Settings.model_validate(payload)
+    require_service_available(settings)
     if settings.provider_type != "ucloud" or whisperx_model(settings):
         raise ValueError("Choose a native Transcriber model, not a CBS Runtime model.")
     setup = settings.ucloud_transcriber
@@ -689,9 +717,12 @@ def save_profile(
     ucloud_token=None,
     hf_token=None,
     native_allocation_choice=None,
+    connection_check=None,
+    connection_checks=None,
 ):
     from .store import new_id, now
 
+    require_service_available(settings)
     if identifier is None:
         settings = fresh_native_settings(settings)
     normalize_vllm_model(settings)
@@ -882,6 +913,15 @@ def save_profile(
                         "UPDATE providers SET value=? WHERE id=?",
                         (json.dumps(payload, ensure_ascii=False, separators=(",", ":")), row["id"]),
                     )
+        if connection_check is not None:
+            if connection_checks is None:
+                raise ValueError("Check the provider connection in Settings before saving.")
+            connection_checks.save(
+                db,
+                connection_check,
+                settings,
+                api_key if api_key is not None else credentials.get(credential_scope(settings)),
+            )
         if settings.provider_type == "ucloud-vllm":
             tokens = {"ucloud_token": ucloud_token, "hf_token": hf_token}
             for name, scope in setup_key_scopes(settings).items():
@@ -892,8 +932,16 @@ def save_profile(
     return public_profile(store, credentials, identifier)
 
 
-def set_default_provider(store, identifier):
-    require_enabled(Settings.model_validate(profile(store, identifier)["settings"]))
+def set_default_provider(store, identifier, credentials=None):
+    settings = Settings.model_validate(profile(store, identifier)["settings"])
+    require_enabled(settings)
+    if credentials is not None:
+        from . import provider_connection
+
+        with store.connection() as db:
+            provider_connection.require_ready(
+                db, settings, credentials.get(credential_scope(settings))
+            )
     store.execute(
         "UPDATE settings SET value=? WHERE id=2", (json.dumps({"default_provider_id": identifier}),)
     )
@@ -901,6 +949,7 @@ def set_default_provider(store, identifier):
 
 def require_enabled(settings):
     """Only new selection/submission checks this flag; frozen workers and retries keep running."""
+    require_service_available(settings)
     if not settings.enabled:
         raise ValueError(
             "Model is disabled. Enable it in Settings before starting a new transcription."
@@ -939,6 +988,8 @@ def save_settings(
     expected_version=None,
     ucloud_token=None,
     hf_token=None,
+    connection_check=None,
+    connection_checks=None,
 ):
     identifier = default_provider_id(store)
     return save_profile(
@@ -952,6 +1003,8 @@ def save_settings(
         expected_version=expected_version,
         ucloud_token=ucloud_token,
         hf_token=hf_token,
+        connection_check=connection_check,
+        connection_checks=connection_checks,
     )
 
 
@@ -996,6 +1049,7 @@ def status_message(exc):
 
 def check_models(settings, key, http_client=None):
     """Inspect account-visible model IDs without sending audio or starting paid work."""
+    require_service_available(settings)
     if settings.provider_type == "ucloud":
         raise ValueError("Use Check UCloud setup for the native Transcriber provider.")
     require_key(settings, key)
@@ -1040,6 +1094,7 @@ def check_models(settings, key, http_client=None):
             {"id": model, "name": label, "listed": model in available}
             for model, (label, _) in OPENAI_MODELS.items()
         ],
+        "selected_model_listed": settings.model in available,
         "note": "Listed means visible to this API key. Transcription permissions, billing, "
         "quota, and audio compatibility are checked only when transcribing. "
         "No audio was uploaded and no transcription was started.",
@@ -1105,6 +1160,7 @@ def transcription_fields(settings):
 
 def transcribe_file(path, settings, key, http_client=None, *, request_fields=None):
     """Send one part; request_fields replays a frozen descriptor's exact logical fields."""
+    require_service_available(settings)
     defaults = transcription_fields(settings)
     require_key(settings, key)
     if http_client is not None and http_client.follow_redirects:

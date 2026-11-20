@@ -7,8 +7,12 @@ Add numbered architecture decisions when changing persistence, timing, or job se
 
 ## Installing on a new machine (Windows and macOS)
 
-Follow README "Install and start". The ordinary-user route is **uv tool install from a
-versioned GitHub release wheel and its matching constraints file**; no Git is required.
+Follow README "Install and start" and `docs/installation.md`. The requested ordinary-user
+route is a **local App/.venv installed from a versioned GitHub release wheel and its matching
+constraints file**; no Git is required. Private Windows installation/help/core/COM/repair
+checks passed for the released wheel; full environment removal remains unverified after an
+automatic approval block. Do not describe these checks as proof that the colleague's
+managed-Windows Access denied issue is resolved; clean-device/Mac acceptance stays separate.
 Repository: https://github.com/CBS-HPC/cbs-transcriber. The MVP wheel release is v0.1.0;
 verify the actual release and installation receipts before claiming acceptance. Publishing and
 repository visibility changes require explicit user authorization; never embed tokens.
@@ -22,34 +26,42 @@ repository visibility changes require explicit user authorization; never embed t
    official installer's `$env:USERPROFILE\.local\bin\uv.exe` explicitly. Do not change Conda
    or global PATH silently. Run `uv python install 3.13` for per-user uv-managed CPython 3.13;
    the app's tool environment remains separate from existing Conda/system environments.
-2. Use the README's explicit versioned HTTPS wheel/constraints URLs once publicly available:
-   `uv tool install --python 3.13 --no-config --link-mode copy --constraints <release-constraints> <release-wheel>`.
-   Copy mode avoids observed Windows Cloud Files/hardlink error 396. Preserve this flag in
-   update/retry commands; it does not change runtime behavior or dependency pins.
-   While access is private, obtain both files through a signed-in browser and use local paths.
-   Do not require GitHub CLI, add a global PyTorch index or drop the release constraints.
-3. Start `cbs-transcriber` at http://127.0.0.1:8765; keep the terminal open, Ctrl+C stops.
+2. Create `<user home>/CBS Transcriber/App`, refusing an existing App folder. Create its
+   `.venv` with `uv --no-config venv --managed-python --python 3.13 <App/.venv>`, then use `uv --no-config pip
+   install --python <exact environment Python> --link-mode copy --constraints <release-constraints>
+   <release-wheel>`. Follow the complete platform-specific block in README/installation.md;
+   stop on each failed command. Keep Library and Projects as siblings, outside App. Copy mode
+   avoids observed Windows Cloud Files/hardlink error 396. Keep matching release assets and
+   these flags on repair/update; do not drop constraints or change a global package index.
+3. Start `<exact environment Python> -m cbs_transcriber --profile mvp` at
+   http://127.0.0.1:8765; keep the terminal open, Ctrl+C stops.
    The release packages MVP; `--profile mvp` selects it explicitly. The profile hides unfinished
-   features but does not reduce dependency downloads. If PATH is missing, use
-   `uv tool update-shell` and reopen the terminal. Stop an earlier app process before opening
+   features but does not reduce dependency downloads. Exact interpreter startup needs no
+   app executable on PATH or environment activation. Stop an earlier app process before opening
    its library from the installed copy; closing a browser tab does not release the lease.
 4. Optional Desktop launcher on Windows/macOS:
-   `cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp`.
+   `<exact environment Python> -m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp`.
    Windows creates a .lnk; macOS creates an executable .command file. Both currently use
    system-default icons; custom icon assignment is not implemented in v0.1.0. Omit the
    location option for Start menu / ~/Applications. See docs/installation-shortcuts.md. Never
    silently overwrite a launcher, install dependencies, migrate a library or start processing.
 5. Update only after saving edits, finishing/stopping jobs, making a complete backup and
-   stopping the app. Install the next approved wheel plus matching constraints, adding
-   `--reinstall-package cbs-transcriber`. Do not substitute an unqualified `uv tool upgrade`.
-   Uninstall only the tool with `uv tool uninstall cbs-transcriber`; libraries/projects remain
-   separate. Recreate launchers after moving/replacing their installation.
+   stopping the app. Use `uv pip install --python <exact environment Python>` with the next
+   approved wheel/matching constraints, copy mode and `--reinstall-package cbs-transcriber`.
+   Do not replace/move a running environment. Follow `docs/uninstall.md`: a local environment
+   and an earlier uv-tool install have different removal steps. Never delete the whole parent
+   holding Library/Projects. Recreate launchers after moving/replacing their installation.
 
 Supported scope: Windows x64; Apple Silicon/macOS14+ with CPU local inference packages;
 Intel macOS core/API/UCloud without the incompatible local inference stack. Clean-device
 Windows/Apple Silicon/Intel acceptance remains pending; package plans are not OS acceptance.
 Wheel constraints pin release versions and selected artifacts, but tool installation does not
 consume the project uv.lock or establish its complete artifact-hash guarantees.
+The isolated post-MVP branch also contains a reviewed `scripts/install_latest.py` bootstrap
+for the earlier uv-tool route. It does not implement this local App-folder layout and its
+release asset is not published: keep the versioned route until a separately authorized
+adaptation/release uploads and verifies that asset. See
+`docs/releasing.md`; never rename a valid versioned wheel to `latest.whl`.
 
 Developers retain clone + `uv sync --locked` + `uv run --locked cbs-transcriber --profile mvp`
 in a fresh unsynced folder. Git is only needed for cloning/updating source. A source ZIP is a
@@ -97,6 +109,13 @@ Future public commits must descend only from the clean public main history.
   Preserve source-operation admission inhibitors and shutdown drain under the serving lease.
   Stream ready owned descriptors with unconditional response-dispatch cleanup; no ZIP Blob or
   schema migration. Ordinary editing remains available; restart continuation is not promised.
+- `huggingface_tasks.py`/`huggingface_prepare_worker.py` (ADR 0173) own server-lifetime HF
+  Save/Check Activity, pinned local preparation and coordination with the existing durable
+  Runtime owner. Keep tokens/fingerprints out of durable/public projections, public downloads
+  token-free, exact worker origin/pins and Stop/drain under the serving lease. An accepted
+  remote preparation task owns only its frozen public files/models; it cannot fetch with a
+  replacement HF token. Optional Runtime model plans and bounded journal/cache observations
+  preserve absent-plan legacy behavior. First-use setup must retain existing provider policy.
 - Manual edit hot paths (ADR 0159) may reuse canonical-format validation only with a fresh
   hash and fresh parsed objects; live ownership/context/CAS and inverse checks stay current.
   Targeted merge/split Apply can stop after its exact proof; advisory and Delete restoration
@@ -135,6 +154,14 @@ Future public commits must descend only from the clean public main history.
   absent policies preserve legacy gaps. Local timing Apply commits version/mirror/job receipt
   atomically, validates lost-reply successors and skips newer timing maps. Keep original producer
   meaning, named voices and unselected dictionaries; reports validate without runtime/file reads.
+- ADR 0169 timing Apply generations are host-only: fresh verified source/role acceptance seals
+  the exact policy in a canonical v2 Working-job authority envelope. Old plain role authority
+  stays v1; parameters alone never upgrade it, and removing a key cannot downgrade the seal.
+  Actually applied timing and changed timing adoption invalidate whole-passage creation
+  alignment-fit hints, including omitted words; retain recognition confidence and immutable
+  raw evidence. Replay stored local/cloud/merge/conflict generations exactly. Local capture
+  and contained validation do not establish cloud historical transformation; keep that scope
+  not_checked and preserve current pins/caps. No historical backfill or automatic alignment.
 - Schema-8 result Trash changes visibility with revision checks and explicit history events.
   Retain result rows, raw files, versions, frozen jobs and source lineage. Active removal chooses
   the newest live result or clears its projection; restore activates only when none is active.
@@ -569,6 +596,15 @@ Future public commits must descend only from the clean public main history.
   10 November 2026. Do not re-add them as a runtime or development dependency.
 - Use descriptive errors without exposing upstream credentials or transcript bodies.
 
+## Planned compute fallback
+
+The agreed future rule applies to both native Transcriber and CBS Runtime (ADR 0177):
+sufficient usable selected-project GPU funding means 1g MIG even when queued. Only known
+absent/exhausted/insufficient GPU funding permits considering `cpu-amd-zen5-8-vcpu`, with CPU
+funding and exact model/recipe proof. Unknown wallet evidence never means zero. This is not
+implemented; preserve current/frozen compute until affordability, CPU-generation and
+compatibility gates pass.
+
 ## Development usage documentation
 
 Keep [the AI development usage ledger](docs/development-usage.md) and its
@@ -596,6 +632,40 @@ combine providers' incompatible credit units or report a full AI total while a p
 Usage accounting does not authorize paid calls, provider jobs or changes to the running app.
 
 ## Workflow
+
+On 11 November the user authorized implementing the morning additions on isolated local
+`codex/post-mvp-morning` from `e445376`: first-launch UCloud/optional-HF setup, direct OpenAI
+deactivation with compatible transport retained, Activity-owned HF access/configured-model
+preparation, Runtime stability and stable latest-release installation. PII-Tracer is parked;
+future startup is on demand through UCloud, after Runtime stability and a later user decision. Follow
+`docs/work-plans/post-mvp-2026-11-11.md`. Preserve the installed running MVP and earlier
+verified branches; no main merge/push, Desktop update or app reload. Root owns SPEC/TODO/ADRs;
+delegate with separate file ownership and independent review. New frontend work is limited
+to these explicit requests. Do not infer missing anonymisation replacement/key policy.
+
+The earlier post-MVP checkpoint (10 November 2026) stays on `codex/post-mvp-work`, descended from
+the clean public history. Do not merge/push it to main, update Desktop main, publish a release
+or replace the installed MVP. Limit frontend decisions to the user's explicit changes;
+broader layouts and workflows await colleague feedback. Text-editor word following remains
+an opt-in prototype. CBS Runtime work is offline ownership/recovery design and mocked checks;
+anonymisation is decision-ready design and synthetic local prototyping. Neither authorizes
+preparation, paid jobs, private uploads or live cleanup. Missing-output reruns are design only.
+
+The user's 11 November provider direction is to deactivate the direct OpenAI service while
+retaining its shared OpenAI-compatible API transport for a possible UCloud transcription
+endpoint. The morning branch implements this deactivation with scoped tests and independent
+review, retaining saved data, Stop, accepted-request drain and cached local finalization. The
+complete assembled synthetic gate has independent Go; activation remains separate and
+installed MVP behavior has not changed.
+Protocol reuse does not authorize enabling
+deferred Custom/UCloud vLLM UI or testing a live endpoint.
+
+The reviewed timing-hint remedy is implemented and independently verified at `4e7f671` on local
+`codex/post-mvp-timing-hints`, based on post-MVP checkpoint `7cf165c`. That worktree owns only
+the backend policy/receipt/merge/validation slice in ADR 0169 and its synthetic tests. Do not
+edit the parent's frozen source. The child's complete synthetic gate and independent review
+have passed; the morning branch inherits it. Main, Desktop and installed MVP remain unchanged.
+No frontend redesign is implied by this backend inheritance.
 
 Implement the approved plan autonomously. Update TODO checkboxes as work passes verification.
 On failure, trace the cause and add a regression test where useful; record material lessons

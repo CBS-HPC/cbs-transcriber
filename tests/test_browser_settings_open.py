@@ -2,12 +2,14 @@ import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
+from test_browser import skip_first_use
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.first_use]
 
 
 def test_older_settings_open_cannot_reset_a_newer_dialog(page, local_app):
     page.goto(local_app.url)
+    skip_first_use(page)
     page.wait_for_function("() => state.providers.length > 0")
     page.evaluate("""() => {
         const original = openSettings;
@@ -34,9 +36,9 @@ def test_older_settings_open_cannot_reset_a_newer_dialog(page, local_app):
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     page.locator("#api-key").fill("Newer unsaved key")
-    page.locator('[data-enabled-model="gpt-4o-transcribe-diarize"]').uncheck()
+    page.locator('[data-enabled-model="medium"]').uncheck()
     route, response = held[0]
     route.fulfill(response=response)
     page.wait_for_function("() => window.settingsOpensCompleted.length === 2")
     expect(page.locator("#api-key")).to_have_value("Newer unsaved key", timeout=1500)
-    expect(page.locator('[data-enabled-model="gpt-4o-transcribe-diarize"]')).not_to_be_checked()
+    expect(page.locator('[data-enabled-model="medium"]')).not_to_be_checked()

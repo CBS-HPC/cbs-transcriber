@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from docs.examples import anonymisation_evaluation
+
 EXAMPLE = Path(__file__).resolve().parents[1] / "docs/examples/anonymisation_demo.py"
 SPEC = importlib.util.spec_from_file_location("anonymisation_design_example", EXAMPLE)
 demo = importlib.util.module_from_spec(SPEC)
@@ -27,13 +29,14 @@ def source(text=None):
     return snapshot
 
 
-def derive(snapshot, hits, decisions, *, expected=None, speakers=None):
+def derive(snapshot, hits, decisions, *, expected=None, speakers=None, entity_labels=None):
     return demo.derive(
         snapshot,
         expected or dict(snapshot["binding"]),
         hits,
         decisions,
         {"HIDDEN_VOICE_ID": "[VOICE_A]"} if speakers is None else speakers,
+        entity_labels=entity_labels,
     )
 
 
@@ -170,3 +173,94 @@ def test_passage_offsets_never_cross_or_join_source_passages():
     assert demo.suggest(snapshot, ("SYNTHETIC_A",)) == []
     result = derive(snapshot, [], [])
     assert [item["text"] for item in result["shareable"]["segments"]] == ["SYNTHETIC_", "A"]
+
+
+def test_explicit_entity_links_keep_variants_consistent_without_linking_same_spelling():
+    labels = {"HIDDEN_ENTITY_1": "[PERSON_1]", "HIDDEN_ENTITY_2": "[PERSON_2]"}
+    first = source("SYNTHETIC_A, SYNTHETIC_A.")
+    hits = demo.suggest(first, ("SYNTHETIC_A",))
+    decisions = [
+        {"action": "replace", "entity": "HIDDEN_ENTITY_1"},
+        {"action": "replace", "entity": "HIDDEN_ENTITY_2"},
+    ]
+    result = derive(first, hits, decisions, entity_labels=labels)
+    assert result["shareable"]["segments"][0]["text"] == "[PERSON_1], [PERSON_2]."
+    second = source("SYNTHETIC_AS")
+    variant = derive(
+        second,
+        demo.suggest(second, ("SYNTHETIC_AS",)),
+        [{"action": "replace", "entity": "HIDDEN_ENTITY_1"}],
+        entity_labels=labels,
+    )
+    assert variant["shareable"]["segments"][0]["text"] == "[PERSON_1]"
+    assert "HIDDEN_" not in json.dumps(result["shareable"])
+    assert "HIDDEN_" not in json.dumps(variant["shareable"])
+    assert result["private_receipt"]["entity_labels"] == labels
+    labels["HIDDEN_ENTITY_1"] = "changed later"
+    decisions[0]["entity"] = "changed later"
+    assert result["private_receipt"]["entity_labels"]["HIDDEN_ENTITY_1"] == "[PERSON_1]"
+    assert result["private_receipt"]["decisions"][0]["entity"] == "HIDDEN_ENTITY_1"
+
+
+@pytest.mark.parametrize(
+    "labels",
+    [None, {"entity": ""}, {"entity": "[P]", "other": "[P]"}, {"": "[P]"}],
+)
+def test_entity_decisions_refuse_missing_empty_or_colliding_labels(labels):
+    snapshot = source("SYNTHETIC_A")
+    with pytest.raises(ValueError, match="entity|entities"):
+        derive(
+            snapshot,
+            demo.suggest(snapshot, ("SYNTHETIC_A",)),
+            [{"action": "replace", "entity": "entity"}],
+            entity_labels=labels,
+        )
+
+
+def test_review_does_not_certify_replacement_wording_as_nonidentifying():
+    snapshot = source("SYNTHETIC_A")
+    result = derive(
+        snapshot,
+        demo.suggest(snapshot, ("SYNTHETIC_A",)),
+        [{"action": "replace", "entity": "private-entity"}],
+        entity_labels={"private-entity": "SYNTHETIC_REINTRODUCED_IDENTIFIER"},
+    )
+    assert result["shareable"]["segments"][0]["text"] == "SYNTHETIC_REINTRODUCED_IDENTIFIER"
+
+
+def test_bilingual_fixture_report_exposes_exact_misses_and_false_suggestions_only():
+    report = anonymisation_evaluation.evaluate()
+    assert report["languages"]["da"] == {
+        "cases": 3,
+        "gold_mentions": 7,
+        "exact_hits": 3,
+        "false_suggestions": 0,
+        "missed_mentions": 4,
+        "cases_with_misses": 2,
+        "clusters": 4,
+        "clusters_with_misses": 3,
+        "categories": {
+            "person": {"gold": 3, "exact_hits": 2},
+            "email": {"gold": 1, "exact_hits": 1},
+            "place": {"gold": 2, "exact_hits": 0},
+            "context": {"gold": 1, "exact_hits": 0},
+        },
+    }
+    assert report["languages"]["en"] == {
+        "cases": 3,
+        "gold_mentions": 5,
+        "exact_hits": 3,
+        "false_suggestions": 1,
+        "missed_mentions": 2,
+        "cases_with_misses": 1,
+        "clusters": 2,
+        "clusters_with_misses": 1,
+        "categories": {
+            "person": {"gold": 3, "exact_hits": 1},
+            "email": {"gold": 2, "exact_hits": 2},
+        },
+    }
+    serialized = json.dumps(report)
+    assert "not model or research-data accuracy" in report["scope"]
+    for canary in ("HIDDEN_", "Fiktivia", "Fictional", "@", "da-person", "en-email"):
+        assert canary not in serialized

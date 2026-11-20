@@ -174,7 +174,7 @@ def test_v142_ready_api_materializes_same_id_while_other_source_is_pending(
     assert store.job(accepted[1]["id"])["params"]["input_intent"]["phase"] == "waiting"
 
 
-def test_v142_native_selection_waits_then_materializes_one_all_selected_owner(
+def test_v231_native_selection_admits_each_file_into_one_owner_as_its_inspection_passes(
     library, credentials, wav_bytes
 ):
     store, _, _, rows = library
@@ -182,21 +182,84 @@ def test_v142_native_selection_waits_then_materializes_one_all_selected_owner(
     with store.library_lock():
         accepted = input_admission.accept(store, [item(provider, row) for row in rows])
         inspect(store, rows[0], wav_bytes)
-        assert input_admission.claim(store) is None
-        assert not store.all("SELECT id FROM native_batch_runs")
+        token = input_admission.claim(store)
+        assert [member["id"] for member in token["jobs"]] == [accepted[0]["id"]]
+        (first,) = input_admission.materialize(
+            store, token, input_admission.prepare(store, credentials, token)
+        )
+        (batch,) = store.all("SELECT * FROM native_batch_runs")
+        # The whole selection is the manifest from the start; the owner is not sealed yet.
+        assert [member["job_id"] for member in json.loads(batch["members"])] == [
+            job["id"] for job in accepted
+        ]
+        run = json.loads(batch["params"])["ucloud_run"]
+        assert not run.get("membership_sealed")
+        assert first["params"]["native_batch_id"] == batch["id"]
+        assert first["state"] == "queued"
+        # The first file's batch may start uploading while the other is still inspected.
+        claimed = store.claim_job("transcribe")
+        assert claimed["id"] == first["id"]
+        assert store.job(accepted[1]["id"])["params"]["input_intent"]["phase"] == "waiting"
+        assert store.job(accepted[1]["id"])["state"] == "queued"
+        assert input_admission.obligations(store) == [
+            {
+                "job_id": accepted[1]["id"],
+                "recording_id": rows[1]["id"],
+                "project_id": rows[1]["project_id"],
+            }
+        ]
 
         inspect(store, rows[1], wav_bytes)
         token = input_admission.claim(store)
-        assert {member["id"] for member in token["jobs"]} == {job["id"] for job in accepted}
-        result = input_admission.materialize(
+        assert [member["id"] for member in token["jobs"]] == [accepted[1]["id"]]
+        (second,) = input_admission.materialize(
             store, token, input_admission.prepare(store, credentials, token)
         )
     batches = store.all("SELECT * FROM native_batch_runs")
     assert len(batches) == 1
-    assert {member["job_id"] for member in json.loads(batches[0]["members"])} == {
-        job["id"] for job in accepted
-    }
-    assert {job["params"]["native_batch_id"] for job in result} == {batches[0]["id"]}
+    # A file admitted into a running batch is running with it; the selection is sealed.
+    assert second["params"]["native_batch_id"] == batches[0]["id"]
+    assert second["state"] == "running" and second["message"] == "Waiting to upload"
+    run = json.loads(batches[0]["params"])["ucloud_run"]
+    assert run["membership_sealed"] is True and run["dropped_members"] == []
+    assert not input_admission.obligations(store)
+
+
+def test_v231_failed_inspection_drops_only_that_file_and_cannot_retry_into_the_owner(
+    library, credentials, wav_bytes
+):
+    store, _, _, rows = library
+    provider = native_provider(store, credentials)
+    with store.library_lock():
+        accepted = input_admission.accept(store, [item(provider, row) for row in rows])
+        inspect(store, rows[0], wav_bytes)
+        token = input_admission.claim(store)
+        input_admission.materialize(
+            store, token, input_admission.prepare(store, credentials, token)
+        )
+        directory = store.directory(rows[1]["id"])
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "original.wav").write_bytes(b"not a recording")
+        cache = original_inspection.ensure(store, rows[1]["id"])
+        claim = original_inspection.claim(store, cache["inspection_job_id"])
+        assert original_inspection.run(store, claim)["state"] == "error"
+        # The failed file needs no token: it is dropped with its own outcome at once.
+        assert input_admission.claim(store) is None
+        dropped = store.job(accepted[1]["id"])
+        assert dropped["state"] == "failed"
+        assert dropped["params"]["input_intent"]["error"]["code"] == "source_error"
+        assert dropped["params"]["input_intent"]["native_group"]["resolved"] is True
+        (batch,) = store.all("SELECT * FROM native_batch_runs")
+        run = json.loads(batch["params"])["ucloud_run"]
+        assert run["membership_sealed"] is True
+        assert run["dropped_members"] == [accepted[1]["id"]]
+        assert not input_admission.obligations(store)
+        intent = dropped["params"]["input_intent"]
+        with pytest.raises(input_admission.AdmissionError, match="already materialized"):
+            input_admission.retry(
+                store, accepted[1]["id"], epoch=intent["epoch"], phase=intent["phase"]
+            )
+    assert store.job(accepted[0]["id"])["params"]["native_batch_id"] == batch["id"]
 
 
 def test_v142_native_cancelled_member_does_not_require_its_uninspected_source(
@@ -212,10 +275,10 @@ def test_v142_native_cancelled_member_does_not_require_its_uninspected_source(
         )
         inspect(store, rows[0], wav_bytes)
         token = input_admission.claim(store)
-        result = input_admission.materialize(
+        input_admission.materialize(
             store, token, input_admission.prepare(store, credentials, token)
         )
-    assert {job["id"]: job["state"] for job in result} == {
+    assert {job["id"]: store.job(job["id"])["state"] for job in accepted} == {
         accepted[0]["id"]: "queued",
         accepted[1]["id"]: "cancelled",
     }
@@ -445,10 +508,15 @@ def test_v142_failed_group_without_owner_can_retry_without_reviving_siblings(
         accepted = input_admission.accept(store, [item(provider, row) for row in rows])
         for row in rows:
             inspect(store, row, wav_bytes)
-        token = input_admission.claim(store)
-        failed = input_admission.materialize(
-            store, token, {job["id"]: {"error": "preparation_failed"} for job in accepted}
-        )
+        failed = []
+        for _ in accepted:  # Each file of a native selection is admitted on its own.
+            token = input_admission.claim(store)
+            failed += input_admission.materialize(
+                store, token, {job["id"]: {"error": "preparation_failed"} for job in token["jobs"]}
+            )
+        # The selection resolves once its last file failed, with no owner created.
+        failed = [store.job(job["id"]) for job in failed]
+        assert all(job["params"]["input_intent"]["native_group"]["resolved"] for job in failed)
         first = failed[0]["params"]["input_intent"]
         retried = input_admission.retry(
             store, failed[0]["id"], epoch=first["epoch"], phase=first["phase"]
@@ -456,10 +524,11 @@ def test_v142_failed_group_without_owner_can_retry_without_reviving_siblings(
         assert retried["state"] == "queued"
         assert store.job(failed[1]["id"])["state"] == "failed"
         token = input_admission.claim(store)
-        result = input_admission.materialize(
+        input_admission.materialize(
             store, token, input_admission.prepare(store, credentials, token)
         )
-    assert [job["state"] for job in result] == ["queued", "failed"]
+    assert [store.job(job["id"])["state"] for job in failed] == ["queued", "failed"]
+    # The only survivor of an all-settled selection keeps the single-file allocation.
     assert not store.all("SELECT id FROM native_batch_runs")
 
 
