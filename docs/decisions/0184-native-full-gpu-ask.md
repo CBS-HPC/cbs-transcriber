@@ -383,8 +383,8 @@ public-clip full-GPU batch for output comparability, speed and actual credit use
 
 ## Not covered
 
-No implementation, review, live read, allocation, cleanup or price measurement. Capacity
-signals are not reservations; this app has not measured full-GPU speed or whether its text
+No production activation, live-account read, allocation, cleanup or price measurement. The
+offline helper checkpoint below does not grant those actions. Capacity signals are not reservations; this app has not measured full-GPU speed or whether its text
 matches the MIG's. CPU fallback, parallel MIGs and CBS Runtime are separate decisions.
 
 ## Offline helper checkpoint — 20 November 2026
