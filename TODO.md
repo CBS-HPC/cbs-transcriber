@@ -267,7 +267,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 ## Reliability and existing workflows
 
 - [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — stability before PII integration.**
-  User priority, 11 November. The morning branch implements verified exact host/shell stamp
+  User priority, 11 November. On 20 November the user added Runtime implementation and testing
+  to the post-v2 plan: it opens the way to other transcription models and to the AI-assisted
+  coding work. Live preparation and paid test jobs still need approval each time. The morning branch implements verified exact host/shell stamp
   validation and PREPARE=1 legacy-reader/retained-lock refusal before new job submission
   (ADR 0172), plus the separately reviewed configured-model preparation plan (ADR 0173).
   These fixes do not reclaim the historical lock or establish live Runtime acceptance.
@@ -546,6 +548,18 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   The Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing word timing)
   is implemented and browser-verified; Next to review follows it (T148). Real-user acceptance
   and coordination with any future re-transcription tags remain open.
+- [ ] **Word timing in review and Activity — decided 20 November, post-v2.** Testing MVP v2
+  the user found passages with missing or rebuilt timing hard to locate, and a per-passage
+  "Add word timing" job vanished from Activity when it finished (finished realignments are
+  hidden as routine; the ready timing is added only when the recording is next open with no
+  draft or dialog). User decisions: in results meant to have word timing, a passage missing it
+  is automatically **Needs review**, so Next to review finds it (untimed-by-design results, such
+  as speakers-only, are not flagged); when timing is added or rebuilt for a passage it becomes
+  **Needs review** again, even if it was Checked, with the reason shown ("timing added");
+  finished word-timing jobs stay in Activity with their outcome (added, ready until the
+  recording is opened, not added because the passage changed, or failed) until cleared.
+  Automatic marks need a truthful system actor and their own ADR (passage review is manual
+  metadata today, ADR 0148); preserve the passage-hash binding, stale-Checked rule and drafts.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
