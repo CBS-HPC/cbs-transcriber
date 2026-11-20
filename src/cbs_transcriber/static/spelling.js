@@ -1,9 +1,10 @@
 "use strict";
 
 // Spelling observes one open Text draft. It never writes saved transcript text (ADR 0185).
-// Possible issues are coloured in a layer behind the textarea; Ctrl+click (⌘+click on a Mac)
-// or Alt+Enter inside one opens a small suggestion popover, and a chosen word is ordinary
-// input, so native Undo restores it. Public dictionaries download in Activity (ADR 0187).
+// Possible issues are coloured in a layer behind the textarea; double-clicking one (the
+// browser still selects the word) or Alt+Enter inside it opens a small suggestion popover,
+// and a chosen word is ordinary input, so native Undo restores it. Public dictionaries
+// download in Activity (ADR 0187).
 // The release profile's "spelling" feature hides it: static entry points carry
 // data-feature="spelling", and every dynamic entry point checks featureOn first.
 let spellingView = null,
@@ -14,8 +15,10 @@ let spellingView = null,
   spellingFinishedTasks = null;
 const spellingOptOuts = new Set(),
   pendingSpellingTasks = new Set(),
-  spellingMac = /Mac|iPhone|iPad/u.test(navigator.platform || ""),
-  spellingTrigger = spellingMac ? "⌘+click" : "Ctrl+click";
+  // The Alt key is labelled Option on a Mac; the event is the same altKey.
+  spellingKeys = /Mac|iPhone|iPad/u.test(navigator.platform || "")
+    ? "Option+Enter"
+    : "Alt+Enter";
 function pauseSpellingForOptOut(enabled) {
   if (enabled) return null;
   const token = {};
@@ -558,9 +561,9 @@ function drawSpellingMarks(view) {
   spellingStatus(
     view,
     view.truncated
-      ? `Only the first possible spelling issues are coloured. More may remain. ${spellingTrigger} a coloured word, or press Alt+Enter inside it, for a suggestion.`
+      ? `Only the first possible spelling issues are coloured. More may remain. Double-click a coloured word, or press ${spellingKeys} inside it, for a suggestion.`
       : count
-        ? `${count} possible spelling ${count === 1 ? "issue" : "issues"} coloured. ${spellingTrigger} a coloured word, or press Alt+Enter inside it, for a suggestion.`
+        ? `${count} possible spelling ${count === 1 ? "issue" : "issues"} coloured. Double-click a coloured word, or press ${spellingKeys} inside it, for a suggestion.`
         : view.ignored.size
           ? "No remaining spelling issues to review."
           : "No spelling issues found in this draft.",
@@ -577,24 +580,24 @@ function syncSpellingOverlay(view) {
   if (content.style.transform !== transform)
     content.style.transform = transform;
 }
-function spellingFlagAtCaret(view) {
-  const start = view.input.selectionStart,
+// The coloured word holding the textarea's selection. A double-click selection may include
+// the following space (Windows), so surrounding whitespace is ignored; a selection of only
+// whitespace, or one reaching beyond a single coloured word, finds nothing. A collapsed
+// caret counts only for the keyboard route.
+function spellingFlagAtSelection(view, caret) {
+  const value = view.input.value;
+  let start = view.input.selectionStart,
     end = view.input.selectionEnd;
+  if (start === end) {
+    if (!caret) return undefined;
+  } else {
+    while (end > start && /\s/u.test(value[end - 1])) end--;
+    while (start < end && /\s/u.test(value[start])) start++;
+    if (start === end) return undefined;
+  }
   return visibleSpellingFlags(view).find(
     ([flag]) => flag.start <= start && end <= flag.end,
   )?.[1];
-}
-function spellingFlagAtPoint(view, x, y) {
-  for (const mark of view.overlay.querySelectorAll("[data-spelling-flag]"))
-    for (const rect of mark.getClientRects())
-      if (
-        x >= rect.left &&
-        x <= rect.right &&
-        y >= rect.top &&
-        y <= rect.bottom
-      )
-        return Number(mark.dataset.spellingFlag);
-  return undefined;
 }
 
 // ---- Suggestion popover ------------------------------------------------------------------
@@ -859,18 +862,29 @@ spellingTranscript.addEventListener(
   },
   true,
 );
+// Double-clicking a coloured word inside the open Text editor opens its popover. The
+// browser's own word selection is left exactly as it made it (a chosen suggestion still
+// replaces only the coloured word), and a double-click anywhere else does nothing extra.
+// app.js's double-click that opens the editor targets a read-only passage word, never this
+// textarea, so the two never meet.
+spellingTranscript.addEventListener("dblclick", (event) => {
+  const view = spellingView;
+  if (
+    !view ||
+    event.target !== view.input ||
+    event.button !== 0 ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.shiftKey
+  )
+    return;
+  const index = spellingFlagAtSelection(view, false);
+  if (index !== undefined) openSpellingPopover(view, index, false);
+});
 spellingTranscript.addEventListener("click", (event) => {
   const view = spellingView;
   if (!view) return;
-  if (event.target === view.input && (event.ctrlKey || event.metaKey)) {
-    const index =
-      spellingFlagAtPoint(view, event.clientX, event.clientY) ??
-      spellingFlagAtCaret(view);
-    if (index === undefined) return;
-    event.preventDefault();
-    openSpellingPopover(view, index, false);
-    return;
-  }
   if (event.target.closest("[data-spelling-download]")) {
     if (view.controls.contains(event.target) && !spellingLocked(view))
       requestSpellingDictionary(view, true);
@@ -916,13 +930,13 @@ spellingTranscript.addEventListener("keydown", (event) => {
     !event.metaKey &&
     !event.shiftKey
   ) {
-    const index = spellingFlagAtCaret(view);
+    const index = spellingFlagAtSelection(view, true);
     if (index === undefined) return;
     event.preventDefault();
     openSpellingPopover(view, index, true);
   }
 });
-// Pointer or focus anywhere else closes the popover; a later Ctrl+click opens another.
+// Pointer or focus anywhere else closes the popover; a later double-click opens another.
 document.addEventListener("pointerdown", (event) => {
   const view = spellingView;
   if (view?.popover && !view.popover.node.contains(event.target))

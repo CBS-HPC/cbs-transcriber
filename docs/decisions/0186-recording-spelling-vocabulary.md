@@ -13,8 +13,9 @@ Recording vocabulary should inherit the project vocab." Implemented on
 - **Where.** File Settings shows **Project vocabulary** and **Recording vocabulary**; Project
   Settings keeps its Project vocabulary button; Settings → Spelling keeps Personal vocabulary
   (user choice, 20 November). The recording dialog shows the inherited project words
-  read-only, next to the recording's own editable list. Ctrl+click on a coloured word also
-  offers "Add to recording vocabulary" and "Add to project vocabulary" (ADR 0187).
+  read-only, next to the recording's own editable list. The suggestion popover (double-click
+  on a coloured word, or Alt+Enter) also offers "Add to recording vocabulary" and "Add to
+  project vocabulary" (ADR 0187).
 - **Storage.** Settings row 13 keeps `schema: 1` while no recording has words, so earlier v2
   builds keep reading it. The first recording word adds a non-empty `recordings` map keyed by
   recording ID and writes `schema: 2`; removing the last recording entry writes `schema: 1`

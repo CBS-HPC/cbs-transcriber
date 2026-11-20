@@ -2,7 +2,7 @@
 
 > Update 20 November 2026: the issue panel, in-editor download notice and Local Processing
 > section are replaced by [ADR 0187](0187-spelling-activity-downloads-and-on-demand-suggestions.md)
-> (coloured words, Ctrl+click/Alt+Enter popover, Activity downloads, Settings → Spelling), and
+> (coloured words, double-click/Alt+Enter popover, Activity downloads, Settings → Spelling), and
 > [ADR 0186](0186-recording-spelling-vocabulary.md) adds recording vocabulary. The engine,
 > pins, worker bounds, privacy, retention and MVP refusals below are unchanged.
 

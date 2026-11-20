@@ -1,7 +1,7 @@
 """Real spelling UI against tiny pinned dictionaries; no public downloads or private library.
 
 ADR 0185 with the 20 November redesign (ADR 0186/0187): coloured words behind the textarea,
-Ctrl+click or Alt+Enter for a suggestion popover, a remembered toolbar toggle, Activity
+a double-click (or Alt+Enter) for a suggestion popover, a remembered toolbar toggle, Activity
 dictionary downloads and recording vocabulary.
 """
 
@@ -181,18 +181,21 @@ def popover(page):
     return page.locator("[data-spelling-popover]")
 
 
-def ctrl_click(page, index=0):
-    """Ctrl+click the middle of a coloured word, through the textarea above it."""
+def over_mark(page, index=0):
+    """The textarea and a position over the middle of a coloured word in the layer below."""
     mark = marks(page).nth(index).bounding_box()
     draft = page.locator('[data-editor-pane="text"]:not([hidden]) textarea')
     box = draft.bounding_box()
-    draft.click(
-        position={
-            "x": mark["x"] + mark["width"] / 2 - box["x"],
-            "y": mark["y"] + mark["height"] / 2 - box["y"],
-        },
-        modifiers=CTRL,
-    )
+    return draft, {
+        "x": mark["x"] + mark["width"] / 2 - box["x"],
+        "y": mark["y"] + mark["height"] / 2 - box["y"],
+    }
+
+
+def double_click(page, index=0):
+    """Double-click a coloured word through the textarea: real mouse input, native selection."""
+    draft, position = over_mark(page, index)
+    draft.dblclick(position=position)
     expect(popover(page)).to_be_visible()
 
 
@@ -276,7 +279,7 @@ def test_first_use_downloads_in_activity_and_suggestion_is_undoable_input(page, 
     expect(page.locator(".passage-spelling-toggle")).to_have_attribute(
         "title", status(page).text_content()
     )
-    ctrl_click(page)
+    double_click(page)
     expect(popover(page)).to_have_attribute("role", "dialog")
     expect(popover(page).locator(".spelling-popover-word")).to_have_text("helllo")
     suggestion = popover(page).locator("[data-spelling-suggestion]", has_text="hello").first
@@ -340,6 +343,169 @@ def test_keyboard_route_focuses_popover_and_escape_returns_to_the_caret(page, sp
     expect(marks(page)).to_have_count(0)
     expect(status(page)).to_have_text("No remaining spelling issues to review.")
     expect(draft).to_be_focused()
+
+
+SELECTED = "node => node.value.slice(node.selectionStart, node.selectionEnd)"
+FLAG_AT = (
+    "(node, range) => { node.setSelectionRange(range[0], range[1]); "
+    "return spellingFlagAtSelection(spellingView, range[2]) ?? null; }"
+)
+
+
+def plain_word(page, word):
+    """The textarea and a position over an uncoloured word, measured in the mirrored layer."""
+    draft = page.locator('[data-editor-pane="text"]:not([hidden]) textarea')
+    position = draft.evaluate(
+        """(input, word) => {
+          const content = input.parentElement.querySelector(
+            '.passage-spelling-overlay-content');
+          const box = input.getBoundingClientRect();
+          for (const node of content.childNodes) {
+            const at = node.nodeType === Node.TEXT_NODE ? node.data.indexOf(word) : -1;
+            if (at < 0) continue;
+            const range = document.createRange();
+            range.setStart(node, at);
+            range.setEnd(node, at + word.length);
+            const rect = range.getBoundingClientRect();
+            return {
+              x: rect.left + rect.width / 2 - box.left,
+              y: rect.top + rect.height / 2 - box.top,
+            };
+          }
+          return null;
+        }""",
+        word,
+    )
+    assert position, f"{word} is not an uncoloured word of the draft."
+    return draft, position
+
+
+def test_double_click_opens_suggestions_and_keeps_native_word_selection(page, spelled):
+    """The user's trigger (20 November): double-click a coloured word inside the open editor."""
+    quietly(spelled, install=["en"])
+    suggests = []
+    page.on(
+        "request",
+        lambda req: suggests.append(True) if req.url.endswith("/spelling/suggest") else None,
+    )
+    # Double-clicking a read-only passage word still opens the Text editor on that word,
+    # and opening it never opens suggestions, even once the word is coloured.
+    page.goto(spelled.app.url + f"/#/recordings/{spelled.rid}")
+    page.locator('#passage-0 .passage-text [data-word="2"]').dblclick()
+    draft = page.locator('#passage-0 [data-editor-pane="text"] textarea')
+    expect(draft).to_be_focused()
+    assert draft.evaluate(SELECTED) == "helllo"
+    ready(page)
+    page.wait_for_timeout(200)
+    expect(popover(page)).to_have_count(0)
+    assert draft.evaluate(SELECTED) == "helllo" and not suggests
+
+    # An uncoloured word: the browser selects it and nothing else happens.
+    _, position = plain_word(page, "hello")
+    draft.dblclick(position=position)
+    expect(draft).to_be_focused()
+    assert draft.evaluate(SELECTED).strip() == "hello"
+    page.wait_for_timeout(300)
+    expect(popover(page)).to_have_count(0)
+    expect(page.locator("#passage-0 .passage-editor")).to_be_visible()
+    expect(draft).to_have_value("😀 hello helllo world")
+    assert not suggests
+
+    # A coloured word: the popover opens beside the browser's own word selection, whose
+    # bounds stay as the browser chose them (Windows also selects the following space).
+    _, position = over_mark(page)
+    draft.dblclick(position=position)
+    expect(popover(page)).to_be_visible()
+    expect(popover(page).locator(".spelling-popover-word")).to_have_text("helllo")
+    expect(draft).to_be_focused()
+    native = draft.evaluate("node => [node.selectionStart, node.selectionEnd]")
+    assert native[0] == 9 and native[1] in {15, 16}, native
+    suggestion = popover(page).locator("[data-spelling-suggestion]", has_text="hello").first
+    expect(suggestion).to_be_visible(timeout=10000)
+    assert draft.evaluate("node => [node.selectionStart, node.selectionEnd]") == native
+    draft.evaluate(
+        "node => { window.spellingInputEvents = 0; "
+        "node.addEventListener('input', () => window.spellingInputEvents++); }"
+    )
+    suggestion.click()
+    expect(popover(page)).to_have_count(0)
+    # Exactly the coloured word is replaced through one input; a selected space stays.
+    expect(draft).to_have_value("😀 hello hello world")
+    assert page.evaluate("() => window.spellingInputEvents") == 1
+    page.keyboard.press("Control+z")
+    expect(draft).to_have_value("😀 hello helllo world")
+    ready(page)
+
+    # Ctrl+click is not a trigger any more: it only places the caret.
+    count = len(suggests)
+    _, position = over_mark(page)
+    draft.click(position=position, modifiers=CTRL)
+    page.wait_for_timeout(300)
+    expect(popover(page)).to_have_count(0)
+    assert len(suggests) == count
+
+    # The keyboard route accepts that double-click selection with its trailing space too;
+    # neither route takes a selection of only whitespace or one beyond the coloured word,
+    # and a bare caret counts only for Alt+Enter.
+    draft.evaluate("node => { node.focus(); node.setSelectionRange(9, 16); }")
+    page.keyboard.press("Alt+Enter")
+    expect(popover(page)).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(popover(page)).to_have_count(0)
+    assert draft.evaluate("node => [node.selectionStart, node.selectionEnd]") == [9, 16]
+    for start, end, caret, found in (
+        (9, 16, False, 0),
+        (12, 12, True, 0),
+        (12, 12, False, None),
+        (15, 16, True, None),
+        (3, 15, True, None),
+        (8, 9, False, None),
+    ):
+        assert draft.evaluate(FLAG_AT, [start, end, caret]) == found, (start, end, caret)
+    expect(draft).to_have_value("😀 hello helllo world")
+
+
+def test_spelling_marks_stay_distinct_from_uncertainty_underlines_on_one_word(page, spelled):
+    """A later dotted uncertainty layer (review hints) can mark the same word (ADR 0187)."""
+    quietly(spelled, install=["en"])
+    editor(page, spelled)
+    ready(page)
+    styles = page.evaluate(
+        """() => {
+          const mark = document.querySelector('.passage-spelling-overlay .spelling-flag'),
+            overlay = mark.closest('.passage-spelling-overlay'),
+            layer = overlay.cloneNode(true),
+            twin = layer.querySelector('.spelling-flag'),
+            input = overlay.parentElement.querySelector('textarea');
+          // A synthetic sibling like a later uncertainty layer: same mirror, same word.
+          twin.className = 'uncertain-word';
+          overlay.after(layer);
+          const style = (node) => {
+            const s = getComputedStyle(node);
+            return [s.textDecorationLine, s.textDecorationStyle, s.textDecorationColor,
+              s.textUnderlineOffset];
+          };
+          const a = mark.getBoundingClientRect(), b = twin.getBoundingClientRect();
+          return {
+            spelling: style(mark),
+            uncertain: style(twin),
+            aligned: ['left', 'top', 'width', 'height'].every(
+              (key) => Math.abs(a[key] - b[key]) < 0.5),
+            pointer: document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2)
+              === input,
+          };
+        }"""
+    )
+    assert styles["spelling"][:2] == ["underline", "wavy"], styles
+    assert styles["uncertain"][:2] == ["underline", "dotted"], styles
+    assert styles["uncertain"][2] == "rgb(194, 122, 0)"
+    assert styles["spelling"][2] != styles["uncertain"][2]
+    # The wavy line sits below the dotted one, so one word can show both.
+    assert (styles["spelling"][3], styles["uncertain"][3]) == ("6px", "3px")
+    assert styles["aligned"] and styles["pointer"], styles
+    page.locator("#passage-0 .passage-text-surface").screenshot(
+        path=str(Path(gettempdir()) / "cbs-spelling-uncertainty-nov20.png")
+    )
 
 
 def test_toolbar_toggle_is_remembered_for_other_passages_and_reloads(page, spelled):
@@ -581,7 +747,7 @@ def test_recording_language_controls_support_and_danish_is_check_only(page, spel
         assert not spelled.downloads
     else:
         ready(page)
-        ctrl_click(page)
+        double_click(page)
         expect(popover(page)).to_contain_text("This dictionary has no suggestions")
         expect(popover(page).locator("[data-spelling-suggestion]")).to_have_count(0)
         assert len(spelled.downloads) == 3
@@ -608,15 +774,8 @@ def test_late_spelling_reply_cannot_retarget_a_new_recording(page, spelled, stag
     editor(page, spelled)
     if stage == "suggest":
         ready(page)
-        mark = marks(page).first.bounding_box()
-        box = page.locator("#passage-0 textarea").bounding_box()
-        page.locator("#passage-0 textarea").click(
-            position={
-                "x": mark["x"] + mark["width"] / 2 - box["x"],
-                "y": mark["y"] + mark["height"] / 2 - box["y"],
-            },
-            modifiers=CTRL,
-        )
+        draft, position = over_mark(page)
+        draft.dblclick(position=position)
     wait_held(page, held)
     page.evaluate("rid => { location.hash = '/recordings/' + rid; }", spelled.other)
     expect(page.locator("#recording-title")).to_have_text("second")
@@ -640,7 +799,7 @@ def test_old_check_and_suggestion_cannot_change_new_draft_or_language(page, spel
         held.append((route, route.fetch()))
 
     page.route("**/spelling/suggest", hold)
-    ctrl_click(page)
+    double_click(page)
     wait_held(page, held)
     draft.fill("hello neww")
     draft.evaluate("node => node.setSelectionRange(4, 4)")
@@ -707,11 +866,11 @@ def test_old_suggest_cannot_release_new_draft_action_busy_guard(page, spelled):
         held.append((route, route.fetch()))
 
     page.route("**/spelling/suggest", hold)
-    ctrl_click(page)
+    double_click(page)
     wait_held(page, held)
     draft.fill("hello neww otherr")
     ready(page, "neww", "otherr")
-    ctrl_click(page, 0)
+    double_click(page, 0)
     wait_held(page, held, 2)
     ignore = popover(page).locator('[data-spelling-action="ignore"]')
     expect(ignore).to_be_disabled()
@@ -800,21 +959,21 @@ def test_ignore_once_recording_and_project_words_stay_private_with_cas(page, spe
     draft = editor(page, spelled)
     ready(page)
     before = spelled.store.recording(spelled.rid)
-    ctrl_click(page)
+    double_click(page)
     popover(page).locator('[data-spelling-action="ignore"]').click()
     expect(marks(page)).to_have_count(0)
     expect(status(page)).to_have_text("No remaining spelling issues to review.")
     assert request(spelled, "GET", "/spelling/vocabulary")["words"] == []
     draft.fill("hello helllo")
     ready(page)
-    ctrl_click(page)
+    double_click(page)
     popover(page).locator('[data-spelling-action="project"]').click()
     expect(status(page)).to_have_text("No spelling issues found in this draft.")
     project_path = f"/projects/{spelled.project}/spelling/vocabulary"
     assert request(spelled, "GET", project_path)["words"] == ["helllo"]
     draft.fill("hello neww")
     ready(page, "neww")
-    ctrl_click(page)
+    double_click(page)
     popover(page).locator('[data-spelling-action="recording"]').click()
     expect(status(page)).to_have_text("No spelling issues found in this draft.")
     recording_path = f"/recordings/{spelled.rid}/spelling/vocabulary"

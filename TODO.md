@@ -600,12 +600,20 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     and a Settings → Spelling tab. Implemented with [ADR 0186](docs/decisions/0186-recording-spelling-vocabulary.md)
     and [ADR 0187](docs/decisions/0187-spelling-activity-downloads-and-on-demand-suggestions.md);
     synthetic unit, browser and MVP checks pass (B467, B468 fixed before commit).
-  - [ ] Not yet verified: macOS ⌘+click and Option+Enter, Firefox/Safari Undo after a chosen
-    suggestion, screen-reader announcements, a real-library look, real dictionaries with
-    researchers, and downgrading to an earlier v2 build once recording words exist (ADR 0186
-    records that limit). Post-v2 work (user, 20 November): spelling stays hidden in v2 and
-    the v2 → main merge does not wait for this branch. A later uncertainty underline in the
-    Text editor should use its own layer; ADR 0187 keeps spelling's wavy line below it.
+  - [x] **Double-click trigger** (branch claude/spelling-trigger, 20 November): the user asked
+    again for suggestions by double-clicking a word. Double-click on a coloured word in the open
+    editor now opens the popover beside the browser's own word selection; other words do
+    nothing extra, the editor-opening double-click is unchanged, Alt+Enter stays and Ctrl+click
+    was removed (ADR 0187 update, B469, B470). Independent review of the redesign found no
+    further defect to fix; Chromium browser tests pin the trigger and the distinct
+    wavy/dotted styles on one word.
+  - [ ] Not yet verified: macOS double-click and Option+Enter, Firefox/Safari double-click
+    word selection and Undo after a chosen suggestion, screen-reader announcements, a
+    real-library look, real dictionaries with researchers, and downgrading to an earlier v2
+    build once recording words exist (ADR 0186 records that limit). Post-v2 work (user,
+    20 November): spelling stays hidden in v2 and the v2 → main merge does not wait for this
+    branch. A later uncertainty underline in the Text editor should use its own layer that
+    leaves pointer events to the textarea; ADR 0187 keeps spelling's wavy line below it.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,

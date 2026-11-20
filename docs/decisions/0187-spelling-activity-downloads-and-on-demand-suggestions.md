@@ -1,16 +1,22 @@
 # 0187 — Spelling: Activity dictionary downloads and on-demand suggestions
 
 Accepted on 20 November 2026 for the hidden v2 spelling feature (ADR 0185), implemented on
-`claude/spelling-redesign`. It replaces ADR 0185's fixed issue panel below the Text editor and
-its in-editor download notice. The user asked that dictionaries "automatically download ... for
-the languages that are selected. This should likely be an Activity", and: "I only want the word
-suggestions to appear by double clicking on a word (or something). I do not want these fixed
-word suggestion boxes."
+`claude/spelling-redesign` and `claude/spelling-trigger`. It replaces ADR 0185's fixed issue
+panel below the Text editor and its in-editor download notice. The user asked that dictionaries
+"automatically download ... for the languages that are selected. This should likely be an
+Activity", and: "I only want the word suggestions to appear by double clicking on a word (or
+something). I do not want these fixed word suggestion boxes."
+
+> Update 20 November 2026 (`claude/spelling-trigger`): the first implementation used
+> Ctrl+click (⌘+click on macOS). The user then asked for the trigger they first named,
+> **double-click**, so double-click on a coloured word now opens the popover, Alt+Enter stays
+> the keyboard route and Ctrl+click was removed rather than kept as a third route (one pointer
+> trigger to explain and test, no macOS-specific modifier).
 
 ## User choices (20 November)
 
-- Trigger: the user proposed **Ctrl+click** instead of double-click, so double-click keeps
-  plain word selection. macOS uses ⌘+click (Ctrl+click there is the context menu).
+- Trigger: **double-click** on a coloured word inside the open Text editor; **Alt+Enter**
+  (Option+Enter on macOS) with the caret or selection inside one is the keyboard route.
 - Nothing under the text box: possible issues are **coloured** in the text, and the editor has
   a **Spelling** checkbox that is remembered for every passage.
 - The popover offers the suggestion, **Add to recording vocabulary**, **Add to project
@@ -55,14 +61,26 @@ word suggestion boxes."
   transparent text and colours only flagged words (tinted background and a wavy underline),
   synchronised to the textarea's width and scroll. It never changes the textarea's value,
   selection, focus or scroll.
-- **Ctrl+click** (⌘+click) on a coloured word, or **Alt+Enter** with the caret or selection
-  inside one, opens a small `role="dialog"` popover anchored below the word. The keyboard route
-  moves focus into the popover (onto the suggestion once it arrives); Escape closes it and
-  returns to the textarea with the selection unchanged. Pointer or focus elsewhere, typing, a
-  new check, navigation or opt-out closes it.
+- **Double-click** on a coloured word inside the open Text editor, or **Alt+Enter** with the
+  caret or selection inside one, opens a small `role="dialog"` popover anchored below the word.
+  - The double-click is not intercepted: the browser selects the word as usual and keeps
+    focus in the textarea, and the popover opens beside that selection. Which word is meant
+    comes from the textarea's own selection, ignoring surrounding whitespace (Windows
+    browsers also select the following space); a selection of only whitespace or one
+    reaching beyond a single coloured word opens nothing. A double-click with a modifier key,
+    or on a word that is not coloured, does nothing beyond the native selection.
+  - The double-click that opens the Text editor from a read-only passage is unchanged: it
+    targets a passage word outside the textarea, selects that word in the new editor and
+    never opens the popover, even after the word is coloured.
+  - The keyboard route moves focus into the popover (onto the suggestion once it arrives);
+    Escape closes it and returns to the textarea with the selection unchanged. Pointer or
+    focus elsewhere (including a third click), typing, a new check, navigation or opt-out
+    closes it.
 - Choosing a suggestion selects exactly the flagged range and inserts the word with the
   browser's `insertText` editing command, so it is ordinary input and the browser's own Undo
-  restores the word. Where that command is unavailable, it falls back to the earlier
+  restores the word. A space that the double-click also selected is therefore kept, and
+  typing over the native selection instead stays ordinary editing that closes the popover.
+  Where that command is unavailable, it falls back to the earlier
   `setRangeText` plus input event. All existing guards still apply: recording, result,
   revision, view epoch, passage, language key, exact draft and range, the saving/structure
   locks, request serials, the replaced busy set and late-response checks.
@@ -73,8 +91,11 @@ word suggestion boxes."
   Text editor too. Spelling keeps a distinct style (red wavy line 6 px below the text plus a
   light tint) in its own layer, so a later uncertainty layer can sit beside it in the same
   `.passage-text-surface`, and one word can carry both lines without either hiding the other.
-  A synthetic check with both layers on one word showed the dotted line above the wavy one.
-  Showing uncertainty in the editor is not part of this decision.
+  A browser test adds a synthetic sibling layer with `.uncertain-word` on the coloured word
+  and pins both styles (wavy red at 6 px, dotted amber at 3 px), their identical word boxes
+  and that the textarea still receives the pointer; its screenshot shows the dotted line
+  directly under the word and the wavy one below it. Showing uncertainty in the editor is not
+  part of this decision; such a layer must also leave pointer events to the textarea.
 - **The Spelling checkbox** sits in the editor toolbar and saves the library preference, so
   it applies to every passage and survives reloads. There is no visible status line: a
   screen-reader live region announces finished checks and states, and the checkbox's tooltip
@@ -98,8 +119,12 @@ feature; MVP pages make no spelling requests.
 ## Consequences
 
 Synthetic unit tests cover triggers, consent, revision fences, failure/Retry/Dismiss, one
-download at a time, opt-out and shutdown; browser tests cover the Activity card, coloured
-words, Ctrl+click and Alt+Enter, Undo, Ignore, both vocabulary scopes, the remembered toggle,
-the Settings tab and MVP hiding. Not verified: macOS ⌘+click and Option+Enter, Firefox/Safari
-`insertText` Undo, screen-reader announcements, real dictionaries and real users. The
-coloured layer assumes the textarea's font metrics match the playback layer, as that layer does.
+download at a time, opt-out and shutdown; Chromium browser tests cover the Activity card,
+coloured words, double-click (native selection kept, uncoloured words and Ctrl+click opening
+nothing, the editor-opening double-click unchanged) and Alt+Enter, Undo, Ignore, both
+vocabulary scopes, the remembered toggle, the Settings tab and MVP hiding. Not verified: macOS
+double-click and Option+Enter, Firefox/Safari word selection and `insertText` Undo,
+screen-reader announcements, real dictionaries and real users. A browser whose double-click
+word differs from the spelling token (for example joining `_` or digits) opens nothing; the
+caret and Alt+Enter still work there. The coloured layer assumes the textarea's font metrics
+match the playback layer, as that layer does.
