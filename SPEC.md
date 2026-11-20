@@ -344,6 +344,11 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V258: Global project-task shutdown immediately prevents every not-yet-claimed Stop,
+  queued task execution and Delete commit even before per-task closing flags are set. Waiting
+  for one task's in-flight COMMIT cannot let the executor advance another queued deletion.
+  A previously claimed COMMIT retains its actual outcome; later queued projects are kept
+  with interrupted notes and their controls unchanged (B518, V253, ADR0190).
 - V257: The passage review dropdown displays derived Uncertain at the current visible
   model-hint threshold, otherwise Timing missing for automatic missing timing. Uncertain
   wins that display overlap; an exact-content manual row always wins both. Derived options
@@ -2372,3 +2377,4 @@ B514|2026-11-20|The task set committing before Store.connection exited, so Keep 
 B515|2026-11-20|Keep won after stop_for_task checked its flag but before _cancel claimed the queue; reserved source inspection and input-intent cancellation still ran, although no Stop had been accepted before Keep|V256,ADR0190; recheck the predicate at queue claim and each reserved/native dispatch, preserve the legacy None predicate, and assert exact frozen jobs/inspection cache remain unchanged when Keep wins
 B516|2026-11-20|The expanded night regression used a deeper generated Windows basetemp than the earlier focused gate; ten successful portable-route scenarios hit the unchanged staging/destination path-budget guard or its secondary wait symptom|Harness-only correction: rerun the complete 30-case portable_routes module from a fresh short synthetic base with identical source, tests and assertions; all 30 pass. Reconcile exact case identities into the 378-case inventory (376 passes, two skips), retaining the original 366-pass/two-skip/ten-failure receipt. No new product invariant or guard relaxation is needed
 B517|2026-11-20|The night dropdown browser runner exposed cached Spylls only to the isolated worker; the unchanged host availability guard could not find the package, so the spelling/uncertainty overlay test failed on both candidate and untouched base|Harness-only correction: expose the actual existing Spylls0.1.7 cache to the test host as well as the isolated child, preserving find_spec and all isolation guards; the corrected58-case gate passes without changing source, assertions or installed environments. Normal installed-worker acceptance remains open
+B518|2026-11-20|Final adversarial review paused close() while it waited for the first task decision; the executor advanced and deleted a second queued project after global closed was already true, because its per-task closing flag had not yet been set|V258,V253,ADR0190; include global closed in the shared Keep/shutdown predicate and use it at both final decision/commit boundaries. Independent deterministic queued-project and two direct-boundary regressions; prior in-flight COMMIT outcome remains authoritative, with no new Stop for the queued project

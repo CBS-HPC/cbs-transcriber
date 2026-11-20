@@ -214,3 +214,12 @@ Independent R5 tests exercise Runtime and native lost Trash replies through the 
 local deletion remains committed, the original release receipt survives, Retry addresses the
 same folder, and parent listing confirms absence without touching a sibling. No real UCloud
 operation, schema migration, publication or preview activation is part of these checks.
+
+### Global shutdown signal precedes per-task draining (B518, V258)
+
+The manager's closed flag participates immediately in the shared Keep/shutdown predicate,
+including queued execution, control dispatch and both commit boundaries. Draining a current
+COMMIT may delay the per-task closing flags; it must never let the executor start the next
+queued deletion meanwhile. An already claimed COMMIT keeps its actual outcome, while the
+later queued projects are kept with interrupted notes and no new Stop. This tightens the
+implementation of the existing early-close decision without changing persistence or UI.

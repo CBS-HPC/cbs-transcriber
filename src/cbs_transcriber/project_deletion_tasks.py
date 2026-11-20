@@ -420,19 +420,19 @@ class ProjectDeletionTasks:
                 self._settle_from_facts(task)
 
     def _wants_keep(self, task):
-        return task.keep_requested or task.closing
+        return self.closed or task.keep_requested or task.closing
 
     def _decide(self, task, *, final):
         """Inside the Delete writer: Keep or the commit, never both (K4)."""
         with task.decision:
-            if task.keep_requested or task.closing:
+            if self._wants_keep(task):
                 raise deletions.Kept()
 
     @contextmanager
     def _commit_guard(self, task):
         """Serialize an overlapping Keep with COMMIT, including a lost reply."""
         with task.decision:
-            if task.keep_requested or task.closing:
+            if self._wants_keep(task):
                 raise deletions.Kept()
             task.committing = True
             try:
