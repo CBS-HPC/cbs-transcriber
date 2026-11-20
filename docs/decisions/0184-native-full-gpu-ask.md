@@ -386,3 +386,15 @@ public-clip full-GPU batch for output comparability, speed and actual credit use
 No implementation, review, live read, allocation, cleanup or price measurement. Capacity
 signals are not reservations; this app has not measured full-GPU speed or whether its text
 matches the MIG's. CPU fallback, parallel MIGs and CBS Runtime are separate decisions.
+
+## Offline helper checkpoint — 20 November 2026
+
+The bounded supplied-data observations in `native_gpu_observations.py` are implemented
+but have no production callers. Capacity is an observation, not a reservation or a
+free-machine count. Two FULL observations must share the frozen context and be at
+least 30 seconds apart. Funding remains in the existing funding observer.
+
+Never-started observations reject unknown/contradictory update evidence and resumable
+SUSPENDED. The closed update contract follows pinned UCloud source, not a guessed
+terminal-state union. These helpers grant no consent, cleanup, Stop or submission
+authority. End-to-end activation remains open; see the verification receipt.
