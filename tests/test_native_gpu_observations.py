@@ -57,8 +57,12 @@ def observe(payload=None, seconds=0, **options):
 def job():
     return {
         "id": REMOTE,
-        "status": {"state": "ABORTED", "startedAt": None},
-        "updates": [{"state": "IN_QUEUE"}, {"status": "waiting"}, {"state": "ABORTED"}],
+        "status": {"state": "SUCCESS", "startedAt": None},
+        "updates": [
+            {"state": "IN_QUEUE", "timestamp": 1},
+            {"status": "waiting", "timestamp": 2},
+            {"state": "SUCCESS", "timestamp": 3},
+        ],
     }
 
 
@@ -248,7 +252,7 @@ def test_bounded_strict_json_cannot_become_capacity_evidence(payload):
 
 def test_never_started_requires_terminal_complete_queued_history_and_all_input_sizes():
     observed = proof()
-    assert observed == gpu.NeverStartedObservation(REMOTE, "ABORTED", ("IN_QUEUE", "ABORTED"), 1)
+    assert observed == gpu.NeverStartedObservation(REMOTE, "SUCCESS", ("IN_QUEUE", "SUCCESS"), 1)
     assert proof(updates_complete=False) is None
     assert proof(updates_complete=1) is None
     assert proof(outputs={"items": []}) is None
@@ -294,7 +298,7 @@ def test_no_started_or_malformed_history_can_authorize_a_second_allocation(probl
     elif problem == "nonobject-update":
         value["updates"].append(None)
     elif problem == "wrong-terminal-update":
-        value["updates"].append({"state": "SUCCESS"})
+        value["updates"].append({"state": "FAILURE", "timestamp": 4})
     elif problem == "canceling":
         value["status"]["state"] = "CANCELING"
     else:
@@ -449,7 +453,7 @@ def test_matching_gpu_periodic_accounting_metadata_is_retained_only_as_evidence(
     assert observe(payload) is not None
 
 
-@pytest.mark.parametrize("updates", [[], [{"state": "ABORTED"}], [{"status": "unknown history"}]])
+@pytest.mark.parametrize("updates", [[], [{"state": "SUCCESS"}], [{"status": "unknown history"}]])
 def test_terminal_status_alone_is_not_a_recorded_queued_history(updates):
     value = job()
     value["updates"] = updates
@@ -518,3 +522,92 @@ def test_each_products_accounting_flags_require_real_booleans(field):
     else:
         category["accountingUnit"][field] = 0 if field == "floatingPoint" else 1
     assert observe(payload) is None
+
+
+@pytest.mark.parametrize("state", ["SUSPENDED", "ABORTED", "CANCELLED"])
+def test_review_nonfinal_or_unsupported_states_are_not_never_started_candidates(state):
+    value = job()
+    value["status"]["state"] = state
+    value["updates"][-1]["state"] = state
+    assert proof(remote=value) is None
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"state": None, "startedAt": 123},
+        {"state": None, "startedAt": None},
+        {"state": None, "foreign": "field"},
+        {"state": None, "status": {}},
+        {"state": None, "expectedState": "UNKNOWN"},
+        {"state": None, "expectedDifferentState": 1},
+        {"state": None, "allowRestart": 0},
+        {"state": None, "newTimeAllocation": "60"},
+        {"state": None, "outputFolder": []},
+        {"state": None, "resourceList": {}},
+    ],
+    ids=[
+        "started",
+        "unknown-null",
+        "unknown-field",
+        "bad-status",
+        "bad-expected",
+        "integer-expected-flag",
+        "integer-restart-flag",
+        "bad-allocation",
+        "bad-output",
+        "bad-resources",
+    ],
+)
+def test_review_malformed_or_contradictory_stateless_updates_are_refused(update):
+    value = job()
+    value["updates"].append({"timestamp": 4, **update})
+    assert proof(remote=value) is None
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [None, True, 1.5, "4", [], 2**63, -(2**63) - 1],
+    ids=["null", "bool", "float", "text", "array", "too-large", "too-small"],
+)
+def test_review_job_updates_require_protocol_integer_timestamps(timestamp):
+    value = job()
+    value["updates"].append({"state": None, "timestamp": timestamp})
+    assert proof(remote=value) is None
+
+
+def test_review_missing_timestamp_is_not_a_complete_update():
+    value = job()
+    value["updates"].append({"state": None})
+    assert proof(remote=value) is None
+
+
+@pytest.mark.parametrize("field", ["expectedDifferentState", "allowRestart"])
+def test_review_valid_nullable_update_flags_are_not_actual_running_states(field):
+    value = job()
+    value["updates"].insert(
+        1,
+        {
+            "timestamp": 1,
+            "state": None,
+            "expectedState": "RUNNING",
+            field: True,
+            "resourceList": [],
+        },
+    )
+    assert proof(remote=value) is not None
+
+
+def test_review_nonempty_resource_changes_remain_explicitly_unchecked():
+    value = job()
+    value["updates"].append(
+        {"timestamp": 4, "state": None, "resourceList": [{"type": "file", "path": "/other"}]}
+    )
+    assert proof(remote=value) is None
+
+
+def test_review_only_pinned_final_states_are_observed():
+    for state in ("SUCCESS", "FAILURE", "EXPIRED"):
+        value = job()
+        value["status"]["state"] = value["updates"][-1]["state"] = state
+        assert proof(remote=value).terminal_state == state

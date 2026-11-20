@@ -29,7 +29,22 @@ MAX_UPDATES = 1000
 MAX_INPUTS = 1000
 FREE = frozenset({"AVAILABLE", "BUSY"})
 STATUSES = FREE | {"FULL"}
-TERMINAL = frozenset({"SUCCESS", "FAILURE", "EXPIRED", "ABORTED", "CANCELLED", "SUSPENDED"})
+# UCloud 2c23d295 jobs.go: JobState.IsFinal excludes resumable SUSPENDED.
+FINAL_STATES = frozenset({"SUCCESS", "FAILURE", "EXPIRED"})
+_JOB_STATES = FINAL_STATES | {"IN_QUEUE", "RUNNING", "SUSPENDED"}
+_UPDATE_FIELDS = frozenset(
+    {
+        "state",
+        "outputFolder",
+        "status",
+        "expectedState",
+        "expectedDifferentState",
+        "newTimeAllocation",
+        "allowRestart",
+        "resourceList",
+        "timestamp",
+    }
+)
 _SHA = re.compile(r"[a-f0-9]{64}")
 
 
@@ -259,6 +274,40 @@ class CapacityWindow:
         return candidate
 
 
+def _integer(value):
+    return type(value) is int and -(2**63) <= value < 2**63
+
+
+def _update_state(update):
+    # Fixed source: SDU-eScience/UCloud 2c23d295318cabdb960a8baa69dc175e806254ac,
+    # provider-integration/shared/pkg/orchestrators/jobs.go JobUpdate and foundation/core.go.
+    # Unknown fields (including startedAt, which belongs on JobStatus) withhold evidence.
+    if (
+        not isinstance(update, dict)
+        or set(update) - _UPDATE_FIELDS
+        or not _integer(update.get("timestamp"))
+    ):
+        raise ValueError("Unverified update shape")
+    for key in ("state", "expectedState"):
+        value = update.get(key)
+        if value is not None and (not isinstance(value, str) or value not in _JOB_STATES):
+            raise ValueError("Unverified update state")
+    for key, maximum in (("status", 8192), ("outputFolder", 4000)):
+        value = update.get(key)
+        if value is not None and (not isinstance(value, str) or len(value) > maximum):
+            raise ValueError("Unverified update text")
+    for key in ("expectedDifferentState", "allowRestart"):
+        value = update.get(key)
+        if value is not None and type(value) is not bool:
+            raise ValueError("Unverified update flag")
+    if update.get("newTimeAllocation") is not None and not _integer(update["newTimeAllocation"]):
+        raise ValueError("Unverified time allocation")
+    # Nonempty resource updates need their own AppParameterValue validation; no inference.
+    if update.get("resourceList") not in (None, []):
+        raise ValueError("Resource updates are not checked")
+    return update.get("state")
+
+
 def never_started(raw_job, raw_outputs, *, remote_id, updates_complete, expected_inputs, inputs):
     """Observe terminal queued history, an empty complete out/ listing and exact input sizes.
 
@@ -288,7 +337,7 @@ def never_started(raw_job, raw_outputs, *, remote_id, updates_complete, expected
         if (
             remote.get("id") != remote_id
             or not isinstance(status, dict)
-            or status.get("state") not in TERMINAL
+            or status.get("state") not in FINAL_STATES
             or status.get("startedAt") is not None
             or not isinstance(updates, list)
             or len(updates) > MAX_UPDATES
@@ -299,7 +348,7 @@ def never_started(raw_job, raw_outputs, *, remote_id, updates_complete, expected
             return None
         states = []
         for update in updates:
-            state = update.get("state") if isinstance(update, dict) else "invalid"
+            state = _update_state(update)
             if state is not None and state not in {"IN_QUEUE", status["state"]}:
                 return None
             if state is not None and state not in states:
