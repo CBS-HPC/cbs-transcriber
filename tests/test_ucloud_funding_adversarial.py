@@ -335,11 +335,12 @@ class Peer:
     """Plain-TCP HTTP/1.1 peer on 127.0.0.1 replaying one scripted step list per request.
 
     Steps: ``bytes`` are sent, numbers are pauses, ``"close"`` closes and ``"reset"`` aborts.
+    ``"eof"`` records the client's FIN, then keeps this side open (it never wakes the client).
     """
 
     def __init__(self, scripts, *, hangup=False):
         self.scripts, self.hangup = list(scripts), hangup
-        self.heads, self.connections = [], 0
+        self.heads, self.connections, self.eofs = [], 0, []
         self.stop = threading.Event()
         self.listener = socket.create_server(("127.0.0.1", 0))
         self.listener.settimeout(0.05)
@@ -389,6 +390,12 @@ class Peer:
                     elif step == "reset":
                         linger = struct.pack("HH" if sys.platform == "win32" else "ii", 1, 0)
                         connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, linger)
+                        return
+                    elif step == "eof":
+                        while connection.recv(65536):
+                            pass
+                        self.eofs.append(time.monotonic())
+                        self.stop.wait(30)
                         return
                     elif self.stop.wait(step):
                         return
@@ -469,6 +476,15 @@ def body_drip_peer(loopback):
     data = encode(page([gpu(600)]))
     head = response(data)[: -len(data)]
     return loopback([head, *drip(data[:6], BODY_DRIP_INTERVAL), "close"])
+
+
+def wait_for(condition, timeout=5.0):
+    end = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() >= end:
+            return False
+        time.sleep(0.01)
+    return True
 
 
 # 1. Real-socket timing.
@@ -583,7 +599,11 @@ def test_slow_name_resolution_never_yields_a_result_after_the_deadline(
     observation, _ = timed(f"https://funding.example.test:{peer.port}")
 
     assert_unknown(observation, "deadline_exceeded")
-    assert len(peer.heads) == 1  # The late, valid answer was received and still refused.
+    assert drain_workers(5) == []
+    assert wait_for(lambda: peer.connections == 1)
+    # The lookup ended inside the join grace and TCP connected after the deadline: that
+    # connection was shut down at once, so not even the request reached the peer.
+    assert peer.heads == []
 
 
 def test_slow_name_resolution_is_cut_at_the_overall_deadline(
@@ -1455,15 +1475,15 @@ class LaggingClock:
     """Injected worker clock that never runs out, so per-read socket timeouts stay long.
 
     Only the watchdog (real monotonic time) can then end a blocked read: this isolates the
-    close-to-wake path from httpx's own timeouts.
+    wake-up path from httpx's own timeouts. ``budget`` is that per-operation timeout.
     """
 
-    def __init__(self):
-        self.calls = 0
+    def __init__(self, budget=1000.0):
+        self.calls, self.budget = 0, budget
 
     def __call__(self):
         self.calls += 1
-        return 1000.0 if self.calls == 1 else 0.0
+        return self.budget if self.calls == 1 else 0.0
 
 
 @pytest.fixture
@@ -1479,11 +1499,25 @@ def cancel_bound():
     return funding.DEADLINE_SECONDS + funding.JOIN_GRACE_SECONDS + GRACE
 
 
-@pytest.mark.skipif(
-    sys.platform != "win32", reason="Socket close wake-up is only verified on Windows."
-)
+@pytest.fixture
+def duplicates(monkeypatch):
+    """Every descriptor the observer duplicates (socket.socket.dup), in order."""
+    taken = []
+    original = socket.socket.dup
+
+    def dup(self):
+        handle = original(self)
+        taken.append(handle)
+        return handle
+
+    monkeypatch.setattr(socket.socket, "dup", dup)
+    return taken
+
+
+# Runs on every platform: shutdown wakes the read where closing does not (Linux, expected on
+# macOS) and closing wakes it where shutdown does not (Windows).
 def test_back_to_back_cancellations_leave_no_workers_or_open_sockets(
-    loopback, monkeypatch, thread_errors
+    loopback, monkeypatch, thread_errors, duplicates
 ):
     monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.3)
     rounds = 12
@@ -1499,12 +1533,13 @@ def test_back_to_back_cancellations_leave_no_workers_or_open_sockets(
 
         assert_unknown(observation, "deadline_exceeded")
         assert elapsed <= cancel_bound()
-        # Only the watchdog's close could end this read (its own timeout is ~1000 s).
+        # Only the watchdog's wake-up could end this read (its own timeout is ~1000 s).
         assert observer_threads() == []
 
     assert len(peer.heads) == rounds
     assert len(PlainBackend.sockets) == rounds
     assert all(client.fileno() == -1 for client in PlainBackend.sockets)
+    assert len(duplicates) == rounds and all(handle.fileno() == -1 for handle in duplicates)
     assert thread_errors == []
 
 
@@ -1601,3 +1636,199 @@ def test_late_worker_cannot_change_the_returned_observation_or_a_later_call(
     assert thread_errors == []
     with pytest.raises(AttributeError):
         first.complete = True
+
+
+# 9. Cross-platform wake-up: shutdown through the observer's own duplicate descriptor.
+#
+# Loopback probes on 19 November: closing a socket from another thread woke a blocked read or
+# TLS handshake on Windows 11 but not on Linux (WSL2 6.18); shutdown(SHUT_RDWR), also through
+# a duplicate taken before TLS wrapping, woke it on Linux but not on Windows. The assertions
+# below that differ per platform encode exactly that; macOS is expected to match Linux.
+
+WAKES_BY_SHUTDOWN = sys.platform != "win32"
+
+
+class ConnectedStream:
+    """Stands in for httpcore's network stream at ``connect_tcp.complete``."""
+
+    def __init__(self, sock):
+        self.sock = sock
+
+    def get_extra_info(self, info):
+        return self.sock if info == "socket" else None
+
+
+@pytest.fixture
+def connected():
+    listener = socket.create_server(("127.0.0.1", 0))
+    client = socket.create_connection(listener.getsockname())
+    server, _ = listener.accept()
+    listener.close()
+    server.settimeout(5)
+    yield client, server
+    client.close()
+    server.close()
+
+
+@pytest.mark.parametrize("event", ["connection.connect_tcp.complete", "socks.connect_tcp.complete"])
+def test_cancel_shuts_down_tracked_connections_before_closing_the_client(
+    connected, duplicates, monkeypatch, event
+):
+    client, server = connected
+    events, shut = [], funding._shut
+    monkeypatch.setattr(funding, "_shut", lambda handle: (events.append("shutdown"), shut(handle)))
+    deadline = funding._Deadline(time.monotonic, 10)
+    deadline.attach(SimpleNamespace(close=lambda: events.append("close")))
+    deadline.trace(event, {"return_value": ConnectedStream(client)})
+
+    deadline.cancel()
+
+    assert events == ["shutdown", "close"]
+    assert server.recv(1) == b""  # The connection itself was shut down: the peer saw FIN.
+    with pytest.raises(OSError):
+        client.sendall(b"GET / HTTP/1.1\r\n\r\n")
+    assert client.fileno() != -1  # httpcore's own socket is still httpcore's to close.
+    assert [handle.fileno() for handle in duplicates] == [-1]
+
+
+def test_connection_completing_after_cancellation_is_shut_down_at_once(connected, duplicates):
+    client, server = connected
+    deadline = funding._Deadline(time.monotonic, 10)
+    deadline.cancel()
+
+    deadline.trace("connection.connect_tcp.complete", {"return_value": ConnectedStream(client)})
+
+    assert server.recv(1) == b""
+    with pytest.raises(OSError):
+        client.sendall(b"GET / HTTP/1.1\r\n\r\n")
+    assert [handle.fileno() for handle in duplicates] == [-1]
+
+
+def test_release_closes_duplicates_without_disturbing_the_connection(connected, duplicates):
+    client, server = connected
+    deadline = funding._Deadline(time.monotonic, 10)
+    deadline.trace("connection.connect_tcp.complete", {"return_value": ConnectedStream(client)})
+
+    deadline.release()
+    deadline.cancel()  # Nothing is left to shut down after the worker released.
+
+    assert [handle.fileno() for handle in duplicates] == [-1]
+    client.sendall(b"still open")
+    assert server.recv(16) == b"still open"
+
+
+@pytest.mark.parametrize(
+    ("event", "stream"),
+    [
+        ("connection.connect_tcp.complete", None),
+        ("connection.connect_tcp.complete", object()),
+        ("connection.connect_tcp.complete", SimpleNamespace(get_extra_info=lambda info: None)),
+        ("connection.start_tls.complete", "connected"),
+        ("connection.connect_tcp.started", "connected"),
+    ],
+)
+def test_only_connected_plain_sockets_are_tracked(connected, duplicates, event, stream):
+    client, server = connected
+    if stream == "connected":
+        stream = ConnectedStream(client)
+    deadline = funding._Deadline(time.monotonic, 10)
+
+    deadline.trace(event, {"return_value": stream})
+    deadline.cancel()
+
+    assert duplicates == []
+    client.sendall(b"untouched")
+    assert server.recv(16) == b"untouched"
+
+
+@pytest.mark.parametrize("failure", [OSError(24, "Too many open files"), NotImplementedError()])
+def test_a_socket_that_cannot_be_duplicated_leaves_only_the_client_close(
+    connected, monkeypatch, failure
+):
+    client, server = connected
+
+    def refuse(self):
+        raise failure
+
+    monkeypatch.setattr(socket.socket, "dup", refuse)
+    deadline = funding._Deadline(time.monotonic, 10)
+
+    deadline.trace("connection.connect_tcp.complete", {"return_value": ConnectedStream(client)})
+    deadline.cancel()
+
+    client.sendall(b"untouched")
+    assert server.recv(16) == b"untouched"
+
+
+def test_shutdown_reaches_the_connection_even_where_closing_cannot_wake_the_read(
+    loopback, monkeypatch, thread_errors, duplicates
+):
+    """Closing the client is disabled, as it is ineffective on Linux: shutdown must suffice."""
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.3)
+    monkeypatch.setattr(PlainStream, "close", lambda self: None)
+    peer = loopback(["eof"])  # Reads the request, never answers, records the client's FIN.
+
+    try:
+        started = time.monotonic()
+        observation = funding.observe(
+            peer.origin, PROJECT, KEY, monotonic=LaggingClock(), now=lambda: NOW
+        )
+        elapsed = time.monotonic() - started
+
+        assert_unknown(observation, "deadline_exceeded")
+        assert elapsed <= cancel_bound()
+        assert len(peer.heads) == 1
+        # The shutdown reached the real connection although no socket was closed.
+        assert wait_for(lambda: len(peer.eofs) == 1, timeout=2.0)
+        assert all(client.fileno() != -1 for client in PlainBackend.sockets)
+        assert len(duplicates) == 1 and duplicates[0].fileno() == -1
+        if WAKES_BY_SHUTDOWN:
+            assert observer_threads() == []  # Woken by shutdown alone (read timeout ~1000 s).
+        else:
+            assert len(observer_threads()) == 1  # Windows needs the close as well.
+    finally:
+        for client in PlainBackend.sockets:
+            client.close()  # On Windows this is the wake-up; elsewhere it only releases.
+    assert thread_errors == []
+
+
+def tls_client(**kwargs):
+    """The SDK's arguments over a real TLS client handshake; no CA, as none ever completes."""
+    return httpx.Client(
+        transport=httpx.HTTPTransport(verify=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)), **kwargs
+    )
+
+
+def test_a_stalled_tls_handshake_is_shut_down_at_the_deadline(
+    monkeypatch, thread_errors, duplicates
+):
+    monkeypatch.setattr(funding, "DEADLINE_SECONDS", 0.3)
+    monkeypatch.setattr(sdk_client, "httpx", SimpleNamespace(Client=tls_client))
+    # A silent peer: the kernel completes TCP from the backlog; nothing ever answers TLS.
+    listener = socket.create_server(("127.0.0.1", 0))
+    handshake_timeout = 3.0  # The worker's connect timeout, so a Windows worker ends anyway.
+
+    try:
+        started = time.monotonic()
+        observation = funding.observe(
+            f"https://127.0.0.1:{listener.getsockname()[1]}",
+            PROJECT,
+            KEY,
+            monotonic=LaggingClock(handshake_timeout),
+            now=lambda: NOW,
+        )
+        elapsed = time.monotonic() - started
+
+        assert_unknown(observation, "deadline_exceeded")
+        assert elapsed <= cancel_bound()
+        assert len(duplicates) == 1 and duplicates[0].fileno() == -1  # TCP had connected.
+        if WAKES_BY_SHUTDOWN:
+            # httpcore had not returned the TLS socket yet, so only the duplicate reached it.
+            assert observer_threads() == []
+        else:
+            # Documented Windows limit: closing the client cannot reach a handshake socket.
+            assert len(observer_threads()) == 1
+            assert drain_workers(handshake_timeout + 2) == []
+    finally:
+        listener.close()
+    assert thread_errors == []

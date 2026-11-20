@@ -3,7 +3,8 @@
 Proposed 12 November 2026 for the user's authorized additional backend work. Conditional
 independent design Go. **Implemented 17–18 November** as an unwired standalone module:
 builder `94b5146`/`921fd0d`/`8698d4c`, independent tester Go `4506d5c`/`dccf2f6` (259 tests).
-No caller, routing or live acceptance yet. This is the read-only
+**Amended 19 November** (Claude, `claude/funding-wakeup`): cross-platform deadline wake-up,
+see below (272 tests). No caller, routing or live acceptance yet. This is the read-only
 foundation for [ADR 0177](0177-funding-based-compute-fallback.md), not a routing decision.
 
 ## Contract
@@ -34,14 +35,39 @@ unique cursors up to 1,024 characters. These are local limits, not provider guar
 
 Per-operation HTTPX timeouts restart per socket read and do not cover name resolution, so a
 watchdog enforces the overall deadline: reads run on a daemon worker; at the deadline the
-caller closes the SDK client and its sockets, waits at most 0.5 s and returns
-`deadline_exceeded`. No later result is accepted. Once `observe()` has returned, an httpcore
-trace hook refuses to write request headers, so a worker held up by a slow name lookup sends
-neither key nor project; within the 0.5 s grace a request already being set up may still be
-sent and its result is refused. Before the first request the client must carry exactly the
-selected `Project` and the supplied key's `Authorization`. Socket-close wake-up is verified on
-Windows only; on Linux/macOS a worker may linger until its own read timeout while `observe()`
-still returns on time. Callers must bound repeated calls (abandoned slow lookups pile up).
+caller shuts down the call's connected sockets, closes the SDK client and its sockets, waits
+at most 0.5 s and returns `deadline_exceeded`. No later result is accepted. Once `observe()`
+has returned, an httpcore trace hook refuses to write request headers, so a worker held up by
+a slow name lookup sends neither key nor project. Before the first request the client must
+carry exactly the selected `Project` and the supplied key's `Authorization`.
+
+### Deadline wake-up (amended 19 November)
+
+Neither action wakes a blocked worker on every platform. Stdlib loopback probes on 19 November
+found that closing a socket from another thread woke a blocked read or TLS handshake on
+Windows 11 but not on Linux (WSL2 kernel 6.18), while `shutdown(SHUT_RDWR)` woke it on Linux
+but not on Windows. So the trace hook keeps the observer's own duplicate descriptor of every
+socket when TCP connects (`*.connect_tcp.complete`, proxy connections included); at the
+deadline the watchdog shuts each duplicate down for both directions and closes it, then
+closes the client as before. httpcore can neither close nor reuse a duplicate, and it still
+refers to the connection after a TLS wrapper detaches the plain socket object, so shutdown
+also reaches a handshake whose TLS socket httpcore has not returned yet. Closing the client
+never reached that socket on any platform: a pooled connection holds no stream to close until
+its handshake completes. A connection completing after the deadline is shut down at once, so it cannot carry
+a request even inside the 0.5 s grace (previously such a request could still be sent and its
+answer was refused). The worker closes its remaining duplicates when it finishes; a socket
+that cannot be duplicated keeps the close-only behaviour.
+
+Remaining limits: a name lookup or TCP connect has no socket to wake and ends at the resolver
+or its connect timeout; on Windows a stalled TLS handshake likewise ends only at its connect
+timeout. Callers must still bound repeated calls (abandoned slow lookups pile up).
+
+Evidence: on Windows 11 the full funding suite passes, including tests that disable the
+client close and require the peer to observe the shutdown, and a mutation run without
+shutdown fails them. On Linux only the stdlib probe ran (this machine's WSL lacks Python 3.13
+and the locked dependencies). macOS is unverified. The wake-up tests now run on every platform
+with per-platform expectations (no Windows-only skip), so a macOS CI run (`macos-15`,
+`macos-15-intel`) exercises them; Linux is not in CI and needs a separate run.
 
 Require exact project owner/type and well-formed category/provider/product-type identities.
 Valid unrelated selected-project wallets are ignored after identity classification. Foreign

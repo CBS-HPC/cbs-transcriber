@@ -12,15 +12,20 @@ variable or credential store is read. Like the app's other SDK clients, the SDK'
 client keeps httpx's default ``trust_env``, so HTTPS_PROXY/ALL_PROXY/NO_PROXY and
 SSL_CERT_FILE/SSL_CERT_DIR in the process environment still apply to this connection.
 
-Network reads run on a daemon worker thread. At the overall deadline the caller closes the
-SDK client (and so its pooled sockets) from its own thread, waits at most
-``JOIN_GRACE_SECONDS`` for the worker and returns unknown/deadline_exceeded; a result the
-worker completes after that moment is never accepted. An operating-system name lookup
-cannot be interrupted: such a worker finishes the lookup on its own, but once observe() has
-returned an httpcore ``trace`` hook refuses to write its request headers, so the late
-connection is closed without sending the key or project. Closing a
-socket from the caller's thread woke blocked reads promptly in Windows tests; on other
-platforms that wake-up is unverified, and an unwoken read stays bounded by its read timeout.
+Network reads run on a daemon worker thread. At the overall deadline the caller shuts down
+every connected socket of this call through its own duplicate descriptor, then closes the
+SDK client (and so its pooled sockets), waits at most ``JOIN_GRACE_SECONDS`` for the worker
+and returns unknown/deadline_exceeded; a result the worker completes after that moment is
+never accepted. Both wake-ups are needed: in loopback probes ``shutdown(SHUT_RDWR)`` woke a
+blocked read or TLS handshake on Linux but not Windows, and closing from another thread woke
+it on Windows but not Linux (macOS is expected to match Linux; unverified). The duplicate is
+taken as soon as TCP connects, so shutdown also reaches a handshake whose TLS socket httpcore
+has not returned yet; closing the client cannot, so on Windows a stalled handshake ends only
+at its connect timeout. A connection completing after the deadline is shut down at once. An
+operating-system name lookup or TCP connect cannot be interrupted: such a worker finishes on
+its own, bounded by the resolver or its connect timeout, but once observe() has returned an
+httpcore ``trace`` hook refuses to write its request headers, so the late connection is
+closed without sending the key or project.
 
 Interpreted units follow upstream UCloud commit 2c23d295318cabdb960a8baa69dc175e806254ac
 (provider-integration/shared/pkg/accounting and k8s/shared/products.go): resource-paid
@@ -31,6 +36,7 @@ currency (floating-point) and any other representation stay unsupported.
 
 import json
 import re
+import socket
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -118,6 +124,7 @@ class _Deadline:
         self._cancelled = False
         self._abandoned = False
         self._client = None
+        self._handles = []  # Our duplicate descriptors of this call's connected sockets.
 
     def remaining(self):
         left = self._end - self._monotonic()
@@ -135,14 +142,32 @@ class _Deadline:
             self._client = http
 
     def cancel(self):
-        """Watchdog side: closing the client closes its pooled sockets, failing blocked reads."""
+        """Watchdog side: shut down every connected socket, then close the client.
+
+        shutdown() wakes a blocked read or TLS handshake where a close from another thread
+        does not (Linux); closing the client's own pooled sockets wakes it where shutdown
+        does not (Windows). The worker's outcome is discarded either way.
+        """
         with self._lock:
             self._cancelled = True
             http, self._client = self._client, None
+            handles, self._handles = self._handles, []
+        for handle in handles:
+            _shut(handle)
         if http is not None:
             try:
                 http.close()
             except Exception:  # The worker's own outcome is discarded after cancellation.
+                pass
+
+    def release(self):
+        """Worker side, after its client has closed: drop the remaining duplicates."""
+        with self._lock:
+            handles, self._handles = self._handles, []
+        for handle in handles:
+            try:
+                handle.close()
+            except OSError:
                 pass
 
     def abandon(self):
@@ -150,13 +175,49 @@ class _Deadline:
         self._abandoned = True
 
     def trace(self, event, info):
-        """httpcore trace hook: refuse request headers on a connection set up too late.
+        """httpcore trace hook: track connected sockets; refuse headers set up too late.
 
         Closing the client cannot reach a connection still resolving or connecting, so a
         late connection reaches this check before any request byte is written.
         """
-        if self._abandoned and event.endswith(".send_request_headers.started"):
+        if event.endswith(".connect_tcp.complete"):
+            self._track(info.get("return_value"))
+        elif self._abandoned and event.endswith(".send_request_headers.started"):
             raise _Unknown("deadline_exceeded")
+
+    def _track(self, stream):
+        """Keep our own duplicate of a newly connected socket for cancel() to shut down.
+
+        A duplicate descriptor cannot be closed or reused by httpcore, and it still refers
+        to the connection after a TLS wrapper detaches the plain socket object. Without one
+        (an unexpected stream or no descriptor left) only closing the client remains.
+        """
+        getter = getattr(stream, "get_extra_info", None)
+        sock = getter("socket") if callable(getter) else None
+        if not isinstance(sock, socket.socket):
+            return
+        try:
+            handle = sock.dup()
+        except (OSError, NotImplementedError):  # No descriptor left, or an SSLSocket.
+            return
+        with self._lock:
+            late = self._cancelled
+            if not late:
+                self._handles.append(handle)
+        if late:  # Connected after the deadline: never usable for a request.
+            _shut(handle)
+
+
+def _shut(handle):
+    """Shut the connection down for both directions, then close our duplicate descriptor."""
+    try:
+        handle.shutdown(socket.SHUT_RDWR)
+    except OSError:  # Already disconnected or reset by the peer.
+        pass
+    try:
+        handle.close()
+    except OSError:
+        pass
 
 
 def _canonical_server(value):
@@ -459,6 +520,8 @@ def _work(server, project, api_key, deadline, outcome):
         outcome["reason"] = "connection_failed"
     except Exception:  # Unknown evidence never propagates upstream text or secrets.
         outcome["reason"] = "internal_error"
+    finally:
+        deadline.release()  # The SDK client (and its sockets) closed inside _traverse.
 
 
 def _category(name, entry):
@@ -493,8 +556,8 @@ def observe(server, project, api_key, *, monotonic=time.monotonic, now=None):
         target=_work,
         args=(server, project, api_key, deadline, outcome),
         name="cbs-funding-observer",
-        daemon=True,  # A name lookup (or an unwoken read off Windows) may outlive observe().
-        # Such a worker never sends request headers afterwards (Deadline.trace).
+        daemon=True,  # A name lookup or TCP connect (or a Windows TLS handshake) may
+        # outlive observe(); such a worker never sends request headers afterwards (trace).
     )
     try:
         worker.start()
