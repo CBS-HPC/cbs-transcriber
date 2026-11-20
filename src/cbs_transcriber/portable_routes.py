@@ -197,7 +197,16 @@ def _restore_index(store, identifier, binding):
                 temporary.unlink(missing_ok=True)
 
 
-def install(app, store, queue, credentials, *, mutation_allowed=None, capture_guard=None):
+def install(
+    app,
+    store,
+    queue,
+    credentials,
+    *,
+    mutation_allowed=None,
+    capture_guard=None,
+    mutation_exempt=None,
+):
     gate = CaptureGate()
     # Blocked admission must leave endpoint workers free to drain earlier writes.
     admission_limiter = anyio.CapacityLimiter(1)
@@ -207,7 +216,9 @@ def install(app, store, queue, credentials, *, mutation_allowed=None, capture_gu
     async def mutation_admission(request, call_next):
         capture = request.method == "POST" and request.url.path == "/api/library/portable-backups"
         mutation = request.method in {"POST", "PUT", "PATCH", "DELETE"}
-        if not mutation or capture:
+        # A deletion task's exact Keep signal must reach it while staging excludes writes.
+        exempt = mutation_exempt is not None and mutation_exempt(request.url.path)
+        if not mutation or capture or exempt:
             return await call_next(request)
         # Waiting on a Condition must never block the serving event loop. Shield acquisition
         # so cancellation cannot leave an acquired mutation slot without its finalizer.

@@ -9,7 +9,7 @@ import hashlib
 import json
 import threading
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
@@ -26,6 +26,7 @@ from . import (
     remote_jobs,
     remote_release,
     restored_owners,
+    runtime_batches,
     runtime_store,
 )
 from .store import now
@@ -41,6 +42,22 @@ MAX_RECORDINGS = 2000
 MAX_JOBS = 20000
 MAX_CONTROL_BYTES = 32 * 1024 * 1024
 OPERATION_SECONDS = 1800
+BUSY = "Wait for the current local file operation to finish, then retry."
+REMOTE_CHANGED = (
+    "A UCloud allocation changed while deleting. Recordings were kept. "
+    "Review Activity before choosing Delete again."
+)
+
+
+class LocalActionBusy(HTTPException):
+    """Another local file operation owns staging; a deletion task waits and tries again."""
+
+    def __init__(self):
+        super().__init__(409, BUSY)
+
+
+class Kept(Exception):
+    """A project deletion task's Keep won before the SQLite Delete commit (ADR 0190)."""
 
 
 def _digest(value):
@@ -51,6 +68,15 @@ def _digest(value):
 
 def _conflict(message):
     raise HTTPException(409, message)
+
+
+def _refusal(error):
+    """A researcher-facing reason without exception internals beyond our own messages."""
+    detail = getattr(error, "detail", None)
+    if isinstance(detail, dict):
+        detail = detail.get("message")
+    text = detail if isinstance(detail, str) else str(error)
+    return (text or "The deletion could not continue.")[:500]
 
 
 def _needs_stop(batch, key):
@@ -86,6 +112,9 @@ class Operation:
     releasing: bool = False
     released: bool = False
     reply: dict | None = None
+    # The server-owned project deletion task that accepted this consent (ADR 0190). Such an
+    # operation never expires and no HTTP DELETE continuation may drive it.
+    task: str | None = None
 
 
 class Deletions:
@@ -103,7 +132,7 @@ class Deletions:
     @contextmanager
     def _file_action(self):
         if not self._file_action_lock.acquire(blocking=False):
-            _conflict("Wait for the current local file operation to finish, then retry.")
+            raise LocalActionBusy()
         try:
             with self._file_lease():
                 yield
@@ -531,11 +560,13 @@ class Deletions:
             return ("intent", intent["generation"], intent["epoch"], intent["cancel_requested"])
         return None
 
-    def _stop_unsubmitted_native(self, operation):
+    def _stop_unsubmitted_native(self, operation, should_continue=None):
         """Caller holds the claim lock: durable Stop for confirmed shared native batches."""
         from . import native_startup
 
         for key, batch_id in sorted(operation.batches):
+            if should_continue is not None and not should_continue():
+                return
             if key != "native_batch_id":
                 continue
             batch = self.store.native_batch(batch_id)
@@ -555,20 +586,23 @@ class Deletions:
                 if getattr(worker, "active_batch_id", None) == batch_id:
                     worker.cancel_event.set()
 
-    def _cancel(self, operation):
+    def _cancel(self, operation, should_continue=None):
         # Capture before releasing the lock. Generic cancellation performs any network I/O
         # outside that lock and fences shared ownership against this complete allowlist.
+        # A deletion task's Keep stops further dispatches; accepted Stops stay (ADR 0190).
         with self.queue.lock:
-            if operation.started:
+            if operation.started or (should_continue is not None and not should_continue()):
                 return
             self._validate(operation)
             # Record each affected unsubmitted native batch's Stop before cancelling any
             # admission below: cancelling a selection's last unjoined file seals its batch
             # in that same transaction, and the coordinator must never see a seal without the
             # Stop (ADR 0183). Its submission intent also refuses a recorded Stop atomically.
-            self._stop_unsubmitted_native(operation)
+            self._stop_unsubmitted_native(operation, should_continue)
             generic = []
             for identifier in sorted(operation.jobs):
+                if should_continue is not None and not should_continue():
+                    break
                 job = self._job(identifier)
                 shared_active = any(
                     _needs_stop(
@@ -603,6 +637,8 @@ class Deletions:
         try:
             handled = set()
             for identifier in generic:
+                if should_continue is not None and not should_continue():
+                    break
                 job = self._job(identifier)
                 allocation = next(
                     (
@@ -633,11 +669,12 @@ class Deletions:
                     if self._job(identifier)["state"] == "cancelled":
                         operation.cancelled.add(identifier)
 
-    def _pending(self, operation):
+    def _pending(self, operation, own=frozenset()):
+        # `own`: allocation control slots this deletion itself reserved (exclusively).
         if operation.cancelling:
             return True
         identifiers = operation.allowed
-        if identifiers & self.queue.coordinator.control_job_ids:
+        if identifiers & (self.queue.coordinator.control_job_ids - own):
             return True
         batches = {identifier for _, identifier in operation.batches}
         if any(
@@ -780,35 +817,7 @@ class Deletions:
                                 "until active work stops.",
                             }
                         self._single_remote(operation)
-                        paths = []
-                        for identifier in operation.recordings:
-                            recording = self.store.one(
-                                "SELECT project_id FROM recordings WHERE id=?", (identifier,)
-                            )
-                            base = self.store.project_folder(recording["project_id"]).resolve()
-                            for path in (
-                                self.store.directory(identifier),
-                                base / "exports" / identifier,
-                            ):
-                                if (
-                                    path.is_symlink()
-                                    or path.is_junction()
-                                    or path.parent.is_symlink()
-                                    or path.parent.is_junction()
-                                    or not path.resolve().is_relative_to(base)
-                                    or path.resolve() == base
-                                ):
-                                    _conflict(
-                                        "Managed file ownership changed. The recordings were kept."
-                                    )
-                                paths.append(path)
-                        project_file = None
-                        if operation.kind == "project":
-                            project = self.store.one(
-                                "SELECT * FROM projects WHERE id=?", (operation.target,)
-                            )
-                            if project["storage_dir"]:
-                                project_file = Path(project["storage_dir"]) / "project.json"
+                        paths, project_file, recording = self._owned_paths(operation)
                         plan = deletion_files.prepare(
                             self.store,
                             operation.identifier,
@@ -831,19 +840,7 @@ class Deletions:
                             }
                         )
                         deletion_files.stage(self.store, plan)
-                        from .spelling import remove_owned_vocabulary
-
-                        # Same writer transaction as the logical Delete, before the owner
-                        # rows go: the vocabulary validator requires live owners.
-                        remove_owned_vocabulary(
-                            db,
-                            project_id=(operation.target if operation.kind == "project" else None),
-                            recording_ids=operation.recordings,
-                        )
-                        for identifier in operation.recordings:
-                            db.execute("DELETE FROM recordings WHERE id=?", (identifier,))
-                        if operation.kind == "project":
-                            db.execute("DELETE FROM projects WHERE id=?", (operation.target,))
+                        self._delete_rows(db, operation)
                     operation.complete = True
                     self._remember_files(
                         {
@@ -894,13 +891,373 @@ class Deletions:
             self.store.snapshot_project(recording["project_id"])
         return 200, operation.reply
 
+    def _owned_paths(self, operation):
+        """Exact managed paths the Delete stages; caller holds queue/snapshot locks."""
+        paths, recording = [], None
+        for identifier in operation.recordings:
+            recording = self.store.one(
+                "SELECT project_id FROM recordings WHERE id=?", (identifier,)
+            )
+            base = self.store.project_folder(recording["project_id"]).resolve()
+            for path in (
+                self.store.directory(identifier),
+                base / "exports" / identifier,
+            ):
+                if (
+                    path.is_symlink()
+                    or path.is_junction()
+                    or path.parent.is_symlink()
+                    or path.parent.is_junction()
+                    or not path.resolve().is_relative_to(base)
+                    or path.resolve() == base
+                ):
+                    _conflict("Managed file ownership changed. The recordings were kept.")
+                paths.append(path)
+        project_file = None
+        if operation.kind == "project":
+            project = self.store.one("SELECT * FROM projects WHERE id=?", (operation.target,))
+            if project["storage_dir"]:
+                project_file = Path(project["storage_dir"]) / "project.json"
+        return paths, project_file, recording
+
+    @staticmethod
+    def _delete_rows(db, operation):
+        from .spelling import remove_owned_vocabulary
+
+        # Same writer transaction as the logical Delete, before the owner
+        # rows go: the vocabulary validator requires live owners.
+        remove_owned_vocabulary(
+            db,
+            project_id=(operation.target if operation.kind == "project" else None),
+            recording_ids=operation.recordings,
+        )
+        for identifier in operation.recordings:
+            db.execute("DELETE FROM recordings WHERE id=?", (identifier,))
+        if operation.kind == "project":
+            db.execute("DELETE FROM projects WHERE id=?", (operation.target,))
+
+    # ---------- Server-owned project deletion tasks (ADR 0190) ----------
+
+    def accept(self, kind, identifier, *, operation_id, confirm_shared, fingerprint, task):
+        """Freeze one previewed operation for a server-owned task. Nothing is stopped here.
+
+        The exact preview consent is checked first; a single-job UCloud blocker refuses before
+        any Stop, unlike the legacy continuation that cancels and then refuses.
+        """
+        with self.queue.lock:
+            self._expire()
+            operation = self.operations.get(operation_id or "")
+            if operation is None or (operation.kind, operation.target) != (kind, identifier):
+                _conflict("This deletion expired. Nothing was changed; choose Delete again.")
+            if operation.task is not None:
+                if operation.task == task:
+                    return operation
+                _conflict("This deletion is already running in Activity.")
+            if operation.started or operation.complete:
+                _conflict("This deletion was already started. Choose Delete again.")
+            self._validate(operation)
+            self._require_consent(operation, operation_id, confirm_shared, fingerprint)
+            if operation.blockers:
+                _conflict(
+                    "A single UCloud job still needs recovery, remote cleanup or "
+                    "reconciliation in Activity before deleting. Nothing was stopped."
+                )
+            operation.task = task
+            return operation
+
+    def forget(self, operation):
+        """A finished task releases its operation; its old token can never continue."""
+        with self.queue.lock:
+            if self.operations.get(operation.identifier) is operation:
+                del self.operations[operation.identifier]
+
+    def stop_for_task(self, operation, should_continue):
+        """Dispatch only the captured Stop controls; never recapture newer work."""
+        if not should_continue():
+            return  # Keep before the first Stop: nothing is stopped (K1).
+        try:
+            self._cancel(operation, should_continue)
+        except ValueError:
+            _conflict(
+                "The captured jobs could not be cancelled safely. The project was kept. "
+                "Review Activity before choosing Delete again."
+            )
+
+    def drained(self, operation):
+        """Fresh validation plus the complete worker/control/admission drain evidence."""
+        with self.queue.lock:
+            self._validate(operation)
+            return not self._pending(operation)
+
+    def finish_task(self, operation, decide, *, on_commit=None, remote=True, commit_guard=None):
+        """The task's last phase. The SQLite Delete commit is the point of no return.
+
+        `decide` runs last inside the writer transaction and raises Kept to roll it back.
+        Owner release receipts commit atomically with the Delete; UCloud steps follow it.
+        """
+        try:
+            with self._file_action():
+                return self._finish_task(operation, decide, on_commit, remote, commit_guard)
+        except LocalActionBusy:
+            return {"status": "waiting", "message": "Waiting for another file operation…"}
+        except HTTPException as error:
+            # Stale capture or a single-job UCloud blocker found before staging: kept.
+            return {"status": "failed", "message": _refusal(error)}
+
+    def _finish_task(self, operation, decide, on_commit, remote, commit_guard):
+        with self.queue.lock, self.store.snapshot_lock:
+            self._validate(operation)
+            if self._pending(operation):
+                return {"status": "waiting", "message": "Waiting for jobs to stop…"}
+            self._single_remote(operation)
+        from .jobs import JobControlConflict
+
+        own = frozenset(job for members in operation.batches.values() for job, _ in members)
+        target = {"kind": operation.kind, "name": operation.target_name}
+        with ExitStack() as owners:
+            for key, identifier in sorted(operation.batches):
+                try:
+                    owners.enter_context(self.queue.control_owner(OWNER_KINDS[key], identifier))
+                except JobControlConflict:
+                    return {
+                        "status": "waiting",
+                        "message": "Waiting for a Stop or Retry of a shared allocation…",
+                    }
+                except (KeyError, ValueError):
+                    return {"status": "failed", "message": REMOTE_CHANGED}
+            if any(key == "runtime_batch_id" for key, _ in operation.batches):
+                # Before staging and the writer: runtime actions take it before SQLite.
+                owners.enter_context(runtime_batches._ACTIONS_LOCK)
+            try:
+                with self.queue.lock:
+                    self._validate(operation)
+                releases = self._release_plan(operation)
+            except (KeyError, ValueError):
+                return {"status": "failed", "message": REMOTE_CHANGED}
+            try:
+                decide(final=False)
+            except Kept:
+                return {"status": "kept"}
+            plan = failure = outcome = recording = None
+            try:
+                with self.staging():
+                    try:
+                        with self.queue.lock, self.store.snapshot_lock:
+                            with ExitStack() as commit_scope:
+                                with self.store.connection() as db:
+                                    db.execute("BEGIN IMMEDIATE")
+                                    self._validate(operation)
+                                    if self._pending(operation, own=own):
+                                        return {"status": "waiting", "message": "Waiting for jobs…"}
+                                    self._single_remote(operation)
+                                    paths, project_file, recording = self._owned_paths(operation)
+                                    plan = deletion_files.prepare(
+                                        self.store,
+                                        operation.identifier,
+                                        operation.kind,
+                                        operation.target,
+                                        operation.recordings,
+                                        paths,
+                                        project_file,
+                                    )
+                                    self._remember_files(
+                                        {
+                                            "id": operation.identifier,
+                                            "state": "recovery_pending",
+                                            "committed": None,
+                                            "busy": True,
+                                            "target_kind": operation.kind,
+                                            "target_name": operation.target_name,
+                                            "created": now(),
+                                            "message": "Staging files for deletion…",
+                                        }
+                                    )
+                                    deletion_files.stage(self.store, plan)
+                                    self._apply_releases(db, releases, target)
+                                    self._delete_rows(db, operation)
+                                    # Last: Keep and this commit are serialized by the task.
+                                    decide(final=True)
+                                    if commit_guard is not None:
+                                        commit_scope.enter_context(commit_guard())
+                            operation.complete = True
+                            self._remember_files(
+                                {
+                                    "id": operation.identifier,
+                                    "state": "pending",
+                                    "committed": True,
+                                    "busy": True,
+                                    "target_kind": operation.kind,
+                                    "target_name": operation.target_name,
+                                    "created": now(),
+                                    "message": "Removing files for the completed deletion…",
+                                }
+                            )
+                    except Exception as error:
+                        failure = error
+                        # A lost COMMIT reply must be classified before admission reopens.
+                        for summary in deletion_files.journal_status(self.store):
+                            self._remember_files(summary)
+                            if (
+                                summary["id"] == operation.identifier
+                                and summary.get("committed") is True
+                            ):
+                                operation.complete = True
+            except (ValueError, HTTPException) as error:
+                # Entering staging refused: an export, Hugging Face task or another file
+                # operation owns it. Nothing was staged; the task waits and tries again.
+                return {"status": "waiting", "message": _refusal(error)}
+            if failure is not None:
+                if plan is None:
+                    if isinstance(failure, Kept):
+                        return {"status": "kept"}
+                    if isinstance(failure, HTTPException):
+                        return {"status": "failed", "message": _refusal(failure)}
+                    self.recover_files()
+                    return {
+                        "status": "failed",
+                        "message": "Files could not be staged safely. The project was kept.",
+                    }
+                # The transaction is CLOSED before establishing its outcome: COMMIT may have
+                # succeeded before raising. Fresh database facts decide, never the task.
+                outcome = self._remember_files(deletion_files.settle(self.store, plan))
+                if outcome.get("committed") is not True:
+                    if outcome["state"] != "complete":
+                        return {"status": "unresolved", "local_cleanup": outcome}
+                    if isinstance(failure, Kept):
+                        return {"status": "kept"}
+                    return {
+                        "status": "failed",
+                        "message": _refusal(failure)
+                        if isinstance(failure, HTTPException)
+                        else "The files could not be staged for deletion. Close apps using "
+                        "the project folder. The project was kept.",
+                    }
+                operation.complete = True
+                if on_commit is not None:
+                    on_commit()
+            else:
+                if on_commit is not None:
+                    on_commit()
+                outcome = self._remember_files(deletion_files.settle(self.store, plan))
+            if operation.kind == "recording" and recording is not None:
+                self.store.snapshot_project(recording["project_id"])
+            released = self._finish_releases(releases) if remote else []
+        return {
+            "status": "deleted",
+            "local_cleanup": outcome if outcome["state"] != "complete" else None,
+            "remote": released,
+        }
+
+    def _release_plan(self, operation):
+        """Read-only per-owner decisions matching _release_owner; no receipt is written."""
+        recordings = set(operation.recordings)
+        consented = {(entry["owner_kind"], entry["owner_id"]): entry for entry in operation.impact}
+        plan = []
+        for (key, identifier), members in sorted(operation.batches.items()):
+            kind = OWNER_KINDS[key]
+            deleting = sorted(job for job, recording in members if recording in recordings)
+            if remote_release._restored(self.store, kind, identifier):
+                continue
+            current = remote_release.impact(self.store, kind, identifier, deleting)
+            if current is None:
+                plan.append(("members", kind, identifier, deleting))
+                continue
+            expected = consented.get((kind, identifier))
+            if expected is None or any(
+                current[field] != expected[field]
+                for field in ("folder", "server", "remote_project", "files", "other_files")
+            ):
+                raise ValueError("The UCloud folder identity changed after confirmation.")
+            trash = expected["action"] == "trash" and current["action"] == "trash"
+            plan.append(("trash" if trash else "retain", kind, identifier, deleting))
+        return plan
+
+    @staticmethod
+    def _apply_releases(db, plan, target):
+        """Write the release receipts inside the logical Delete's writer transaction."""
+        for action, kind, identifier, deleting in plan:
+            if kind == "runtime_batch":
+                batch = runtime_store._get(db, identifier)
+                if batch["journal"].get("cleanup_state") in {"trashed", "deleted"}:
+                    continue
+                if action == "members" and batch["state"] in {"queued", "running"}:
+                    continue
+                if action == "trash":
+                    runtime_store.confirm_release_in(
+                        db, identifier, target=target, deleted_job_ids=deleting
+                    )
+                else:
+                    runtime_store.record_deleted_members_in(db, identifier, deleting)
+                continue
+            batch = native_batch._batch_in(db, identifier)
+            if batch["params"].get("ucloud_run", {}).get("cleanup_state") in {
+                "trashed",
+                "deleted",
+            }:
+                continue
+            if action == "trash":
+                native_batch.confirm_release_in(
+                    db, identifier, target=target, deleted_job_ids=deleting
+                )
+            else:
+                native_batch.record_deleted_members_in(db, identifier, deleting)
+
+    def _finish_releases(self, plan):
+        """After the commit: stop/terminal-check/Trash each consented folder, once."""
+        states = []
+        for action, kind, identifier, _ in plan:
+            if action != "trash":
+                continue
+            finish = (
+                remote_release._finish_runtime
+                if kind == "runtime_batch"
+                else remote_release._finish_native
+            )
+            try:
+                state = finish(self.store, self.queue.credentials, identifier)
+            except Exception:  # noqa: BLE001 - the durable decision stays for Retry/automatic.
+                state = "pending"
+            states.append({"owner_kind": kind, "owner_id": identifier, "cleanup_state": state})
+        return states
+
     def _expire(self):
         now = time.monotonic()
         self.operations = {
             key: value
             for key, value in self.operations.items()
-            if now - value.created < OPERATION_SECONDS
+            if value.task is not None or now - value.created < OPERATION_SECONDS
         }
+
+    def _require_consent(self, operation, operation_id, confirm_shared, fingerprint):
+        if (
+            not operation.started
+            and operation.affected
+            and (not operation_id or not confirm_shared)
+        ):
+            raise HTTPException(
+                409,
+                {
+                    **self._summary(operation),
+                    "code": "confirm_shared_cancellation",
+                    "message": "Stopping this shared allocation cancels other recordings.",
+                },
+            )
+        if (
+            not operation.started
+            and any(entry["action"] == "trash" for entry in operation.impact)
+            and (not operation_id or fingerprint != operation.fingerprint)
+        ):
+            # Confirming Delete is consent to Trash exactly these owned folders. Folders
+            # kept for other files' unsaved work are listed but need no Trash consent.
+            raise HTTPException(
+                409,
+                {
+                    **self._summary(operation),
+                    "code": "confirm_remote_cleanup",
+                    "message": "Delete also moves these UCloud working folders to UCloud "
+                    "Trash. Empty Trash in UCloud to free the space.",
+                },
+            )
 
     def request(
         self, kind, identifier, *, operation_id=None, confirm_shared=False, fingerprint=None
@@ -911,6 +1268,8 @@ class Deletions:
                 operation = self.operations.get(operation_id)
                 if operation is None or (operation.kind, operation.target) != (kind, identifier):
                     _conflict("This deletion expired. Recordings were kept; choose Delete again.")
+                if operation.task is not None:
+                    _conflict("This project is being deleted in Activity.")
                 if operation.complete:
                     return 200, operation.reply or {"ok": True}
                 self._validate(operation)
@@ -918,35 +1277,7 @@ class Deletions:
                 if len(self.operations) >= MAX_OPERATIONS:
                     _conflict("Too many pending deletion requests. Finish one or try again later.")
                 operation = self._capture(kind, identifier)
-            if (
-                not operation.started
-                and operation.affected
-                and (not operation_id or not confirm_shared)
-            ):
-                raise HTTPException(
-                    409,
-                    {
-                        **self._summary(operation),
-                        "code": "confirm_shared_cancellation",
-                        "message": "Stopping this shared allocation cancels other recordings.",
-                    },
-                )
-            if (
-                not operation.started
-                and any(entry["action"] == "trash" for entry in operation.impact)
-                and (not operation_id or fingerprint != operation.fingerprint)
-            ):
-                # Confirming Delete is consent to Trash exactly these owned folders. Folders
-                # kept for other files' unsaved work are listed but need no Trash consent.
-                raise HTTPException(
-                    409,
-                    {
-                        **self._summary(operation),
-                        "code": "confirm_remote_cleanup",
-                        "message": "Delete also moves these UCloud working folders to UCloud "
-                        "Trash. Empty Trash in UCloud to free the space.",
-                    },
-                )
+            self._require_consent(operation, operation_id, confirm_shared, fingerprint)
         if not operation.started:
             try:
                 self._cancel(operation)

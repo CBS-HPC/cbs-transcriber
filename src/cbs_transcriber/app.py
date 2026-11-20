@@ -44,6 +44,7 @@ from . import (
     local_concurrency,
     original_inspection,
     portable_routes,
+    project_deletion_tasks,
     provider_connection,
     release_profile,
     remote_jobs,
@@ -877,6 +878,8 @@ def create_app(
     connection_checks = provider_connection.Checks()
     queue = JobQueue(store, credentials)
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
+    # Server-owned project deletion in Activity (ADR 0190); no worker starts until a Delete.
+    project_tasks = project_deletion_tasks.ProjectDeletionTasks(store, queue, deletion_requests)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
     from .spelling import SpellingService, default_cache_dir
     from .spelling_tasks import DictionaryTasks
@@ -920,6 +923,13 @@ def create_app(
         with hf_manager.exclusive(), export_manager.exclusive():
             yield
 
+    @contextmanager
+    def backup_capture_guard():
+        # A deletion can be stopping jobs before a file journal/queue worker exists.
+        # Reserve both admissions atomically; keep its own staging path independent.
+        with project_tasks.capture_exclusive(), background_exclusive():
+            yield
+
     processing_started = False
     profiles_initialized = False
     initialization_lock = threading.Lock()
@@ -956,6 +966,8 @@ def create_app(
                     else nullcontext()
                 ):
                     deletion_requests.recover_files()
+                    # After file journals: earlier receipts become notes, never a resumed Delete.
+                    project_tasks.recover()
                     initialize_processing()
                 yield
             except BaseException as primary:
@@ -964,9 +976,16 @@ def create_app(
             finally:
                 cleanup_error = None
                 try:
-                    hf_manager.close()
+                    # First, while staging inhibitors still work: keep every project not yet
+                    # past its point of no return and drain the executor under the lease.
+                    project_tasks.close()
                 except BaseException as cleanup:
                     cleanup_error = cleanup
+                try:
+                    hf_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
                 try:
                     export_manager.close()
                 except BaseException as cleanup:
@@ -1010,6 +1029,7 @@ def create_app(
     app.state.spelling = spelling_service
     app.state.spelling_downloads = spelling_downloads
     app.state.deletions = deletion_requests
+    app.state.project_deletions = project_tasks
     app.state.export_tasks = export_manager
     app.state.huggingface_tasks = hf_manager
     app.state.profile = release
@@ -1023,7 +1043,9 @@ def create_app(
         retry = request.url.path.startswith("/api/local-deletions/") and request.url.path.endswith(
             "/retry"
         )
-        return not deletion_requests.file_recovery_blocked or retry
+        # Keep project only signals its task, which owns rollback during staging (ADR 0190).
+        keep = project_deletion_tasks.keep_path(request.url.path)
+        return not deletion_requests.file_recovery_blocked or retry or keep
 
     portable_routes.install(
         app,
@@ -1031,7 +1053,8 @@ def create_app(
         queue,
         credentials,
         mutation_allowed=local_mutation_allowed,
-        capture_guard=background_exclusive,
+        capture_guard=backup_capture_guard,
+        mutation_exempt=project_deletion_tasks.keep_path,
     )
 
     @contextmanager
@@ -1040,6 +1063,8 @@ def create_app(
             yield
 
     deletion_requests.staging = export_safe_staging
+    # Outside the capture gate: a fenced project's write is refused without waiting for it.
+    project_deletion_tasks.install(app, project_tasks)
 
     @app.middleware("http")
     async def local_file_recovery_admission(request, call_next):
@@ -1079,6 +1104,7 @@ def create_app(
 
     def require_runtime_idle(*, project_id=None, recording_ids=None):
         deletion_requests.require_files_idle()
+        project_tasks.require_idle(project_id=project_id)
         export_manager.require_idle(project_id=project_id, recording_ids=recording_ids)
         hf_manager.require_idle()
         try:
@@ -1173,6 +1199,8 @@ def create_app(
                 **row,
                 "storage_path": str(Path(row["storage_dir"]) if row["storage_dir"] else store.root),
                 "snapshot_error": store.snapshot_errors.get(row["id"]),
+                # Inactive while its Activity deletion runs: not openable or editable.
+                "deleting": project_tasks.deleting(row["id"]),
             }
             for row in rows
         ]
@@ -1488,6 +1516,7 @@ def create_app(
 
     def copy_recording(project_id, file, collection_id=None, upload_batch=None):
         store.one("SELECT id FROM projects WHERE id=?", (project_id,))
+        project_tasks.require_active(project_id)
         if collection_id is not None:
             # Checked before any bytes are copied.
             store.one(
@@ -3067,6 +3096,7 @@ def create_app(
         plans = []
         for identifier in recording_ids:
             recording = store.recording(identifier)
+            project_tasks.require_active(recording["project_id"])
             language_guard = language_preferences.guard(store, recording)
             preference = language_preferences.selected(language_guard)
             route = input_admission.snapshot_routing(
@@ -3865,6 +3895,7 @@ def create_app(
             + runtime_preparation.activity(store)
             + retained
             + deletion_requests.file_activity()
+            + project_tasks.activity()
             + export_manager.activity()
             + hf_manager.activity()
             + spelling_downloads.activity()
