@@ -363,6 +363,10 @@ Future public commits must descend only from the clean public main history.
   uncertain outcomes and the durable browser-local warning until explicit acknowledgement;
   an immediate refresh is not proof that an unconfirmed request has finished.
 - `jobs.py` owns the durable local queue. No external queue service is required.
+- The review dropdown's Uncertain/Timing missing suggestions are derived display only
+  (ADR0191/V257). Exact-content researcher marks win; keep the three stored review states,
+  hash/revision fences, hint/filter semantics and native editor state. Explicit Not checked
+  can replace a displayed suggestion even when the unstored underlying default matches.
 - `passage_review.py` owns schema19 manual review metadata, separate from text/history/Working.
   Bind marks to the exact saved passage hash and independent row revision; stale Checked becomes
   Needs review. Keep review changes in deletion fingerprints and complete backup/restore, and

@@ -24,7 +24,10 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 20 November final follow-on tasks (local, separate from verified source): cursor-word timing
 prototype `f140a34` has 15 browser passes but no persistence and remains unmerged/OFF by default
 (T159). Project deletion in Activity is now implemented on `claude/deletion-activity`
-(ADR 0190, T160); independent review and H24 remain. Backup in Activity has a reviewed
+(ADR 0190, T160), independently hardened at `8cad1eb` with376 backend passes/two skips
+and22 relevant browser passes. Real H24 remains. The agreed review dropdown passed58 focused
+browser cases at `9b56e20`. Both are composed on local `codex/night-post-v2-20261120` for final
+gates; main and the running preview are unchanged. Backup in Activity has a reviewed
 proposal and three characterization passes, including the necessary reciprocal
 deletion/capture admission fence (T161); that plan is not an accepted ADR or task service. Save/Split benchmarking was deferred at the user's request;
 no usable timing samples were collected. Exact private artifacts are in the Claude handoff.
@@ -645,7 +648,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   "Complete"; passages being timed leave the Repair all count at once. Synthetic backend,
   restore and browser checks pass; real-library acceptance is H15c. Merged into
   `claude/post-v2` at f2ea4ea after root review.
-- [ ] **Review status dropdown shows Uncertain and Timing missing — decided 20 November
+- [x] **Review status dropdown shows Uncertain and Timing missing — decided 20 November
   (evening), post-v2, amends ADR 0191 and the review-hint display.** Testing the MVP v2
   preview, the user asked to remove the separate "Review suggested" tag. Instead the passage's
   status dropdown itself shows **Uncertain** (visually highlighted) for passages flagged by the
@@ -653,9 +656,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   passage is both uncertain and missing timing, **Uncertain wins**. These are automatic states
   shown in the dropdown, not marks the researcher set; keep ADR 0191's rules: derived, never
   stored as review rows, the researcher's own mark on the exact current content wins, and
-  untimed-by-design results are not flagged. Decide how "timing added" (ADR 0191) shows in the
-  same dropdown, keep the Show filter and Next to review consistent with the new values, and
-  keep the dotted uncertainty underline in the text. Needs an ADR amendment and browser tests.
+  untimed-by-design results are not flagged. Implemented at `9b56e20` on the isolated
+  dropdown branch (V257, T163, ADR0191 amendment): timing added retains Needs review and its
+  reason; Show/Next and dotted text uncertainty are preserved.58 focused browser cases passed,
+  including explicit same-status manual override, stale Checked with complete/missing timing,
+  disabled derived options, no implicit writes and native keyboard focus. Cached Spylls host/
+  child imports are a test qualification (B517), not an installed-worker claim. Composed locally
+  with deletion at `5482338`; final composition gates remain separate and nothing was loaded.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,

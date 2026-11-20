@@ -70,3 +70,24 @@ Review counts now include automatic marks, so a newly opened word-timing result 
 untimed passages starts with them under Needs review. Opt-in edit realignments also leave a
 finished card in Activity per edit until cleared. Timing applied before this decision is not
 flagged retroactively.
+
+## Review-dropdown amendment, 20 November evening (V257)
+
+The user retired the separate Review suggested tag. The existing native status dropdown
+shows a disabled, selected display suggestion: **Uncertain** for current visible model hints
+at the selected level, otherwise **Timing missing** for the server's automatic missing-timing
+reason. Uncertain wins when both apply. An exact-content researcher mark, including explicit
+Not checked, always replaces that suggestion. Derived labels never become stored/API states;
+manual writes retain the same revision/hash fences. Explicitly choosing Not checked on an
+unstored default now records that deliberate choice instead of treating it as a no-op.
+
+Timing added preserves its existing Needs review label and reason. The API's three review
+states, progress counts and Show/Next behavior stay authoritative. Show Uncertain may still
+include a model-flagged passage with a manual mark; its tooltip explains that distinction.
+The dotted text decoration, chosen hint level, drafts, caret, native keyboard handling and
+late-reply fences remain. Untimed-by-design results receive no missing-timing suggestion.
+
+Implemented on `codex/night-review-dropdown-20261120` at `9b56e20`;58 focused browser cases
+passed with unchanged source/test bytes. The cached Spylls0.1.7 host/child test qualification
+and its initial runner failures are recorded separately (B517), not claimed as a normal
+installed-worker or screen-reader acceptance. No backend/schema change or preview activation.

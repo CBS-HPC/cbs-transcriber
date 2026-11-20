@@ -155,6 +155,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   visits only shown passages (V223).
   Each passage view also carries `automatic` (`timing_added`, `word_timing_missing` or null):
   a derived system Needs review for word timing, never a stored row (V243, ADR 0191).
+  The dropdown also uses display-only Uncertain / Timing missing suggestions (V257);
+  API review states, counts and stored schema remain Not checked / Checked / Needs review.
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
@@ -342,6 +344,14 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V257: The passage review dropdown displays derived Uncertain at the current visible
+  model-hint threshold, otherwise Timing missing for automatic missing timing. Uncertain
+  wins that display overlap; an exact-content manual row always wins both. Derived options
+  are disabled/display-only and never stored as marks. Choosing an explicit manual status,
+  including Not checked when the underlying unstored default is already Not checked, writes
+  only through the existing revision/hash-bound API. Timing added keeps Needs review and its
+  reason. Remove the separate Review suggested tag while retaining uncertainty decoration,
+  Show/Next semantics, drafts, caret, native keyboard access and late-reply fences (ADR0191).
 - V256: A project task checks Keep/shutdown again after claiming the queue and before each
   reserved inspection/input-intent or unsubmitted-native Stop dispatch. Keep that wins before
   the first claim leaves every captured control unchanged; already accepted Stops stay
@@ -2222,6 +2232,7 @@ T159|~|Separate cursor-word timing interaction prototype f140a34 from4574083: OF
 T160|x|Project deletion in Activity implemented on claude/deletion-activity and independently hardened on codex/night-deletion-fixes-20261120: reciprocal existing-backup admission, actual COMMIT-bound Keep, Keep-before-Stop and R5 lost-Trash-reply recovery; corrected staged backend inventory 376 passes/two skips and final22 relevant browser passes on fixed source with exact before/after hashes; fullbrowser729 and realH24 notclaimed, recording deletes unchanged, no loaded-app/main claim|V250,V251,V252,V253,V254,V255,V256,V148,ADR0092,ADR0101,ADR0102,ADR0190
 T161|~|Backup preparation in Activity: reviewed backend proposal plus3 current-behavior characterization passes; exact control bypass, cancellable admission, publishing/recovery and reciprocal deletion admission fences proposed; durable storage/restore policy undecided, no production task implemented|V3,V5,V8,ADR0096,ADR0158
 T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review, unmerged): derived automatic Needs review for missing/added timing with reasons, Activity outcomes for finished word timing, worker outcome message kept, Repair all count without in-flight passages; synthetic checks pass (239 focused backend and 77 browser cases; a broader 670-case backend run had one failure, the base branch's packaged mvp profile); real-library acceptance H15c pending|V243,V244,V186,V223,V103,I.passage-review,ADR0191
+T163|x|Derived Uncertain/Timing missing review dropdown on codex/night-review-dropdown-20261120 (9b56e20): separate Review suggested tag retired; current-content manual marks win, no derived writes, native controls and existing filters retained;58 focused browser passes with exact source hashes and explicitly qualified cached Spylls host/child imports; local integration only, final composition gates separate, no app reload|V257,V243,V223,V192,ADR0191
 
 ## §B Bug memory
 
@@ -2360,3 +2371,4 @@ B513|2026-11-20|Independent deletion review reproduced both admission orders: an
 B514|2026-11-20|The task set committing before Store.connection exited, so Keep returned deletion_committed while SQLite COMMIT was still pending and could subsequently roll back; the old K4 test explicitly expected that false early claim|V255,V252,ADR0190; hold the task decision through connection exit and fresh classification of raised COMMIT, move Keep/shutdown waits outside the manager lock, disable unknown-outcome Keep, and require a real outcome before a final response; independent late-Keep rollback/success and unknown-outcome tests retain both winner oracles
 B515|2026-11-20|Keep won after stop_for_task checked its flag but before _cancel claimed the queue; reserved source inspection and input-intent cancellation still ran, although no Stop had been accepted before Keep|V256,ADR0190; recheck the predicate at queue claim and each reserved/native dispatch, preserve the legacy None predicate, and assert exact frozen jobs/inspection cache remain unchanged when Keep wins
 B516|2026-11-20|The expanded night regression used a deeper generated Windows basetemp than the earlier focused gate; ten successful portable-route scenarios hit the unchanged staging/destination path-budget guard or its secondary wait symptom|Harness-only correction: rerun the complete 30-case portable_routes module from a fresh short synthetic base with identical source, tests and assertions; all 30 pass. Reconcile exact case identities into the 378-case inventory (376 passes, two skips), retaining the original 366-pass/two-skip/ten-failure receipt. No new product invariant or guard relaxation is needed
+B517|2026-11-20|The night dropdown browser runner exposed cached Spylls only to the isolated worker; the unchanged host availability guard could not find the package, so the spelling/uncertainty overlay test failed on both candidate and untouched base|Harness-only correction: expose the actual existing Spylls0.1.7 cache to the test host as well as the isolated child, preserving find_spec and all isolation guards; the corrected58-case gate passes without changing source, assertions or installed environments. Normal installed-worker acceptance remains open
