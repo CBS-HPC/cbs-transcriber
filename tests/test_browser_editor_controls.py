@@ -224,6 +224,16 @@ def test_cancel_discards_only_open_draft_and_preserves_search_scroll_audio_and_r
     page.locator("#audio").evaluate("audio => audio.pause()")
 
 
+def test_browser_tab_title_never_names_the_project_or_recording(page, local_app):
+    # User, 20 November: the browser tab shows just "CBS Transcriber".
+    store, rid, _ = seed_editor(page, local_app)
+    expect(page).to_have_title("CBS Transcriber")
+    project = store.recording(rid)["project_id"]
+    page.evaluate("id => { location.hash = `/projects/${id}`; }", project)
+    expect(page.locator("#project-title")).to_have_text("Synthetic editor controls")
+    expect(page).to_have_title("CBS Transcriber")
+
+
 def test_rejected_dirty_passage_switch_keeps_original_draft_caret_and_controls(page, local_app):
     store, rid, _ = seed_editor(page, local_app)
     before, requests = content_state(store, rid), mutations(page)

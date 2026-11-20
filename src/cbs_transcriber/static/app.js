@@ -2005,7 +2005,6 @@ $("#project-rename").addEventListener(
       if (state.project?.id === context.id && !state.recording) {
         projectForm.name = state.project.name;
         $("#project-title").textContent = state.project.name;
-        document.title = `${state.project.name} · CBS Transcriber`;
       }
     } catch (error) {
       projectRefreshRequired.add(context.id);
@@ -2243,7 +2242,6 @@ Large recordings can take time to copy.`,
           $("#project-delete").disabled = false;
           $("#project-rename").disabled = false;
           $("#project-title").textContent = state.project.name;
-          document.title = `${state.project.name} · CBS Transcriber`;
           $("#project-edit-note").textContent =
             (failure &&
               `${savedFields.length ? `Confirmed saved: ${savedFields.join(", ")}. ` : ""}A previous request may still finish. ${failure.message}`) ||
@@ -2392,9 +2390,8 @@ async function route() {
   $("#project-content").hidden = !state.project;
   $("#project-title").textContent = state.project?.name || "";
   renderProjectSettings();
-  document.title = state.project
-    ? `${state.project.name} · CBS Transcriber`
-    : "CBS Transcriber";
+  // The browser tab always reads just "CBS Transcriber" (user, 20 November).
+  document.title = "CBS Transcriber";
   renderProjects();
   if (state.project) await refreshRecordings();
   renderProviderSelects();
@@ -3290,7 +3287,7 @@ async function openEditor() {
   $("#project-settings-dialog").close();
   $("#library-view").hidden = true;
   $("#editor-view").hidden = false;
-  document.title = `${state.recording.name} · CBS Transcriber`;
+  document.title = "CBS Transcriber";
   // The Show filter belongs to one opened recording view.
   if (typeof resetTranscriptFilter === "function") resetTranscriptFilter();
   renderEditorDetails();
