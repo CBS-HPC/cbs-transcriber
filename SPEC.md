@@ -2151,6 +2151,9 @@ T87f|x|fresh whole Runtime format-aware original transport, pinned remote materi
 T90f|x|older-recording selected-source byte/epoch proof and absolute bounded timeline repair admission verified offline; no whole original upload|V158,V159,I.repair-bundle
 
 T158|x|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, truthful errors/alignment stage and impossible-window admission/skip (ADR0189); 377 backend and final 22 browser cases pass with independent review and exact Unicode parity; isolated local rc2 wheel/constraints and 155 helper/profile cases verified (6ff03df); no installation/publication/reload, real H15a pending|V241,V242,V3,V5,V8,ADR0189
+T159|~|Separate cursor-word timing interaction prototype f140a34 from4574083: OFF by default, native Text retained, start/end drafts in memory only, no save/API/CAS changes; 15 browser cases and independent limited-scope Go; boundary/selection/one-character and production save UX remain undecided; unmerged|V239,V240,V201,I.transcript
+T160|~|Project deletion in Activity: five recorded decisions traced into implementation proposal and30 deterministic scenarios; independent source evidence retained, proposed ADR0190/durable receipt and atomic disposition/Keep boundaries remain unaccepted; no production implementation|V8,V22,V148,ADR0092,ADR0101,ADR0102
+T161|~|Backup preparation in Activity: reviewed backend proposal plus3 current-behavior characterization passes; exact control bypass, cancellable admission, publishing/recovery and reciprocal deletion admission fences proposed; durable storage/restore policy undecided, no production task implemented|V3,V5,V8,ADR0096,ADR0158
 
 ## §B Bug memory
 

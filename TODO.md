@@ -21,6 +21,15 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+20 November final follow-on tasks (local, separate from verified source): cursor-word timing
+prototype `f140a34` has 15 browser passes but no persistence and remains unmerged/OFF by default
+(T159). Project deletion in Activity has a proposed contract and 30 scenario oracles (T160).
+Backup in Activity has a reviewed proposal and three characterization passes, including the
+necessary reciprocal deletion/capture admission fence (T161). These plans are not accepted
+ADRs or implemented task services. Save/Split benchmarking was deferred at the user's request;
+no usable timing samples were collected. Exact private artifacts are in the Claude handoff.
+
+
 20 November offline weekend composition: `codex/weekend-post-v2-20261120` combines
 the reviewed timing, spelling/Text uncertainty, disabled Runtime supersession and
 unused native capacity helpers at product `4574083`. Focused staged gates and
