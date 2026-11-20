@@ -70,10 +70,10 @@ problems (B469); windows too short for their text are refused, skipped when froz
 "Too short to time", and Activity shows "Aligning words…" (B470, ADR 0189). Synthetic and
 offline-replay evidence only; a real WhisperX run on the user's audio is human check H15a.
 
-- [ ] **Local passage timing reliability candidate (B468–B470/B481/B486/B487, ADR 0189).**
+- [x] **Local passage timing reliability candidate (B468–B470/B481/B486/B487, ADR 0189).**
   Frozen backend gate: 377 passes; final browser gate: 22 passes, plus independent real
-  Windows held-reader and cancellation checks. Unicode parity is verified; local rc2
-  packaging is pending; [verification](docs/verification-2026-11-20-timing-rc2.md). Real-library
+  Windows held-reader and cancellation checks. Unicode parity and local rc2 wheel/constraints
+  are verified (source `1ae0069`, packaging `6ff03df`); installation-helper/profile gate 155 passes; [verification](docs/verification-2026-11-20-timing-rc2.md). Real-library
   WhisperX acceptance remains H15a; this candidate has not been loaded or published.
 
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
@@ -648,13 +648,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   [design proposal](docs/proposals/history-undo-2026-11-18.md). Slice 1 is implemented on
   `claude/undo-last-change` (ADR 0180, T150): toolbar **Undo last change** / **Redo** with live
   labels, exact predecessor restoration of every saved content change, one Redo until the next
-  change, reach to the result's start; review marks stay outside Undo. It is hidden in the
-  MVP profile until the user decides whether MVP v2 shows it. Slice 2 (ADR 0181, T151): the
-  History change list with word-level "What changed", undone/redone tags and "Revert this
-  change" for proven older merges, splits and deletions, replacing the per-passage controls
-  when the feature is on. Slice 3 (ADR 0182, T152): a Branches tab drawing results as lanes
-  with branch points, merge edges, Working and undo markers. All three are hidden in MVP;
-  remaining: the user's choice for MVP v2 and a real-library look before loading.
+  change, reach to the result's start; review marks stay outside Undo. Slice 2 (ADR 0181,
+  T151) provides the History change list, word-level "What changed", undone/redone tags and
+  "Revert this change" for proven older merges, splits and deletions. Slice 3 (ADR 0182,
+  T152) draws results as branches with Working and undo markers. The user's 20 November
+  decision exposes all three in MVP v2 and keeps the per-passage controls as well. Code is
+  implemented and the rc2 package preserves that profile; broader real-user/history workflow
+  acceptance remains separate. The earlier pending-choice/hidden-MVP description is obsolete.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
@@ -732,15 +732,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Refreshed merge/conflict previews now use their own fresh Working authority while keeping
   unsaved editor drafts separate; synthetic stale-refresh and closed-preview checks cover B376.
   See ADR 0133 for the scope of the synthetic evidence.
-- [ ] **Existing sole-result Working designation — current-schema gap.** The ADR 0141
-  implementation is present in main and called at startup, but its schema-18 guard refuses
-  the current schema 19. Eligible old sole results can still need explicit Set as working.
-  Extend/review current-schema eligibility without simply removing the guard; retain untouched-
-  passage evidence, restored-library refusal, job/authority fences, owned-folder snapshot
-  refresh/recovery and startup bounds. The 27 genuine-schema-18/current-schema-refusal checks
-  pass; current-schema support and real activation remain open. Job-finish re-evaluation was
-  not adopted. See the [release limitation](docs/verification-2026-11-10-mvp-release.md#remaining-acceptance).
-  [Earlier review](docs/proposals/existing-sole-working-review-2026-11-04.md).
+- [x] **Existing sole-result Working designation — current-schema implementation (T147).**
+  ADR 0179 extends the intentionally held ADR 0141 path to reviewed 18/18 and 19/19 pairs,
+  retaining untouched-result, restore, native-authority, owned-snapshot and startup fences.
+  Builder and independent adversarial evidence cover 171 cases; B454 adds unreadable-evidence
+  refusal without aborting the pass. This supersedes the earlier current-schema engineering
+  gap, not its historical MVP 0.1.0 limitation. Real-library acceptance remains separate;
+  automatic job-finish re-evaluation was not adopted. See [ADR 0179](docs/decisions/0179-existing-working-schema19.md)
+  and the [earlier review](docs/proposals/existing-sole-working-review-2026-11-04.md).
 - [ ] **NVivo and REFI-QDA (T88a/T88c).** The acceptance pack is synthetic; test actual
   transcript imports on Windows and Mac and implement/validate REFI-QDA codebook/project
   interchange for supported codes, passages and memos. Do not claim compatibility until tested.

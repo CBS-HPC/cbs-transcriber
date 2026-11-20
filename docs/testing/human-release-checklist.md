@@ -15,15 +15,17 @@ the user's approval each time; checks marked **later** belong to features still 
 
 ### H1 · Fresh install on a clean Windows PC
 
-- **Do:** On a Windows x64 PC without the app, follow README "Install and start" with the
-  release wheel and constraints file; start `cbs-transcriber`.
+- **Do:** On a Windows x64 PC without the app, follow README "Install and start" for the
+  local `App/.venv` wheel and matching constraints route. Start the exact environment
+  Python with `-m cbs_transcriber --profile mvp`; no app executable on PATH is required.
 - **Pass when:** Installation finishes without changing Conda or global PATH, the browser opens
   at http://127.0.0.1:8765, and a short recording can be uploaded, played and exported.
 - **Status:** Not run. (MVP 0.1.0 installed on the developer PC only.)
 
 ### H2 · Desktop and Start menu shortcut on Windows
 
-- **Do:** `cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp`, then
+- **Do:** Use that installation's exact environment Python with
+  `-m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp`, then
   double-click it; repeat without a location for the Start menu.
 - **Pass when:** The shortcut starts the installed app with the MVP profile and the same
   library; creating it again refuses to overwrite.
@@ -53,9 +55,11 @@ the user's approval each time; checks marked **later** belong to features still 
 
 ### H6 · Uninstall
 
-- **Do:** `uv tool uninstall cbs-transcriber`.
-- **Pass when:** The tool is gone; libraries, project folders and saved credentials remain, as
-  the uninstall guide says.
+- **Do:** Follow `docs/uninstall.md` for the actual installation type. The default local
+  `App/.venv` route removes only its stopped App installation and its launcher; an older
+  uv-tool installation instead uses `uv tool uninstall cbs-transcriber`.
+- **Pass when:** That installation is gone; sibling Library/Projects, originals, backups
+  and credentials remain as the guide specifies. Never remove the whole parent folder.
 - **Status:** Not run.
 
 ## UCloud batches
