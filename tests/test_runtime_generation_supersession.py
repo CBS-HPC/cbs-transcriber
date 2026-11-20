@@ -111,6 +111,15 @@ def failed_candidate(f, monkeypatch, mode):
     else:
         assert mode == "stopped-after-post"
         _interrupt_with_open_allocation(f, monkeypatch)
+        terminate = f.cloud.terminate_job
+
+        def terminate_with_supported_state(identifier):
+            terminate(identifier)
+            # The shared legacy fake returns CANCELLED, outside the pinned raw JobState.
+            # Model a supported final reply here; production never normalizes aliases.
+            f.cloud.state = "FAILURE"
+
+        monkeypatch.setattr(f.cloud, "terminate_job", terminate_with_supported_state)
         card = preparation.cancel(f.store, f.credentials, value["id"])
         assert card["state"] == "cancelled" and f.cloud.terminations == ["remote-preparation"]
     f.drive.damage = f.drive.on_create = None
@@ -751,3 +760,68 @@ def test_registry_writer_swaps_only_the_exact_candidate_inside_a_writer(env, mon
         generations.supersede_candidate(
             db, target, superseded=candidate, **{**fresh, "owner_id": "c" * 32, "token": "b" * 32}
         )
+
+
+@pytest.mark.parametrize("remote_state", ["SUSPENDED", "ABORTED", "CANCELLED"])
+def test_b484_unclosed_remote_lifecycle_blocks_supersession(env, monkeypatch, remote_state):  # noqa: F811
+    """The pinned UCloud IsFinal excludes SUSPENDED; unsupported aliases prove no closure."""
+    f = env
+    admit(f)
+    f.cloud.state = remote_state
+    owner, _ = execute(f)
+    assert owner["state"] == "failed" and owner["journal"]["remote_state"] == remote_state
+    # Preserve the legacy capacity classifier: supersession needs its own stricter proof.
+    assert not runtime_store._reserved(owner["journal"])
+    rows, settings = _rows(f), raw_settings(f)
+    with pytest.raises(subject.Conflict, match="allocation or capacity"):
+        subject.preview_supersession(f.store, f.credentials)
+    with pytest.raises(subject.Conflict, match="allocation or capacity"):
+        subject.supersede(f.store, f.credentials, _frozen_supersession(f, owner), lambda: None)
+    assert _rows(f) == rows and raw_settings(f) == settings
+
+
+def test_b484_superseded_owner_cannot_acquire_resumable_remote_evidence(env, monkeypatch):  # noqa: F811
+    f = env
+    owner = failed_candidate(f, monkeypatch, "remote-failure")
+    subject.supersede(
+        f.store, f.credentials, subject.preview_supersession(f.store, f.credentials), lambda: None
+    )
+    retired = preparation.get(f.store, owner["id"])
+    row = _row(f, owner["id"])
+    with pytest.raises(preparation.Conflict):
+        preparation.checkpoint(
+            f.store, owner["id"], retired["epoch"], journal={"remote_state": "SUSPENDED"}
+        )
+    assert _row(f, owner["id"]) == row
+
+
+@pytest.mark.parametrize(
+    "damage", ["evidence-null", "evidence-state", "evidence-extra", "candidate-retyped", "policy"]
+)
+def test_b485_duplicate_digest_never_substitutes_for_the_exact_body(env, monkeypatch, damage):  # noqa: F811
+    f = env
+    failed_candidate(f, monkeypatch, "remote-failure")
+    record = subject.preview_supersession(f.store, f.credentials)
+    first = subject.supersede(f.store, f.credentials, record, lambda: None)
+    changed = copy.deepcopy(record)
+    if damage == "evidence-null":
+        changed["evidence"] = None
+    elif damage == "evidence-state":
+        changed["evidence"]["state"] = "cancelled"
+    elif damage == "evidence-extra":
+        changed["evidence"]["extra"] = True
+    elif damage == "candidate-retyped":
+        changed["superseded"]["expected_revision"] = float(
+            changed["superseded"]["expected_revision"]
+        )
+    else:
+        changed["policy"] = "cbs-runtime-generation-supersession-v2"
+    assert changed["supersession_sha256"] == record["supersession_sha256"]
+    rows, settings = _rows(f), raw_settings(f)
+    with pytest.raises(subject.Conflict):
+        subject.supersede(f.store, f.credentials, changed, lambda: None)
+    assert _rows(f) == rows and raw_settings(f) == settings and len(rows) == 2
+    # The exact lost-reply replay remains idempotent after rejecting the changed body.
+    same = subject.supersede(f.store, f.credentials, copy.deepcopy(record), lambda: None)
+    assert same["deduplicated"] and same["operation"]["id"] == first["operation"]["id"]
+    assert _rows(f) == rows and raw_settings(f) == settings
