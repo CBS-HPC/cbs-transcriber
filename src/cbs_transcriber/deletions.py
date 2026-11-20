@@ -520,6 +520,30 @@ class Deletions:
             return ("intent", intent["generation"], intent["epoch"], intent["cancel_requested"])
         return None
 
+    def _stop_unsubmitted_native(self, operation):
+        """Caller holds the claim lock: durable Stop for confirmed shared native batches."""
+        from . import native_startup
+
+        for key, batch_id in sorted(operation.batches):
+            if key != "native_batch_id":
+                continue
+            batch = self.store.native_batch(batch_id)
+            run = batch["params"].get("ucloud_run", {})
+            if (
+                not _needs_stop(batch, key)
+                or run.get("job_id")
+                or native_batch.uncertain(run)
+                or run.get("submission_attempted")
+            ):
+                continue  # Submitted or settled allocations keep the existing Stop path.
+            native_startup.stop_batch(self.store, batch_id)
+            self.store.update_native_batch(
+                batch_id, run_update={"cancel_requested": True}, message="Stopping UCloud batch…"
+            )
+            for worker in self.queue.coordinator.workers:
+                if getattr(worker, "active_batch_id", None) == batch_id:
+                    worker.cancel_event.set()
+
     def _cancel(self, operation):
         # Capture before releasing the lock. Generic cancellation performs any network I/O
         # outside that lock and fences shared ownership against this complete allowlist.
@@ -527,6 +551,11 @@ class Deletions:
             if operation.started:
                 return
             self._validate(operation)
+            # Record each affected unsubmitted native batch's Stop before cancelling any
+            # admission below: cancelling a selection's last unjoined file seals its batch
+            # in that same transaction, and the coordinator must never see a seal without the
+            # Stop (ADR 0183). Its submission intent also refuses a recorded Stop atomically.
+            self._stop_unsubmitted_native(operation)
             generic = []
             for identifier in sorted(operation.jobs):
                 job = self._job(identifier)
