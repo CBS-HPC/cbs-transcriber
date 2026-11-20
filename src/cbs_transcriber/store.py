@@ -3612,8 +3612,13 @@ class Store:
                 db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
             )
 
-    def update_native_batch(self, identifier, *, run_update=None, reconnect=None, **fields):
-        """Merge journal receipts instead of replacing a concurrent cancellation receipt."""
+    def update_native_batch(
+        self, identifier, *, run_update=None, reconnect=None, refuse_stopped=False, **fields
+    ):
+        """Merge journal receipts instead of replacing a concurrent cancellation receipt.
+
+        `refuse_stopped` makes the write conditional, in its own transaction, on no recorded
+        Stop: a submission intent can never follow a Stop that a Delete recorded (ADR 0183)."""
         from . import restored_owners
 
         restored_owners.require_owner(self, "native_batch", identifier)
@@ -3635,6 +3640,15 @@ class Store:
             batch = self._native_batch(
                 db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
             )
+            if refuse_stopped:
+                from . import native_startup
+                from .media import Cancelled
+
+                run = batch["params"].get("ucloud_run", {})
+                if run.get("release_decision") or any(
+                    run.get(flag) for flag in native_startup.STOP_FLAGS
+                ):
+                    raise Cancelled()
             if run_update is not None:
                 batch["params"]["ucloud_run"].update(run_update)
                 fields["params"] = json.dumps(batch["params"])

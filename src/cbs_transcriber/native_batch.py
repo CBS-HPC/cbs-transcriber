@@ -200,13 +200,18 @@ def _duration(seconds):
     return f"{hours} h {minutes} min" if minutes else f"{hours} h"
 
 
-def plain_status(batch, member_rows, log_progress, *, current=None):
+def plain_status(batch, member_rows, log_progress, *, current=None, deleted=frozenset()):
     """Activity's batch sentence (ADR 0183). Saved counts come from local results only.
 
-    Log observations may say a file was reported done; they never count as saved."""
+    Log observations may say a file was reported done; they never count as saved. Dropped,
+    excluded and Delete-released files are not part of the total."""
     run = batch["params"].get("ucloud_run", {})
     message = batch["message"]
-    excluded = dropped(batch) | {row.get("job_id") for row in member_rows if row.get("excluded")}
+    excluded = (
+        dropped(batch)
+        | set(deleted)
+        | {row.get("job_id") for row in member_rows if row.get("excluded")}
+    )
     total = len(batch["members"]) - len(excluded)
     saved_ids = {
         row.get("job_id")
@@ -770,7 +775,13 @@ def status_fields(store, job, *, connection=None):
     read_errors = _output_errors(run, batch["members"])
     log_progress = _log_progress(run, batch["members"])
     # Plain status (ADR 0183): the batch-level log line only dates the latest log reading.
-    message = plain_status(batch, member_rows, log_progress)
+    try:
+        deleted = (
+            deleted_members(store, batch) if connection is None else _deleted(connection, batch)
+        )
+    except ValueError:
+        deleted = set()  # A malformed receipt only affects the displayed total.
+    message = plain_status(batch, member_rows, log_progress, deleted=deleted)
     if continued and CONTINUED_RUNTIME_NOTICE not in message:
         message = (message + " " + CONTINUED_RUNTIME_NOTICE).strip()
     for member in members.values():
@@ -1566,7 +1577,17 @@ def run_batch(worker, job, *, reconnect=None):
                             store.update_job(
                                 member["job_id"], message="Waiting for transcript", progress=0.3
                             )
-                    checkpoint(submission_attempted=True, reconciled_not_created=False)
+                    # A Stop recorded after the last guard (for example by a Delete that sealed
+                    # an early selection) refuses the submission intent in its own transaction.
+                    native_startup.guard(store, reconnect)
+                    current = store.update_native_batch(
+                        identifier,
+                        run_update={"submission_attempted": True, "reconciled_not_created": False},
+                        reconnect=reconnect,
+                        refuse_stopped=True,
+                    )
+                    run.clear()
+                    run.update(current["params"]["ucloud_run"])
                     remote_id = extract_job_id(native.cloud_call(client.submit_job, specification))
                     checkpoint(job_id=remote_id)
                 paths = set()

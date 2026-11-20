@@ -2,7 +2,7 @@
 
 Accepted 19 November 2026 (user decisions of the same day). Amends ADR 0085 (the native
 selection barrier), ADR 0146 (the fixed two-worker native lane) and V187's fixed four uploads.
-No schema migration: the limits are one JSON row (id 12) in the existing `settings` table and the
+No schema migration: the limits are one JSON row (id 14) in the existing `settings` table and the
 early-selection receipts live in the existing native batch journal. A live UCloud batch has not
 been run with this behaviour; acceptance remains separate.
 
@@ -65,7 +65,9 @@ inspection finished. Now a selection of two or more native files is an *early se
   transaction finds it, and two batches for one selection are refused. Later files join it.
 - **Uploads start at once.** The native lane may claim the batch after its first file joins.
   The coordinator uploads every joined file (bounded by the upload limit), then rechecks every
-  second for newly joined files while others are still inspected.
+  second for newly joined files while others are still inspected. By design the batch keeps its
+  "batches at once" slot while it waits for its last inspections, so with a low limit it can
+  delay other native batches or single-file runs until it is submitted.
 - **Dropped files.** A file whose inspection fails is made terminal by the claim itself, with
   its own `source_error` outcome and no token; a preflight failure, cancellation or recovery
   cancellation likewise ends only that file. Such files never receive `native_batch_id`, are
@@ -104,7 +106,11 @@ early batches and binds `membership_sealed`/`dropped_members` into its identity.
 
 **Deletion and cleanup.** Deleting a joined file stops the shared allocation with the existing
 impact confirmation; that also cancels the admission of files still being inspected, so they are
-counted as having nothing remote to keep. When no other joined file remains, the confirmed Delete
+counted as having nothing remote to keep. Because cancelling a selection's last unjoined file
+(directly, or when its admission finishes after a Delete marked it) seals the batch, the
+confirmed Delete first records the Stop of every affected unsubmitted batch under the claim
+lock, and the coordinator's submission intent is written only in a transaction that finds no
+recorded Stop. A sealed batch therefore never submits after a Delete was confirmed (B463). When no other joined file remains, the confirmed Delete
 moves the owned folder (with any early uploads) to UCloud Trash exactly as ADR 0045/0101
 describe. Ordinary success cleanup and automatic release require saved results only for joined,
 undeleted members. Deletion scope, Activity retention and obligations treat dropped files like
