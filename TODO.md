@@ -62,10 +62,10 @@ problems (B469); windows too short for their text are refused, skipped when froz
 "Too short to time", and Activity shows "Aligning words…" (B470, ADR 0189). Synthetic and
 offline-replay evidence only; a real WhisperX run on the user's audio is human check H15a.
 
-- [ ] **Local passage timing reliability candidate (B468–B470/B481/B486/B487, ADR 0189).**
+- [x] **Local passage timing reliability candidate (B468–B470/B481/B486/B487, ADR 0189).**
   Frozen backend gate: 377 passes; final browser gate: 22 passes, plus independent real
-  Windows held-reader and cancellation checks. Unicode parity is verified; local rc2
-  packaging is pending; [verification](docs/verification-2026-11-20-timing-rc2.md). Real-library
+  Windows held-reader and cancellation checks. Unicode parity and local rc2 wheel/constraints
+  are verified (source `1ae0069`, packaging `6ff03df`); installation-helper/profile gate 155 passes; [verification](docs/verification-2026-11-20-timing-rc2.md). Real-library
   WhisperX acceptance remains H15a; this candidate has not been loaded or published.
 
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused

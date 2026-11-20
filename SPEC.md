@@ -2109,7 +2109,7 @@ T80b|~|approved cancelled five-file Runtime folder moved to Trash through main; 
 T87f|x|fresh whole Runtime format-aware original transport, pinned remote materialization and exact PCM/preparation receipts verified offline; cost/codec/live acceptance remains|V156,V157,I.enhance-api
 T90f|x|older-recording selected-source byte/epoch proof and absolute bounded timeline repair admission verified offline; no whole original upload|V158,V159,I.repair-bundle
 
-T158|~|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, truthful errors/alignment stage and impossible-window admission/skip (ADR0189); 377 backend and final 22 browser cases pass with independent review and exact Unicode parity; isolated local packaging verification pending|V241,V242,V3,V5,V8,ADR0189
+T158|x|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, truthful errors/alignment stage and impossible-window admission/skip (ADR0189); 377 backend and final 22 browser cases pass with independent review and exact Unicode parity; isolated local rc2 wheel/constraints and 155 helper/profile cases verified (6ff03df); no installation/publication/reload, real H15a pending|V241,V242,V3,V5,V8,ADR0189
 
 ## §B Bug memory
 

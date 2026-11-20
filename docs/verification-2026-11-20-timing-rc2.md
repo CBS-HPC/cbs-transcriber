@@ -55,8 +55,9 @@ The test file's pre-existing CRLF endings were restored after the 22-case run wi
 AST and LF-normalized bytes. The five added cases passed again (41.75 s), with all product
 bytes unchanged and a new stable 599-file receipt. No deadline/assertion was weakened.
 
-Pending: separate local 0.2.0rc2 packaging checkout, wheel/constraints generation and byte checks.
-Do not describe packaging as passed yet.
+Local packaging is verified separately at `6ff03df`, from timing source `1ae0069`.
+See the [rc2 package receipt](verification-2026-11-20-rc2-package.md). No installation,
+publication or preview reload was performed.
 
 ## Acceptance limits
 
