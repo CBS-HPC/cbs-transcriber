@@ -416,6 +416,20 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   and tested synthetically. Complete remaining crash, platform, filesystem and live acceptance;
   keep unresolved deletion/cleanup visible. Real Cloud Files, Mac and power-loss behavior are
   not established by those tests.
+- [ ] **Project deletion in Activity — decided 20 November, post-v2.** Testing MVP v2 the
+  user deleted a 12-recording project; the Delete dialog could still be closed while the final
+  step ran, so the open project stayed visible until a refresh removed it. Today the open
+  dialog drives deletion (it re-sends Delete each second while jobs stop; closing it abandons
+  the request). User decisions: Delete hands off at once to an Activity item "Deleting project
+  …" with stages (stopping jobs, removing from the library, removing files); the server owns
+  the deletion, independently of the dialog. Only that project becomes inactive (greyed,
+  "Deleting…", not openable or editable); a user inside it lands on the project list; the rest
+  of the app stays usable. Activity offers **Keep project** until the point of no return
+  (stopped jobs stay stopped). If the app closes before that point the project is kept and
+  Activity notes the unfinished deletion; nothing resumes automatically. After it, deletion
+  stays permanent and recovery relies on backups ("Recently deleted" and automatic pre-delete
+  backups were not chosen). No quick fix for v2: the full version only, in post-v2 work. Needs
+  its own ADR (job semantics); apply the same model to recording deletes where it fits.
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and
