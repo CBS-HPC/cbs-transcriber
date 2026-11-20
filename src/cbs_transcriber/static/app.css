@@ -1811,14 +1811,16 @@ select {
   background: transparent;
   isolation: isolate;
 }
-.passage-text-overlay {
+.passage-text-overlay,
+.passage-uncertainty-overlay {
   position: absolute;
   inset: 1px;
   overflow: hidden;
   pointer-events: none;
   border-radius: 5px;
 }
-.passage-text-overlay-content {
+.passage-text-overlay-content,
+.passage-uncertainty-overlay-content {
   padding: 12px;
   white-space: pre-wrap;
   overflow-wrap: break-word;

@@ -1270,6 +1270,7 @@ function canDiscardPassage() {
 function clearEdit() {
   if (typeof invalidateSpellingEditor === "function")
     invalidateSpellingEditor();
+  textEditorSizeObserver.disconnect();
   editVersion++;
   state.dirty = false;
   state.editing = null;
@@ -6206,7 +6207,14 @@ async function loadHints() {
     // A superseded editor load cannot replace newer cached hints for the same revision.
     if (version !== hintVersion) return;
     hintCache.set(key, hints);
-    if (sameRecordingView(context) && !state.dirty && !state.editing)
+    // Hint display may arrive after typing. Refresh only display layers for this
+    // exact view/result/revision; the textarea and its editing history stay native.
+    if (
+      context.epoch === viewEpoch &&
+      context.id === state.recording?.id &&
+      key ===
+        `${state.recording?.active_transcript_id}:${state.recording?.revision}`
+    )
       refreshTranscriptHints();
   })();
   pendingHints.set(pendingKey, pending);
@@ -6235,7 +6243,7 @@ function refreshPassageHintFlag(passage, reasons) {
   } else flag?.remove();
 }
 function refreshTranscriptHints() {
-  if (!state.recording || state.dirty || state.editing) return;
+  if (!state.recording) return;
   const review = uncertaintyView(),
     changed = [];
   for (const segment of state.recording.segments) {
@@ -6244,6 +6252,8 @@ function refreshTranscriptHints() {
     refreshPassageHintFlag(passage, review.flagged.get(segment.id));
     const text = passage.querySelector(":scope > .passage-text");
     const marks = review.words.get(segment.id) || [];
+    const editor = passage.querySelector(":scope > .passage-editor");
+    if (editor) refreshTextEditorUncertainty(segment, editor, marks);
     if (text && renderedWordHints.get(text) !== JSON.stringify(marks)) {
       renderPassageText(text, segment, true, marks);
       changed.push(segment);
@@ -6352,7 +6362,7 @@ function uncertaintyView() {
 }
 for (const id of ["#show-uncertainty", "#uncertainty-share"])
   $(id).addEventListener("change", () => {
-    if (!state.dirty) renderTranscript();
+    refreshTranscriptHints();
   });
 // T71: new wording for chosen passages from WhisperX, as a separate result to compare.
 function retranscribable(segment) {
@@ -7025,6 +7035,7 @@ function passageEditorMarkup(segment) {
     <div data-editor-pane="text">
       <div class="passage-text-surface">
         <div class="passage-text-overlay" aria-hidden="true" hidden><div class="passage-text-overlay-content"></div></div>
+        <div class="passage-uncertainty-overlay" aria-hidden="true" hidden><div class="passage-uncertainty-overlay-content"></div></div>
         <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
       </div>
       <p class="split-help" data-text-playback-note hidden></p>
@@ -7043,6 +7054,8 @@ function passageEditorMarkup(segment) {
 }
 function renderEditorPlayback(segment, editor) {
   refreshTextEditorPlayback(segment, editor);
+  textEditorSizeObserver.disconnect();
+  textEditorSizeObserver.observe(editor.querySelector("textarea"));
   renderPassageText(
     editor.querySelector(".editor-playback-text"),
     segment,
@@ -7054,17 +7067,25 @@ function renderEditorPlayback(segment, editor) {
       : "Saved text for playback · word highlighting unavailable";
 }
 let activeTextPlaybackWord = null;
+const textEditorSizeObserver = new ResizeObserver((entries) => {
+  for (const { target } of entries)
+    if (target.isConnected)
+      syncTextEditorScroll(target.closest(".passage-editor"));
+});
 function syncTextEditorScroll(editor) {
-  if (editor.querySelector(".passage-text-overlay").hidden) return;
   const input = editor.querySelector("textarea");
-  const content = editor.querySelector(".passage-text-overlay-content");
-  // The native scrollbar reduces the textarea's text width. Match its actual
-  // client box, including padding, rather than the surrounding editor width.
+  // Match the native client box (including its scrollbar), without scrolling it.
   const width = `${input.clientWidth}px`;
   const transform = `translate(${-input.scrollLeft}px, ${-input.scrollTop}px)`;
-  if (content.style.width !== width) content.style.width = width;
-  if (content.style.transform !== transform)
-    content.style.transform = transform;
+  for (const overlay of editor.querySelectorAll(
+    ".passage-text-overlay, .passage-uncertainty-overlay",
+  )) {
+    if (overlay.hidden) continue;
+    const content = overlay.firstElementChild;
+    if (content.style.width !== width) content.style.width = width;
+    if (content.style.transform !== transform)
+      content.style.transform = transform;
+  }
 }
 // Text highlighting maps saved word timing onto the native textarea's draft. Offsets are
 // code points in the textarea's presentation (CR/CRLF become LF, as textarea values do).
@@ -7100,7 +7121,7 @@ function savedTextPresentation(segment) {
     words.push([index, offsets[start], offsets[end]]);
     cursor = end;
   }
-  saved = { characters, text: characters.join(""), words };
+  saved = { characters, text: characters.join(""), words, offsets };
   savedTextPresentations.set(segment, saved);
   return saved;
 }
@@ -7109,6 +7130,13 @@ function savedTextPresentation(segment) {
 // change), and still separated from any edited letters. Words touching the changed middle,
 // and every new or changed word, stay unhighlighted; no time is ever assigned to them.
 function draftPlaybackWords(segment, draft) {
+  return draftUnchangedRanges(
+    segment,
+    draft,
+    savedTextPresentation(segment).words,
+  );
+}
+function draftUnchangedRanges(segment, draft, ranges) {
   const saved = savedTextPresentation(segment);
   const before = saved.characters;
   const after = Array.from(draft);
@@ -7126,7 +7154,7 @@ function draftPlaybackWords(segment, draft) {
   const separated = (character) =>
     character === undefined || !/[\p{L}\p{N}\p{M}]/u.test(character);
   const words = [];
-  for (const [index, start, end] of saved.words) {
+  for (const [index, start, end] of ranges) {
     if (end < prefix || (end === prefix && separated(after[end])))
       words.push([index, start, end]);
     else if (
@@ -7168,6 +7196,81 @@ function renderTextEditorMirror(segment, content, draft) {
     activeTextPlaybackWord = null;
   return mirror;
 }
+// Model signals use their own layer, including words without playback timing.
+// Cache ranking per immutable hint reply/share; typing only remaps this passage.
+const textEditorHintViews = new WeakMap();
+const textEditorUncertaintyMirrors = new WeakMap();
+function textEditorUncertaintyMarks(segment) {
+  const hints = currentHints();
+  if (!hints || !$("#show-uncertainty").checked) return [];
+  const share = Number($("#uncertainty-share").value);
+  let cached = textEditorHintViews.get(hints);
+  if (cached?.share !== share) {
+    cached = { share, words: reviewMarks(hints, share).words };
+    textEditorHintViews.set(hints, cached);
+  }
+  return cached.words.get(segment.id) || [];
+}
+function refreshTextEditorUncertainty(
+  segment,
+  editor,
+  marks = textEditorUncertaintyMarks(segment),
+) {
+  const overlay = editor.querySelector(".passage-uncertainty-overlay"),
+    content = overlay.firstElementChild,
+    draft = editor.querySelector("textarea").value;
+  if (!marks.length) {
+    overlay.hidden = true;
+    content.replaceChildren();
+    textEditorUncertaintyMirrors.delete(content);
+    return;
+  }
+  const previous = textEditorUncertaintyMirrors.get(content);
+  if (
+    previous?.segment === segment &&
+    previous.draft === draft &&
+    previous.marks === marks
+  )
+    return;
+  const saved = savedTextPresentation(segment),
+    ranges = [];
+  let cursor = 0;
+  for (const [index, [start, end]] of marks.entries()) {
+    if (
+      Number.isInteger(start) &&
+      Number.isInteger(end) &&
+      start >= cursor &&
+      end > start &&
+      end < saved.offsets.length &&
+      saved.offsets[end] > saved.offsets[start]
+    ) {
+      ranges.push([index, saved.offsets[start], saved.offsets[end]]);
+      cursor = end;
+    }
+  }
+  const layout = draftUnchangedRanges(segment, draft, ranges),
+    fragment = document.createDocumentFragment();
+  cursor = 0;
+  for (const [, start, end] of layout.words) {
+    fragment.append(
+      document.createTextNode(layout.characters.slice(cursor, start).join("")),
+    );
+    const mark = document.createElement("span");
+    mark.className = "uncertain-word";
+    mark.textContent = layout.characters.slice(start, end).join("");
+    fragment.append(mark);
+    cursor = end;
+  }
+  fragment.append(
+    document.createTextNode(
+      layout.characters.slice(cursor).join("") + "\u200b",
+    ),
+  );
+  content.replaceChildren(fragment);
+  overlay.hidden = !layout.words.length;
+  textEditorUncertaintyMirrors.set(content, { segment, draft, marks });
+  syncTextEditorScroll(editor);
+}
 function refreshTextEditorPlayback(segment, editor) {
   const overlay = editor.querySelector(".passage-text-overlay");
   const content = overlay.firstElementChild;
@@ -7189,6 +7292,7 @@ function refreshTextEditorPlayback(segment, editor) {
         : "Unsaved changes: no unchanged timed words remain to highlight.";
   if (note.textContent !== message) note.textContent = message;
   note.hidden = !message;
+  refreshTextEditorUncertainty(segment, editor);
   syncTextEditorScroll(editor);
 }
 function tickTextEditorPlayback(segment, index, player) {
