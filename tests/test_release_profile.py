@@ -98,7 +98,7 @@ def test_main_ships_full_and_one_command_builds_the_mvp_variant(tmp_path):
     assert release_profile.packaged(target).public() == {
         "profile": "mvp",
         "label": "MVP rc1",
-        "disabled": sorted(release_profile.FEATURES),
+        "disabled": sorted(release_profile.PROFILES["mvp"]),
         "features": sorted(release_profile.FEATURES),
     }
     refused = subprocess.run([*command[:3], "beta", "--file", str(target)], capture_output=True)
