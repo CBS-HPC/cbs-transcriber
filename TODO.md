@@ -17,6 +17,14 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+20 November Codex editor checkpoint on `codex/weekend-spelling-20261120`: Claude's
+recording vocabulary/Activity downloads/double-click redesign was independently checked,
+and dotted model uncertainty now appears in the actual Text draft without changing its
+native editing state (T157/ADR0188). **165 distinct focused cases pass**, with the
+cached-engine harness limitation recorded in the [verification receipt](docs/verification-2026-11-20-editor-spelling.md).
+This separate branch is not integrated, loaded or released. Spelling stays hidden in MVP.
+Spelling bug IDs were reconciled to B488–B491; core export/timing keeps B467–B470.
+
 12 November handover: [the continuation plan](docs/work-plans/mvp-v2-continuation-2026-11-12.md)
 records tested components and the unstarted Runtime Stage 2, funding-observer (T146) and
 schema-19 Working (T147) designs. Editor/review workflow is the next user discussion;
@@ -599,12 +607,12 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     coloured words and a remembered Spelling checkbox, popover actions recording/project/Ignore,
     and a Settings → Spelling tab. Implemented with [ADR 0186](docs/decisions/0186-recording-spelling-vocabulary.md)
     and [ADR 0187](docs/decisions/0187-spelling-activity-downloads-and-on-demand-suggestions.md);
-    synthetic unit, browser and MVP checks pass (B467, B468 fixed before commit).
+    synthetic unit, browser and MVP checks pass (B488, B491 fixed before commit).
   - [x] **Double-click trigger** (branch claude/spelling-trigger, 20 November): the user asked
     again for suggestions by double-clicking a word. Double-click on a coloured word in the open
     editor now opens the popover beside the browser's own word selection; other words do
     nothing extra, the editor-opening double-click is unchanged, Alt+Enter stays and Ctrl+click
-    was removed (ADR 0187 update, B469, B470). Independent review of the redesign found no
+    was removed (ADR 0187 update, B489, B490). Independent review of the redesign found no
     further defect to fix; Chromium browser tests pin the trigger and the distinct
     wavy/dotted styles on one word.
   - [ ] Not yet verified: macOS double-click and Option+Enter, Firefox/Safari double-click

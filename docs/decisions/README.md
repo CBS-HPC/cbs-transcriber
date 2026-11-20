@@ -191,4 +191,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0186 — Recording spelling vocabulary that inherits the project's words](0186-recording-spelling-vocabulary.md) (hidden in the MVP profile)
 - [0187 — Spelling: Activity dictionary downloads and on-demand suggestions](0187-spelling-activity-downloads-and-on-demand-suggestions.md) (double-click/Alt+Enter popover; hidden in the MVP profile)
 
+- [0188 — Uncertainty decoration inside native Text drafts](0188-text-editor-uncertainty-decoration.md)
+
 Terminology is defined in [the domain glossary](../../CONTEXT.md).
