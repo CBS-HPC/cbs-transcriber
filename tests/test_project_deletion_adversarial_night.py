@@ -6,13 +6,23 @@ from pathlib import PurePosixPath
 
 import httpx
 import pytest
+from admission_support import configure_compatible
 from fastapi import HTTPException
+from test_api import upload
 from test_delete_overrules import native_owner, runtime_owner
 from test_delete_overrules import remote as remote
 from test_project_deletion_tasks import hold_stop as hold_stop
 from test_project_deletion_tasks import project_exists, settled, start
 
-from cbs_transcriber import portable_routes, project_deletion_tasks, runtime_store
+from cbs_transcriber import (
+    deletions,
+    input_admission,
+    original_inspection,
+    portable_routes,
+    project_deletion_tasks,
+    providers,
+    runtime_store,
+)
 from cbs_transcriber import ucloud_native as native
 
 _REAL_TRASH = native.trash_owned_folder
@@ -286,3 +296,63 @@ def test_unknown_commit_facts_never_offer_keep_or_claim_project_deleted(client):
     finally:
         with owner.lock:
             del owner.tasks[task.identifier]
+
+
+def test_keep_before_stop_claim_preserves_reserved_inspection_and_input_intent(
+    client, monkeypatch, wav_bytes
+):
+    uploaded = upload(client, wav_bytes)
+    configure_compatible(client)
+    store = client.app.state.store
+    project_id = uploaded["recording"]["project_id"]
+    profile_id = providers.public_profiles(store, client.app.state.credentials)["providers"][0][
+        "id"
+    ]
+    profile = providers.profile(store, profile_id)
+    entered, release = threading.Event(), threading.Event()
+    original_cancel = deletions.Deletions._cancel
+    calls = []
+    source_cancel, input_cancel = original_inspection.cancel, input_admission.cancel
+
+    def paused_cancel(self, operation, should_continue=None):
+        # stop_for_task has checked Keep, but _cancel has not claimed queue.lock yet.
+        entered.set()
+        assert release.wait(10), "Release the Stop claim boundary"
+        return original_cancel(self, operation, should_continue)
+
+    def cancel_source(*args, **kwargs):
+        calls.append("source")
+        return source_cancel(*args, **kwargs)
+
+    def cancel_input(*args, **kwargs):
+        calls.append("input")
+        return input_cancel(*args, **kwargs)
+
+    monkeypatch.setattr(deletions.Deletions, "_cancel", paused_cancel)
+    monkeypatch.setattr(original_inspection, "cancel", cancel_source)
+    monkeypatch.setattr(input_admission, "cancel", cancel_input)
+    with store.library_lock():
+        input_admission.accept(
+            store,
+            [
+                {
+                    "recording_id": uploaded["recording"]["id"],
+                    "choice": input_admission.choice(provider=profile),
+                }
+            ],
+        )
+        before = store.all("SELECT id,kind,state,params FROM jobs ORDER BY id")
+        source_before = original_inspection.read(store, uploaded["recording"]["id"])
+        task = start(client, project_id).json()
+        assert entered.wait(10)
+        try:
+            response = client.post(
+                f"/api/project-deletion-tasks/{task['id']}/keep", json={"project_id": project_id}
+            )
+            assert response.status_code == 202, response.text
+        finally:
+            release.set()
+        assert settled(client, task["id"])["state"] == "kept"
+        assert calls == [], "Keep won before any Stop claim; no reserved control may run"
+        assert store.all("SELECT id,kind,state,params FROM jobs ORDER BY id") == before
+        assert original_inspection.read(store, uploaded["recording"]["id"]) == source_before
