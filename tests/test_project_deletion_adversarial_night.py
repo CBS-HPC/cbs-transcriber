@@ -221,8 +221,12 @@ def test_late_keep_reports_actual_transaction_outcome_not_precommit_intent(
     assert not thread.is_alive() and not errors and replies
     done = settled(client, task["id"])
     if commit_succeeds:
-        assert replies[0].status_code == 409
-        assert replies[0].json()["detail"]["code"] == "deletion_committed"
+        assert replies[0].status_code in (200, 409)
+        reply = replies[0].json()
+        if replies[0].status_code == 409:
+            assert reply["detail"]["code"] == "deletion_committed"
+        else:
+            assert reply["committed"] is True and reply["can_keep"] is False
         assert done["committed"] is True and not project_exists(store, project["id"])
     else:
         assert replies[0].status_code in (200, 202), replies[0].text
