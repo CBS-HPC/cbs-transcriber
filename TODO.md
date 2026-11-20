@@ -395,6 +395,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   recordings and video remain. Compare optional UCloud preparation for larger batches, including
   upload/download time, privacy approval, remote cleanup, resource charges and recovery, before
   choosing a policy.
+- [ ] **Very large library stress test — requested 20 November, after MVP v2.** Check that the
+  app does not crash or hang with a very large set of recordings, using a public Hugging Face
+  speech dataset (any language) in a throwaway library. Choose the dataset with a verified
+  licence, pinned revision and hashes; download it outside the repository, never in routine
+  tests. Import its reference transcripts as results so scale costs no transcription; transcribe
+  only a small subset. Cover upload, media preparation, lists, Activity, editor, search, export,
+  backup/restore and deletion. Human check H15b in the
+  [release checklist](docs/testing/human-release-checklist.md).
 - [ ] **Local processing concurrency across task types.** Implemented on
   `claude/local-concurrency` (ADR 0146, T111): Settings → Local Processing → Parallel local
   tasks with automatic media = logical CPUs − 2 in 2..8, inspection = CPUs/2 in 2..4, API 6 and

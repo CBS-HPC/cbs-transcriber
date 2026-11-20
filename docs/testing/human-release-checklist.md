@@ -134,6 +134,21 @@ the user's approval each time; checks marked **later** belong to features still 
 
 ## Editing and review
 
+### H15b · Very large library stress test (later, after MVP v2)
+
+- **Do:** Load a large public speech dataset from Hugging Face (any language) into a throwaway
+  library: many files (for example 1,000+ short clips) plus some multi-hour recordings. Import
+  the dataset's own reference transcripts as results, so scale can be tested without paying
+  for transcription; transcribe only a small subset. Then upload, prepare media, browse, edit,
+  search, export, back up, restore and delete at that size.
+- **Pass when:** Nothing crashes or hangs; lists, Activity and the editor stay responsive; memory
+  and disk use stay bounded; every export, backup and deletion completes.
+- **Dataset:** to be chosen with a verified licence, pinned revision and hashes, downloaded
+  outside the repository and never in routine tests. Candidates to check: LibriSpeech (many
+  short read clips), AMI meetings (long, several speakers), Earnings-22 (long calls),
+  VoxPopuli or Common Voice (very many clips).
+- **Status:** Not run. Requested 20 November; not needed before the MVP v2 release.
+
 ### H16 · Editing a long real transcript
 
 - **Do:** Edit, split, merge and delete passages in a 600+ passage transcript.
