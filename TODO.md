@@ -79,8 +79,11 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   Stage 2 (disabled owner/folder/readiness-promotion slice) is implemented on
   `codex/mvp-v2-runtime-protocol`: builder `e9dd23d`, independent review `229865a`, defect
   fix `600141f` (B453); combined on `claude/v2-integration` with all switches off.
-  - [x] Disabled supersession of a settled failed candidate (`claude/runtime-supersession`,
-    19 November, synthetic only). Independent review is still required before enablement.
+  - [x] Disabled settled-candidate supersession (`claude/runtime-supersession`, 19 November).
+    Independent review found B484/B485; local fixes have nine red/green regressions and
+    final 203 generation and 249 legacy/HF/Stage1 passes with three platform skips;
+    [verification and limits](docs/verification-2026-11-20-runtime-supersession.md). All
+    generation switches remain off; no live preparation or activation is implied.
   - [ ] Strict comparison with UCloud's normalised specification:
     [designed](docs/proposals/runtime-strict-specification-comparison-2026-11-19.md);
     needs authorized real UCloud job replies.

@@ -209,3 +209,21 @@ Actual UCloud specification normalization, physical mounts/locks, CUDA/MIG memor
 preparation/reuse and a real batch/Stop/recovery/cleanup remain separately authorized live
 acceptance. The historical lock is retained throughout; terminal owner or age is never reclaim
 permission. No new frontend controls or public activation are implied by this backend design.
+
+## Independent supersession review — 20 November 2026
+
+Before enablement, observed remote closure is stricter than the historical shared capacity
+classifier: when remote_state is present, only the pinned UCloud positively-final states
+SUCCESS, FAILURE and EXPIRED qualify. SUSPENDED can resume and unsupported aliases do not
+prove closure. Absence still requires all existing no-ID, no-uncertain-POST and no-reservation
+proof. Both candidate settlement and the permanent retired-owner decoder enforce it (B484).
+The broad legacy runtime_store terminal set is unchanged.
+
+The supplied complete supersession body must canonically and type-strictly match its claimed
+digest and policy before comparison with a recorded lost-reply digest. A reused digest does
+not authorize substituted evidence. Exact replay returns the same successor; a changed or
+retyped body refuses without rows/settings changes (B485).
+
+This is a disabled offline hardening slice, not completion of Runtime activation. All three
+generation switches remain false. Existing locks, old environments, remote folders, jobs and
+cleanup obligations are untouched. See the dated verification receipt for gate boundaries.
