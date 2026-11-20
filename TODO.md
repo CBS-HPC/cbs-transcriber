@@ -606,7 +606,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   The Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing word timing)
   is implemented and browser-verified; Next to review follows it (T148). Real-user acceptance
   and coordination with any future re-transcription tags remain open.
-- [ ] **Word timing in review and Activity — decided 20 November, post-v2.** Testing MVP v2
+- [x] **Word timing in review and Activity — decided 20 November, post-v2.** Testing MVP v2
   the user found passages with missing or rebuilt timing hard to locate, and a per-passage
   "Add word timing" job vanished from Activity when it finished (finished realignments are
   hidden as routine; the ready timing is added only when the recording is next open with no
@@ -618,6 +618,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   recording is opened, not added because the passage changed, or failed) until cleared.
   Automatic marks need a truthful system actor and their own ADR (passage review is manual
   metadata today, ADR 0148); preserve the passage-hash binding, stale-Checked rule and drafts.
+  **Implemented 20 November on branch `claude/timing-review` (unmerged; ADR 0191, T162,
+  V243/V244, B510–B512):** automatic marks are derived when review progress is read, never
+  stored; the researcher's mark on the exact current content always wins. New timing versions
+  record the passages they timed (`timing_added`); older timing raises no mark. The reasons show
+  beside the status, the summary counts them, and Show/Next to review find them. Finished word
+  timing stays in Activity with its outcome; the worker's own message is no longer replaced by
+  "Complete"; passages being timed leave the Repair all count at once. Synthetic backend,
+  restore and browser checks pass; real-library acceptance is H15c.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,

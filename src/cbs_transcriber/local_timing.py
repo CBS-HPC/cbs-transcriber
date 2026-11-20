@@ -28,6 +28,34 @@ def _digest(value):
     return hashlib.sha256(encoded).hexdigest()
 
 
+def activity_outcome(raw):
+    """Typed, bounded Activity projection of a word-timing job's outcome (ADR 0191).
+
+    `raw` is the jobs listing's JSON summary of the job's own receipt fields; unknown or
+    malformed values project as None, never as an invented outcome.
+    """
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError, RecursionError):
+        return None
+    if not isinstance(value, dict):
+        return None
+
+    def count(key):
+        item = value.get(key)
+        return item if type(item) is int and 0 <= item <= 1_000_000 else None
+
+    return {
+        "applied": value.get("applied") if value.get("applied") in {"applied", "stale"} else None,
+        "applied_count": count("applied_count"),
+        "skipped_count": count("skipped_count"),
+        "output_count": count("output_count"),
+        "complete_count": count("complete_count"),
+    }
+
+
 def _policy(params):
     if POLICY_KEY not in params:
         return None
@@ -354,6 +382,13 @@ def _existing(db, recording_id, result_id, job, params, input_hash):
     decode_payload(version["payload"], version["payload_sha256"])
     if context.get("producer_artifacts") != previous_context.get("producer_artifacts"):
         raise ValueError("The timing successor changed its original producer evidence.")
+    from . import passage_review
+
+    # ADR 0191 review evidence is optional (older versions lack it) but exact when present.
+    if passage_review.TIMING_KEY in context and context[
+        passage_review.TIMING_KEY
+    ] != passage_review.timing_added(successor, applied):
+        raise ValueError("The applied timing review evidence changed. Preserve its history.")
     if params.get("timing_artifact_policy") is not None:
         from . import timing_capture
 
@@ -477,6 +512,10 @@ def apply(store, recording_id, result_id, job_id, revision, *, working_choice=No
                         evidence = timing_capture.for_application(
                             job, recording_id, result_id, applied
                         )
+                    from . import passage_review
+
+                    # ADR 0191: which passages this timing changed, for automatic review.
+                    review = passage_review.timing_added(segments, applied)
                     version = append_edit(
                         store,
                         db,
@@ -488,7 +527,8 @@ def apply(store, recording_id, result_id, job_id, revision, *, working_choice=No
                         action="timing_realign",
                         context={"job_id": job_id}
                         | ({POLICY_KEY: apply_policy} if apply_policy is not None else {})
-                        | ({"segment_id": applied[0]} if len(outputs) == 1 else {}),
+                        | ({"segment_id": applied[0]} if len(outputs) == 1 else {})
+                        | {passage_review.TIMING_KEY: review},
                         reason=None,
                         timing_artifacts=evidence,
                         **(

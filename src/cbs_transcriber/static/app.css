@@ -1939,6 +1939,12 @@ select {
 .manual-review-row button {
   white-space: nowrap;
 }
+/* ADR 0191: the reason for an automatic Needs review, in muted text beside the status. */
+.manual-review-row .review-reason {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
 .manual-review-row [role="status"],
 .manual-review-row [role="alert"] {
   max-width: 260px;
@@ -2498,6 +2504,11 @@ select {
   color: var(--muted);
   margin: 10px 0;
   overflow-wrap: anywhere;
+}
+/* ADR 0191: a finished word-timing job's outcome reads before its worker message. */
+.job p.timing-outcome {
+  color: var(--ink);
+  font-weight: 600;
 }
 .job progress {
   display: block;

@@ -64,6 +64,7 @@
 | Source alignment-fit invalidation | A passage marker suppressing old creation-time alignment word scores after applied timing replacement/adoption, including omitted words; recognition confidence and raw source evidence remain. |
 | Passage / segment | A stretch of transcript with optional start/end times and a speaker label. |
 | Manual passage review | User progress (Not checked, Checked or Needs review) bound to exact saved passage content, independent of uncertainty hints and Working versions. |
+| Automatic Needs review | A system-derived Needs review ("word timing missing" or "timing added") computed when review progress is read, never stored; a researcher's mark on the exact current content replaces it (ADR 0191). |
 | Change (undo step) | A saved version whose content differs from its predecessor, made by the researcher or applied at their request; no-change saves, Trash/Restore markers, review marks, Working choices and notes are not changes (ADR 0180). |
 | Undo last change / Redo | Appending the exact predecessor of the newest change (Undo) or the exact version the newest Undo removed (Redo) as a new version; history is never rewritten. |
 | What changed | A read-only, bounded word-level comparison of a saved version with its predecessor or another version of the same recording (ADR 0181). |

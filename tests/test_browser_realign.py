@@ -98,7 +98,11 @@ def test_realignment_adds_timing_to_the_same_result(page, local_app, monkeypatch
         re.compile("timing realign|added word timing", re.IGNORECASE)
     )
     page.locator("#history-dialog [data-close]").first.click()
-    # Finished realignments stay out of Activity.
+    # ADR 0191 (amending ADR 0052): a finished realignment stays in Activity with its outcome.
     page.locator("#activity-open").click()
-    expect(page.locator("#jobs")).not_to_contain_text("edited passage")
+    card = page.locator("#jobs .job").filter(has_text="edited passage")
+    expect(card.locator("[data-timing-outcome='added']")).to_have_text(
+        "Word timing added to passage 1."
+    )
+    expect(card).to_contain_text("Word timing ready for 3 of 3 words.")
     assert len(store.results(rid)) == 1

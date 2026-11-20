@@ -54,6 +54,11 @@ def filtered(local_app):
     )["id"]
     save_status(store, rid, result, "0", "checked")
     save_status(store, rid, result, "1", "needs_review")
+    # This word-timing result would mark its untimed passages Needs review automatically
+    # (ADR 0191, covered in test_browser_timing_review). Explicit Not checked marks on that
+    # exact content win, so these filter checks keep their manual states.
+    save_status(store, rid, result, "2", "not_checked")
+    save_status(store, rid, result, "4", "not_checked")
     other = store.create_recording(project["id"], "other.wav")["id"]
     store.add_result(
         other,
@@ -287,9 +292,10 @@ def test_filter_keeps_an_open_draft_survives_rerender_and_resets_per_recording(p
     expect(show(page)).to_have_value("all")
     expect_visible(page, ["0"])
     page.goto(app.url + f"/#/recordings/{rid}")
-    # Editing the Checked passage made it need review again.
+    # Editing the Checked passage made it need review again; the edit also left it without
+    # complete word timing, which the summary counts as automatic (ADR 0191).
     expect(page.locator("[data-review-summary]")).to_have_text(
-        "Manual review · Checked 0 of 5 · Needs review 2"
+        "Manual review · Checked 0 of 5 · Needs review 2 (1 for word timing)"
     )
     expect(show(page)).to_have_value("all")
     expect_visible(page, ["0", "1", "2", "3", "4"])
