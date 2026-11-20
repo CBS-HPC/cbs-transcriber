@@ -312,25 +312,6 @@
                   Versions
                 </button>
               </div>
-              <!-- Undo last change / Redo (ADR 0180), directly under Versions. -->
-              <div class="change-steps" data-feature="undo_last_change">
-                <button
-                  id="undo-last"
-                  class="button change-step"
-                  type="button"
-                  disabled
-                >
-                  ↶ Undo
-                </button>
-                <button
-                  id="redo-last"
-                  class="button change-step"
-                  type="button"
-                  disabled
-                >
-                  ↷ Redo
-                </button>
-              </div>
               <p id="working-version-status" class="field-note"></p>
             </div>
           </div>
@@ -438,6 +419,26 @@
                   role="status"
                   hidden
                 ></div>
+                <!-- Undo last change / Redo (ADR 0180) in the transcript panel, above the
+                     scrolling passages, so they stay visible (user, 20 November). -->
+                <div class="change-steps" data-feature="undo_last_change">
+                  <button
+                    id="undo-last"
+                    class="button change-step"
+                    type="button"
+                    disabled
+                  >
+                    ↶ Undo
+                  </button>
+                  <button
+                    id="redo-last"
+                    class="button change-step"
+                    type="button"
+                    disabled
+                  >
+                    ↷ Redo
+                  </button>
+                </div>
                 <label
                   id="transcript-filter-label"
                   class="transcript-filter"

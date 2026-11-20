@@ -229,7 +229,11 @@ function paintManualReviews(view, only = null) {
         saveManualReview(current, sid, desired);
       });
       row.appendChild(select);
-      heading.insertBefore(row, heading.querySelector(".passage-actions"));
+      // The status dropdown always comes first after the time, left of any tags
+      // ("Review suggested", word timing), so it stays in one place (user, 20 November).
+      heading
+        .querySelector(".timestamp")
+        .insertAdjacentElement("afterend", row);
     }
     const select = row.querySelector("select");
     select.value = view.rows.get(sid)?.status || "not_checked";

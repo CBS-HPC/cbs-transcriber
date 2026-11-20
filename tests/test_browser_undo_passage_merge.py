@@ -15,9 +15,8 @@ pytestmark = pytest.mark.browser
 
 @pytest.fixture
 def local_app(tmp_path_factory, monkeypatch):
-    # Per-passage Undo merge is the fallback wherever the History change list is hidden; with
-    # it on (full, and MVP v2 since 20 November) older merges are reverted from History
-    # instead (ADR 0181). Hide the feature to keep the fallback covered.
+    # Per-passage Undo merge shows with or without the History change list (ADR 0181 as
+    # amended 20 November); this module pins a profile hiding that feature to cover it alone.
     monkeypatch.setitem(release_profile.PROFILES, "mvp", frozenset(release_profile.FEATURES))
     yield from serve_profile(tmp_path_factory, monkeypatch, "mvp")
 

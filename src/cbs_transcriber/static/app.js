@@ -6226,9 +6226,11 @@ function refreshPassageHintFlag(passage, reasons) {
     if (!flag) {
       flag = document.createElement("span");
       flag.className = "review-flag";
-      heading
-        .querySelector(".timestamp")
-        .insertAdjacentElement("afterend", flag);
+      // Tags follow the review status dropdown when it is shown (user, 20 November).
+      (
+        heading.querySelector("[data-manual-review]") ||
+        heading.querySelector(".timestamp")
+      ).insertAdjacentElement("afterend", flag);
     }
     flag.textContent = "Review suggested";
     flag.title = `Review suggested: ${reasons.join("; ")}. Model signals, not a measure of correctness.`;
@@ -6911,13 +6913,9 @@ function refreshMergeUndoOptions() {
   if (typeof renderDeletedPassages === "function")
     renderDeletedPassages(mergeUndoOptions.response);
   if (typeof renderChangeSteps === "function") renderChangeSteps();
-  // With the History change list on, older merges/splits are reverted there (ADR 0181).
-  if (
-    !mergeUndoOptions.ids ||
-    !mergeUndoOptions.splitIds ||
-    structureLocked() ||
-    featureOn("undo_last_change")
-  )
+  // Per-passage Undo merge/split stay beside the passage even with the History change list
+  // and Undo last change on (user, 20 November; amends ADR 0181).
+  if (!mergeUndoOptions.ids || !mergeUndoOptions.splitIds || structureLocked())
     return;
   for (const passage of $("#transcript").querySelectorAll("[data-segment]")) {
     const actions = passage.querySelector(".passage-actions");

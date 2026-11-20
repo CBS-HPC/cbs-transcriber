@@ -1195,11 +1195,12 @@ html.busy * {
   min-height: 35px;
 }
 /* Undo last change / Redo (ADR 0180): a compact row under Versions, never widening it. */
-.result-controls > .change-steps {
+.editor-options > .change-steps {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+  margin-left: auto;
 }
 .change-steps .change-step {
   max-width: 240px;
