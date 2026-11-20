@@ -6,6 +6,20 @@ const manualReviewLabels = {
   checked: "Checked",
   needs_review: "Needs review",
 };
+// Automatic Needs review for word timing (ADR 0191) is derived by the server from saved
+// content; it is never a stored mark, and a mark the researcher sets always replaces it.
+const automaticReviewReasons = {
+  timing_added: {
+    label: "timing added",
+    title:
+      "Set automatically: word timing was added to this passage, so it needs review again. Choose Checked once you have reviewed it.",
+  },
+  word_timing_missing: {
+    label: "word timing missing",
+    title:
+      "Set automatically: this passage has no complete word timing. Add word timing or review it, then choose Checked.",
+  },
+};
 let manualReviews = null;
 const nextManualReviewButton = document.getElementById("next-uncertain");
 nextManualReviewButton.disabled = true;
@@ -130,7 +144,12 @@ function manualReviewRow(value, ids) {
     !Object.hasOwn(manualReviewLabels, value.status) ||
     !Number.isSafeInteger(value.review_revision) ||
     value.review_revision < 0 ||
-    !/^[a-f0-9]{64}$/u.test(value.passage_sha256)
+    !/^[a-f0-9]{64}$/u.test(value.passage_sha256) ||
+    !(
+      value.automatic == null ||
+      (Object.hasOwn(automaticReviewReasons, value.automatic) &&
+        value.status === "needs_review")
+    )
   )
     throw new Error(
       "Review progress did not match this saved passage. Reload it.",
@@ -177,10 +196,13 @@ function paintManualReviews(view, only = null) {
   const needs = [...view.rows.values()].filter(
     (row) => row.status === "needs_review",
   ).length;
+  const automatic = [...view.rows.values()].filter(
+    (row) => row.automatic,
+  ).length;
   const summary = document.createElement("span");
   summary.dataset.reviewSummary = "";
   summary.textContent = view.ready
-    ? `Manual review · Checked ${checked} of ${view.ids.size} · Needs review ${needs}`
+    ? `Manual review · Checked ${checked} of ${view.ids.size} · Needs review ${needs}${automatic ? ` (${automatic} for word timing)` : ""}`
     : view.loadError
       ? "Manual review · Progress unavailable"
       : "Manual review · Loading progress…";
@@ -238,8 +260,19 @@ function paintManualReviews(view, only = null) {
     const select = row.querySelector("select");
     select.value = view.rows.get(sid)?.status || "not_checked";
     row
-      .querySelectorAll("[data-review-message], [data-review-retry]")
+      .querySelectorAll(
+        "[data-review-reason], [data-review-message], [data-review-retry]",
+      )
       .forEach((node) => node.remove());
+    const reason = automaticReviewReasons[view.rows.get(sid)?.automatic];
+    if (reason) {
+      const note = document.createElement("small");
+      note.className = "review-reason";
+      note.dataset.reviewReason = view.rows.get(sid).automatic;
+      note.textContent = reason.label;
+      note.title = reason.title;
+      row.appendChild(note);
+    }
     const error = view.errors.get(sid);
     if (error || view.pending.has(sid)) {
       const note = document.createElement("span");

@@ -193,5 +193,6 @@ record explicitly rather than rewriting its historical rationale.
 
 - [0188 — Uncertainty decoration inside native Text drafts](0188-text-editor-uncertainty-decoration.md)
 - [0189 — Passage timing windows too short for their text are not aligned](0189-windows-too-short-for-their-text.md)
+- [0191 — Word timing in review and Activity](0191-word-timing-in-review-and-activity.md) (post-v2; derived automatic Needs review, Activity outcomes)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

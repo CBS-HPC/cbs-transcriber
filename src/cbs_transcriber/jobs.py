@@ -1084,6 +1084,17 @@ class JobQueue:
             terminate_owned(settings, self.credentials, remote_id)
         self.store.mark_job_termination_requested(identifier, remote_id)
 
+    def _completion_message(self, identifier):
+        """Local word timing ends with its own outcome message (B511); others say Complete."""
+        rows = self.store.all(
+            "SELECT message FROM jobs WHERE id=? AND kind='enhance' AND json_valid(params) "
+            "AND json_extract(params,'$.realign')=1 "
+            "AND json_extract(params,'$.enhancement.execution')='local'",
+            (identifier,),
+        )
+        message = rows[0]["message"] if rows else None
+        return message if isinstance(message, str) and message else "Complete"
+
     def run(self):
         if self.kind == "runtime-prepare":
             return self.run_runtime_preparation()
@@ -1128,7 +1139,7 @@ class JobQueue:
                 if self.cancel_event.is_set():
                     raise media.Cancelled()
                 if not self.active_batch_id:
-                    finish("completed", "Complete", progress=1)
+                    finish("completed", self._completion_message(identifier), progress=1)
             except media.Cancelled:
                 finish(
                     "interrupted" if self.stopping.is_set() else "cancelled",

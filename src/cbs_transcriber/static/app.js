@@ -6700,6 +6700,63 @@ function timingProgress(job, id) {
   }
   return job.realign_ready ? "Adding" : null;
 }
+// Finished word timing stays in Activity with its outcome until cleared (ADR 0191).
+function timingActivityOutcome(job) {
+  if (!job.realign || job.state !== "completed" || job.input_preparation)
+    return null;
+  const outcome = job.realign_outcome || {},
+    ids = job.segment_ids || (job.segment_id == null ? [] : [job.segment_id]),
+    open = state.recording?.id === job.recording_id,
+    plural = (count) => `${count} passage${count === 1 ? "" : "s"}`;
+  if (outcome.applied === "applied") {
+    const count = outcome.applied_count ?? ids.length,
+      skipped = outcome.skipped_count || 0,
+      index =
+        open && ids.length === 1 && count === 1
+          ? state.recording.segments.findIndex((s) => s.id === ids[0])
+          : -1,
+      complete =
+        !skipped &&
+        Number.isInteger(outcome.output_count) &&
+        Number.isInteger(outcome.complete_count)
+          ? outcome.complete_count
+          : null,
+      where =
+        index >= 0
+          ? `passage ${index + 1}`
+          : count === 1
+            ? "one passage"
+            : plural(count);
+    let text = `Word timing added to ${where}`;
+    if (complete !== null && complete < count)
+      text +=
+        count === 1
+          ? ". Some words could not be timed, so it still counts as incomplete"
+          : ` (${complete} complete)`;
+    if (skipped)
+      text += `. ${plural(skipped)} not added: ${skipped === 1 ? "it" : "they"} changed`;
+    return { kind: "added", text: `${text}.` };
+  }
+  if (outcome.applied === "stale")
+    return {
+      kind: "stale",
+      text: `Not added: the passage${ids.length === 1 ? "" : "s"} changed.`,
+    };
+  if (job.realign_ready)
+    return {
+      kind: "ready",
+      text:
+        open && job.source_result_id === state.recording.active_transcript_id
+          ? "Ready, added when no passage is being edited."
+          : "Ready, added when you next open the recording.",
+    };
+  // Jobs finished before B511 lost their own message to "Complete".
+  const message =
+    job.message && job.message !== "Complete"
+      ? job.message.replace(/^[A-Z](?=[a-z])/u, (first) => first.toLowerCase())
+      : "no word timing was found in the audio.";
+  return { kind: "none", text: `Not added: ${message}` };
+}
 function refreshPassageRepairs() {
   document
     .querySelectorAll(".passage-repair, .bulk-passage-repair")
@@ -6723,18 +6780,30 @@ function refreshPassageRepairs() {
         const whole = host.dataset.wholeResult != null;
         // Every listed passage is too short for its text: nothing here can time them.
         const short = host.dataset.tooShort != null;
+        // Passages already being timed leave the count at once (ADR 0191, B512).
+        const pending = ids.length - left.length;
+        const remaining = Number(host.dataset.missing) - pending;
+        const noun = `incomplete passage${remaining === 1 ? "" : "s"}`;
         disabled = !whole && !left.length;
         label =
-          whole || short || left.length
+          whole || short || (left.length && !pending)
             ? host.dataset.label
-            : `Adding word timing to ${ids.length} passage(s)`;
+            : left.length
+              ? left.length === remaining
+                ? `Repair all ${remaining} ${noun}`
+                : `Repair ${left.length} of ${remaining} ${noun}`
+              : `Adding word timing to ${ids.length} passage(s)`;
+        const already =
+          pending && left.length
+            ? ` ${pending} more ${pending === 1 ? "is" : "are"} already being timed.`
+            : "";
         title = whole
           ? `${host.dataset.note} Opens Add word timing / speakers for the whole result.`
           : short
             ? host.dataset.note
             : featureOn("ucloud_enhancement")
-              ? `${host.dataset.note} Small selections use local WhisperX; larger selections can use an approved, prepared UCloud connection when original-v1 source proof is ready. Timing is added to this result as one version in History.`
-              : `${host.dataset.note} Local WhisperX times the selection on this computer. Timing is added to this result as one version in History.`;
+              ? `${host.dataset.note}${already} Small selections use local WhisperX; larger selections can use an approved, prepared UCloud connection when original-v1 source proof is ready. Timing is added to this result as one version in History.`
+              : `${host.dataset.note}${already} Local WhisperX times the selection on this computer. Timing is added to this result as one version in History.`;
         host.dataset.runIds = JSON.stringify(left);
       } else {
         const job = timingJob(resultId, ids[0]);
@@ -6863,7 +6932,7 @@ function renderTimingWarning(result, selector) {
         : others
           ? `Timing options for ${missing.length} ${passages}`
           : `${missing.length} ${passages} too short to time`;
-  target.innerHTML = `${summaryMarkup}<span class="bulk-passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-ids="${h(JSON.stringify(ids))}" data-label="${h(label)}" data-note="${h(note)}" ${ids.length ? "" : others ? "data-whole-result" : "data-too-short"}></span>`;
+  target.innerHTML = `${summaryMarkup}<span class="bulk-passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-ids="${h(JSON.stringify(ids))}" data-missing="${missing.length}" data-label="${h(label)}" data-note="${h(note)}" ${ids.length ? "" : others ? "data-whole-result" : "data-too-short"}></span>`;
 }
 function refreshSpeakerBadges(recording, previousRevision) {
   const speakers = [
@@ -12695,7 +12764,8 @@ function activityCard(job, expanded) {
         })
         .join("")}</ul></details>`
     : "";
-  return `<article class="job" ${job.ucloud_batch_id ? `data-activity-batch="${h(job.ucloud_batch_id)}"` : ""}>${activityCardHead(job, job.kind === "media" ? "Media preparation" : h(configurationLabel(job.provider_name, job.model) || "API transcription"))}<h3>${h(job.recording_name)}</h3><p>${h(job.message || "Waiting in the local queue")}</p>${job.inspection_stage ? `<p>${h(job.inspection_stage)}</p>` : ""}${activityJobDetails(job)}${runtimeBatchProgress(job) || `<progress value="${job.progress}" max="1" aria-label="Job progress"></progress>`}${outcomes}${activityRemovalNote(job)}<div class="job-footer"><span class="badge ${["queued", "running"].includes(job.state) ? "working" : ["failed", "interrupted"].includes(job.state) ? "failed" : ""}">${h(job.state)}</span>${jobActions(job)}</div></article>`;
+  const timing = timingActivityOutcome(job);
+  return `<article class="job" ${job.ucloud_batch_id ? `data-activity-batch="${h(job.ucloud_batch_id)}"` : ""}>${activityCardHead(job, job.kind === "media" ? "Media preparation" : h(configurationLabel(job.provider_name, job.model) || "API transcription"))}<h3>${h(job.recording_name)}</h3>${timing ? `<p class="timing-outcome" data-timing-outcome="${timing.kind}">${h(timing.text)}</p>` : ""}${timing?.kind === "none" ? "" : `<p>${h(job.message || "Waiting in the local queue")}</p>`}${job.inspection_stage ? `<p>${h(job.inspection_stage)}</p>` : ""}${activityJobDetails(job)}${runtimeBatchProgress(job) || `<progress value="${job.progress}" max="1" aria-label="Job progress"></progress>`}${outcomes}${activityRemovalNote(job)}<div class="job-footer"><span class="badge ${["queued", "running"].includes(job.state) ? "working" : ["failed", "interrupted"].includes(job.state) ? "failed" : ""}">${h(job.state)}</span>${jobActions(job)}</div></article>`;
 }
 let jobsPollSequence = 0,
   jobsRenderedSequence = 0;
@@ -12724,11 +12794,8 @@ async function pollJobs() {
   $("#job-count").textContent = activities.filter((job) =>
     ["queued", "running"].includes(job.state),
   ).length;
-  // Finished realignments of edited passages are routine; Activity keeps the rest.
-  const listed = activities.filter(
-    (job) =>
-      !(job.realign && job.state === "completed" && !job.input_preparation),
-  );
+  // Finished word timing stays listed with its outcome until cleared (ADR 0191).
+  const listed = activities;
   // V105/V162: only the rendered list is filtered; state.jobs stays complete.
   const shown = listed.filter(
     (job) => !clearedFromActivity(job) && !removedFromActivity(job),

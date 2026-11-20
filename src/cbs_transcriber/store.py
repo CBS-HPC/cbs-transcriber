@@ -1678,6 +1678,10 @@ class Store:
                     segments, frozen, outputs, apply_policy=apply_policy
                 )
                 if applied:
+                    from . import passage_review
+
+                    # ADR 0191: which passages this timing changed, for automatic review.
+                    review = passage_review.timing_added(segments, applied)
                     version = append_edit(
                         self,
                         db,
@@ -1688,7 +1692,8 @@ class Store:
                         speakers,
                         action="timing_realign",
                         context={"job_id": job_id}
-                        | ({local_timing.POLICY_KEY: apply_policy} if apply_policy else {}),
+                        | ({local_timing.POLICY_KEY: apply_policy} if apply_policy else {})
+                        | {passage_review.TIMING_KEY: review},
                         reason=None,
                         **(
                             {"working_choice": working_choice} if working_choice is not None else {}

@@ -147,6 +147,20 @@ the user's approval each time; checks marked **later** belong to features still 
   left unchanged. Only synthetic tests and an offline replay of the 20 November job cover this.
 - **Status:** Not run.
 
+### H15c · Word timing in review and Activity (later, post-v2)
+
+- **Do:** On a copy of a real library, open a word-timing result with untimed passages and a
+  speakers-only result. Choose Show → Needs review and use Next to review. Mark one untimed
+  passage Checked and another Not checked. Then use Add word timing on one passage and Repair
+  all, keep a passage editor open while one finishes, close it, and open Activity.
+- **Pass when:** Untimed passages show Needs review with "word timing missing", the
+  speakers-only result shows none; your own Checked/Not checked marks stay; a newly timed
+  passage shows Needs review with "timing added", even if it was Checked; the Repair all count
+  drops as soon as a passage is sent; Activity keeps each finished timing job with "Word timing
+  added to passage N", "Ready, added when…", "Not added: the passage changed" or its reason,
+  until Clear finished. Only synthetic tests cover this (ADR 0191).
+- **Status:** Not run. Implemented 20 November on an unmerged post-v2 branch.
+
 ## Editing and review
 
 ### H15b · Very large library stress test (later, after MVP v2)

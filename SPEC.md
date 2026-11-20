@@ -153,6 +153,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   A view-local Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing
   word timing) narrows rendered passages, with counts, together with search; Next to review
   visits only shown passages (V223).
+  Each passage view also carries `automatic` (`timing_added`, `word_timing_missing` or null):
+  a derived system Needs review for word timing, never a stored row (V243, ADR 0191).
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
@@ -340,6 +342,26 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V244: Finished word-timing jobs stay in Activity until Clear finished, outcome first:
+  added (passage number when the recording is open, otherwise a count; changed and still
+  incomplete passages named), ready (added when the recording is next open, or when no
+  passage is being edited), not added because the passage changed, or not added with the
+  worker's own reason; failures keep their cards. Local word timing keeps its worker outcome
+  message on completion. Passages already queued, aligning or ready leave the Repair all
+  count at once, with the number already being timed in its tooltip (B510–B512, ADR 0191).
+- V243: Automatic Needs review for word timing is derived when review progress is read and
+  never stored as a review row (schema 19 unchanged); the passage view names the system
+  reason (`timing_added` / `word_timing_missing`). A row bound to the exact current passage
+  hash always wins, so a researcher's Checked or Not checked stays until the content changes
+  and a removed automatic mark is not invented again. Without such a row: "timing added" when
+  the current fingerprint equals one a real timing_realign version recorded for that passage
+  (`timing_added`, written atomically with the version, exact on lost-reply replay, bounded
+  to the newest 1,000 versions/20,000 entries, malformed evidence fails closed, no backfill);
+  otherwise "word timing missing" only in results meant to have word timing (mirroring
+  expectsWordTiming) for passages with lexical text. Speakers-only/untimed-by-design results
+  are never flagged. Review rows, revisions, deletion fingerprints, backups and portable
+  restore are unchanged and restore reproduces the same marks; marks stay outside Undo, and
+  Undo/Redo of timing return the content's own mark (ADR 0191).
 - V242: Contention on advisory progress.json or progress.pending never fails inference.
   Progress retries are bounded; failed cleanup retains the pending file for a later write
   and preserves the last readable stage. Mandatory JSON/output failures still propagate
@@ -2154,6 +2176,7 @@ T158|x|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, tr
 T159|~|Separate cursor-word timing interaction prototype f140a34 from4574083: OFF by default, native Text retained, start/end drafts in memory only, no save/API/CAS changes; 15 browser cases and independent limited-scope Go; boundary/selection/one-character and production save UX remain undecided; unmerged|V239,V240,V201,I.transcript
 T160|~|Project deletion in Activity: five recorded decisions traced into implementation proposal and30 deterministic scenarios; independent source evidence retained, proposed ADR0190/durable receipt and atomic disposition/Keep boundaries remain unaccepted; no production implementation|V8,V22,V148,ADR0092,ADR0101,ADR0102
 T161|~|Backup preparation in Activity: reviewed backend proposal plus3 current-behavior characterization passes; exact control bypass, cancellable admission, publishing/recovery and reciprocal deletion admission fences proposed; durable storage/restore policy undecided, no production task implemented|V3,V5,V8,ADR0096,ADR0158
+T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review, unmerged): derived automatic Needs review for missing/added timing with reasons, Activity outcomes for finished word timing, worker outcome message kept, Repair all count without in-flight passages; synthetic checks pass (239 focused backend and 77 browser cases; a broader 670-case backend run had one failure, the base branch's packaged mvp profile); real-library acceptance H15c pending|V243,V244,V186,V223,V103,I.passage-review,ADR0191
 
 ## §B Bug memory
 
@@ -2281,3 +2304,6 @@ B484|2026-11-20|Independent review of disabled Runtime supersession reproduced a
 B485|2026-11-20|The disabled supersession lost-reply path compared a caller-supplied digest string with the recorded receipt before validating the whole supplied body, accepting substituted evidence while returning the same successor|V219,T144,ADR0176; validate policy and canonical type-strict whole-body digest before deduplication; changed/null/retyped bodies refuse without writes while exact replay remains idempotent
 B482|2026-11-20|Independent review of the unintegrated full-GPU evidence helper found that bool GPU counts could compare equal to integers in supplied product metadata|V233,T154; require exact integer GPU metadata for both products; three adversarial cases failed before 2caa3b6 and passed after strict type checks
 B483|2026-11-20|The unintegrated full-GPU helper ignored unknown or contradictory job-update fields and treated resumable SUSPENDED as terminal|V233,T154; follow the pinned UCloud JobUpdate allowlist and strict nullable scalar/int64 types, reject unsupported resource evidence and admit only SUCCESS,FAILURE,EXPIRED as observed-final; 21 adversarial red cases before 13e2027; existing production state handling is unchanged
+B510|2026-11-20|Testing MVP v2: a per-passage "Add word timing" job vanished from Activity when it finished, because finished realignments were hidden as routine; the user could not tell whether timing had been added, was waiting for the recording to be opened, had been skipped because the passage changed, or had found nothing|V244, ADR 0191; finished word-timing jobs stay listed until Clear finished, with the outcome first (added with passage number or count, ready, not added: changed, not added: reason); end-to-end and routed browser regressions
+B511|2026-11-20|While implementing B510: the local job runner overwrote every finished job's message with "Complete", so the word-timing worker's own outcome ("Complete word timing for N of M passages", "Word timing could not be found…", ADR 0189's too-short skips) never reached Activity or the passage tag's tooltip; tests called queue.process directly and never saw the runner's final write|V244; completed local realign jobs keep the worker's message (others still say Complete); a unit test of the completion message and an end-to-end browser check through the real runner. Older jobs keep "Complete" and Activity names a generic reason
+B512|2026-11-20|Testing MVP v2: after "Add word timing" on one passage, "Repair all N incomplete passages" kept N while that passage was queued, aligning or ready (the timing is added only once no passage is being edited, and model loading took minutes), so the count looked stuck|V244; in-flight passages leave the count at once and the tooltip names them; the count re-renders when timing is applied; a passage whose words could not all be timed still counts as incomplete and Activity says so; end-to-end browser regression with a held aligner

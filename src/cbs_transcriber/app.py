@@ -3580,6 +3580,26 @@ def create_app(
             "COALESCE(json_extract(j.params,'$.realign'),0) AS realign, "
             "(json_extract(j.params,'$.realign_output') IS NOT NULL AND "
             "json_extract(j.params,'$.realign_applied') IS NULL) AS realign_ready, "
+            # ADR 0191: finished word timing keeps its outcome in Activity.
+            "CASE WHEN json_extract(j.params,'$.realign')=1 THEN json_object("
+            "'applied',json_extract(j.params,'$.realign_applied'),"
+            "'applied_count',COALESCE("
+            "json_array_length(j.params,'$.realign_apply_receipt.applied_ids'),"
+            "json_array_length(j.params,'$.realign_receipt.applied_ids')),"
+            "'skipped_count',COALESCE("
+            "json_array_length(j.params,'$.realign_apply_receipt.skipped_ids'),"
+            "json_array_length(j.params,'$.realign_receipt.skipped_ids')),"
+            "'output_count',CASE "
+            "WHEN json_type(j.params,'$.realign_output.passages')='object' THEN "
+            "(SELECT count(*) FROM json_each(j.params,'$.realign_output.passages')) "
+            "WHEN json_type(j.params,'$.realign_output')='object' THEN 1 END,"
+            "'complete_count',CASE "
+            "WHEN json_type(j.params,'$.realign_output.passages')='object' THEN "
+            "(SELECT count(*) FROM json_each(j.params,'$.realign_output.passages') "
+            "WHERE json_type(value,'$.word_timing')='true') "
+            "WHEN json_type(j.params,'$.realign_output')='object' THEN "
+            "json_type(j.params,'$.realign_output.word_timing')='true' END) "
+            "END AS realign_outcome, "
             "json_extract(j.params,'$.enhancement.execution') AS execution, "
             "CASE WHEN j.kind='enhance' AND "
             "json_extract(j.params,'$.source_snapshot.source_version_id') IS NOT NULL THEN "
@@ -3827,6 +3847,9 @@ def create_app(
             row["segment_ids"] = json.loads(row["segment_ids"]) if row["segment_ids"] else None
             row["source_changed"] = bool(row["source_changed"])
             row["realign"], row["realign_ready"] = bool(row["realign"]), bool(row["realign_ready"])
+            from .local_timing import activity_outcome
+
+            row["realign_outcome"] = activity_outcome(row["realign_outcome"])
             if row["ucloud_batch_id"]:
                 row.update(native_status[row["ucloud_batch_id"]])
         # Owner obligations outlive the recent per-file query, including deleted member rows.
