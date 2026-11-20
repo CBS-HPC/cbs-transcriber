@@ -132,6 +132,17 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** Media preparation finishes, the app stays usable, and memory/CPU stay reasonable.
 - **Status:** Not run.
 
+### H15a · Passage word timing on a real result (Add word timing / Repair all)
+
+- **Do:** On Windows, open a real result with untimed passages (for example "Per og Kim") and
+  use Repair all, then Add word timing on one passage whose interval is plausible.
+- **Pass when:** Passages whose saved interval is far too short for their text show "Too short
+  to time" and are not sent; Repair all runs every remaining unit without the "Local file
+  operation failed" error; Activity moves from "Loading local models…" to "Aligning words…";
+  timing appears for passages where speech is found, and the job message names any passages
+  left unchanged. Only synthetic tests and an offline replay of the 20 November job cover this.
+- **Status:** Not run.
+
 ## Editing and review
 
 ### H15b · Very large library stress test (later, after MVP v2)

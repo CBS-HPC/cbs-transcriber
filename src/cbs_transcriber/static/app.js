@@ -6584,19 +6584,38 @@ function clampedWindow(window) {
     end: Math.min(window.end, duration),
   };
 }
-function eligiblePassage(segment, segments = state.recording.segments) {
+// Mirrors enhancement.aligner_frames() (ADR 0189): the pinned wav2vec2 aligners place at
+// most one character per 20 ms frame, so text with more characters than frames never aligns.
+function alignerFrames(seconds) {
+  const samples = Math.floor(seconds * 16000) + 1;
+  return samples < 400 ? 1 : Math.floor((samples - 400) / 320) + 1;
+}
+// "time": Add word timing aligns it here; "whole": too long or no window, so the whole
+// result is offered; "short": its window has fewer aligner frames than characters.
+function timingKind(segment, segments = state.recording.segments) {
   const window = clampedWindow(
     timingWindow(segments, segments.indexOf(segment)),
   );
   const text = window.members.map((s) => s.text).join(" ");
-  return (
-    window.start != null &&
-    window.end != null &&
-    window.end > window.start &&
-    window.end - window.start <= 60 &&
-    Array.from(text).length <= 1200 &&
-    text.trim().split(/\s+/u).length <= 120
-  );
+  const words = text.split(/[\p{White_Space}\u001c-\u001f]+/u).filter(Boolean);
+  if (
+    !(
+      window.start != null &&
+      window.end != null &&
+      window.end > window.start &&
+      window.end - window.start <= 60 &&
+      Array.from(text).length <= 1200 &&
+      words.length <= 120
+    )
+  )
+    return "whole";
+  return Array.from(words.join(" ")).length >
+    alignerFrames(window.end - window.start)
+    ? "short"
+    : "time";
+}
+function eligiblePassage(segment, segments = state.recording.segments) {
+  return timingKind(segment, segments) === "time";
 }
 // Missing word timing is a compact "Add word timing" tag in the passage heading, like
 // "Review suggested"; the reason is its tooltip. Other timing states keep a quiet note.
@@ -6615,9 +6634,11 @@ function timingReason(segment) {
         : "Word timing missing or incomplete · passage highlighting";
 }
 // What "Add word timing" will do for this passage; every untimed passage gets the same tag.
-function timingScope(segment) {
-  if (!eligiblePassage(segment))
+function timingScope(segment, kind = timingKind(segment)) {
+  if (kind === "whole")
     return "Too long to time on its own (over 60 seconds or 120 words, or no timed neighbours within 60 seconds): opens Add word timing / speakers for the whole result.";
+  if (kind === "short")
+    return "The audio this passage can be searched in is too short for its text: the word aligner needs about 20 ms of audio per character, so word timing cannot be found there. The passage stays as it is.";
   return unboundedPassage(segment)
     ? "This passage has no start/end of its own: it is searched only between the neighbouring timed passages, together with adjacent untimed passages. That search window is never stored as timing; uncertain words stay untimed. You can start other passages meanwhile."
     : "Aligns only this passage on this computer and adds the timing to this result. You can start other passages meanwhile.";
@@ -6626,7 +6647,8 @@ function timingTag(segment, expectedTiming) {
   if (segment.word_timing || !timingGap(segment, expectedTiming)) return "";
   // The comparison is read only: its count is in the comparison note, with no actions.
   if (state.comparison?.segments.includes(segment)) return "";
-  return `<span class="passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-segment="${h(segment.id)}" data-reason="${h(timingReason(segment))}" data-scope="${h(timingScope(segment))}" ${eligiblePassage(segment) ? "" : "data-whole-result"}></span>`;
+  const kind = timingKind(segment);
+  return `<span class="passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-segment="${h(segment.id)}" data-reason="${h(timingReason(segment))}" data-scope="${h(timingScope(segment, kind))}" ${kind === "whole" ? "data-whole-result" : kind === "short" ? "data-too-short" : ""}></span>`;
 }
 function timingNote(segment, expectedTiming) {
   if (segment.word_timing || timingGap(segment, expectedTiming)) return "";
@@ -6689,16 +6711,20 @@ function refreshPassageRepairs() {
         );
         const left = ids.filter((id) => !waiting.has(id));
         const whole = host.dataset.wholeResult != null;
+        // Every listed passage is too short for its text: nothing here can time them.
+        const short = host.dataset.tooShort != null;
         disabled = !whole && !left.length;
         label =
-          whole || left.length
+          whole || short || left.length
             ? host.dataset.label
             : `Adding word timing to ${ids.length} passage(s)`;
         title = whole
           ? `${host.dataset.note} Opens Add word timing / speakers for the whole result.`
-          : featureOn("ucloud_enhancement")
-            ? `${host.dataset.note} Small selections use local WhisperX; larger selections can use an approved, prepared UCloud connection when original-v1 source proof is ready. Timing is added to this result as one version in History.`
-            : `${host.dataset.note} Local WhisperX times the selection on this computer. Timing is added to this result as one version in History.`;
+          : short
+            ? host.dataset.note
+            : featureOn("ucloud_enhancement")
+              ? `${host.dataset.note} Small selections use local WhisperX; larger selections can use an approved, prepared UCloud connection when original-v1 source proof is ready. Timing is added to this result as one version in History.`
+              : `${host.dataset.note} Local WhisperX times the selection on this computer. Timing is added to this result as one version in History.`;
         host.dataset.runIds = JSON.stringify(left);
       } else {
         const job = timingJob(resultId, ids[0]);
@@ -6706,9 +6732,12 @@ function refreshPassageRepairs() {
         const retry = ["failed", "interrupted", "cancelled"].includes(
           job?.state,
         );
-        disabled = !!progress;
-        label =
-          progress || (retry ? "Try word timing again" : "Add word timing");
+        // A window too short for its text cannot be aligned (ADR 0189); say so on the tag.
+        const short = !progress && host.dataset.tooShort != null;
+        disabled = !!progress || short;
+        label = short
+          ? "Too short to time"
+          : progress || (retry ? "Try word timing again" : "Add word timing");
         title =
           reason +
           (progress === "Adding"
@@ -6806,20 +6835,25 @@ function renderTimingWarning(result, selector) {
     target.innerHTML = summaryMarkup;
     return;
   }
+  const kinds = missing.map((s) => timingKind(s, result.segments));
   const ids = missing
-    .filter((s) => eligiblePassage(s, result.segments))
+    .filter((_, index) => kinds[index] === "time")
     .map((s) => s.id)
     .slice(0, 1000);
-  const others = missing.length - ids.length;
+  // Windows too short for their text are named, never sent or routed to the whole result.
+  const short = kinds.filter((kind) => kind === "short").length;
+  const others = missing.length - ids.length - short;
   const passages = `incomplete passage${missing.length === 1 ? "" : "s"}`,
-    note = `${missing.length} ${passages}; available timed words still highlight.${others ? ` ${others} cannot be timed in this request; use Add word timing / speakers for those.` : ""}`;
+    note = `${missing.length} ${passages}; available timed words still highlight.${short ? ` ${short} cannot be timed: the audio they can be searched in is too short for their text (the word aligner needs about 20 ms per character).` : ""}${others ? ` ${others} cannot be timed in this request; use Add word timing / speakers for those.` : ""}`;
   const label =
     ids.length === missing.length
       ? `Repair all ${missing.length} ${passages}`
       : ids.length
         ? `Repair ${ids.length} of ${missing.length} ${passages}`
-        : `Timing options for ${missing.length} ${passages}`;
-  target.innerHTML = `${summaryMarkup}<span class="bulk-passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-ids="${h(JSON.stringify(ids))}" data-label="${h(label)}" data-note="${h(note)}" ${ids.length ? "" : "data-whole-result"}></span>`;
+        : others
+          ? `Timing options for ${missing.length} ${passages}`
+          : `${missing.length} ${passages} too short to time`;
+  target.innerHTML = `${summaryMarkup}<span class="bulk-passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-ids="${h(JSON.stringify(ids))}" data-label="${h(label)}" data-note="${h(note)}" ${ids.length ? "" : others ? "data-whole-result" : "data-too-short"}></span>`;
 }
 function refreshSpeakerBadges(recording, previousRevision) {
   const speakers = [

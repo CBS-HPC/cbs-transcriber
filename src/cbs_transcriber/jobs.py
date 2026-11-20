@@ -36,6 +36,25 @@ class JobControlConflict(ValueError):
     """An earlier Stop/Retry still owns its local or remote control request."""
 
 
+def failure_message(exc):
+    """Curated Activity text for a failed job; never paths, keys or transcript bodies (B469).
+
+    Only a curated ValueError carries its own text. A busy file is not a disk problem, and a
+    missing key is a processing fault, not a missing file."""
+    if isinstance(exc, ValueError):
+        return str(exc)
+    if isinstance(exc, PermissionError):
+        return (
+            "A local file was busy or could not be opened (another program may have had it "
+            "open). Retry this job."
+        )
+    if isinstance(exc, OSError):
+        return "Local file operation failed. Check free space and that files still exist."
+    return (
+        "Unexpected processing error: expected job or recording data was missing. Retry this job."
+    )
+
+
 @contextmanager
 def preparation_slot(gate, guard):
     """Waiting for another file's local I/O must remain cancellable."""
@@ -1127,14 +1146,7 @@ class JobQueue:
             except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
                 from .native_batch import MonitoringInterrupted
 
-                # Known errors have curated messages; filesystem paths are not sent to the UI.
-                message = (
-                    str(exc)
-                    if isinstance(exc, ValueError)
-                    else (
-                        "Local file operation failed. Check free space and that files still exist."
-                    )
-                )
+                message = failure_message(exc)
                 finish(
                     "interrupted"
                     if self.active_batch_id and isinstance(exc, MonitoringInterrupted)

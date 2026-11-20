@@ -55,6 +55,19 @@ longer relies on a Windows-only socket close: it first shuts each connection dow
 own duplicate descriptor, which also reaches a stalled TLS handshake (ADR 0178 amendment,
 B465). Windows-verified (272 funding tests); Linux only by a stdlib probe; macOS pending.
 
+20 November (Claude, `claude/timing-units-fix`, not merged or loaded): local passage word
+timing on the MVP v2 preview. Repair all no longer fails when Windows briefly refuses the
+progress file (B468); job failures name busy files and processing faults separately from disk
+problems (B469); windows too short for their text are refused, skipped when frozen and shown as
+"Too short to time", and Activity shows "Aligning words…" (B470, ADR 0189). Synthetic and
+offline-replay evidence only; a real WhisperX run on the user's audio is human check H15a.
+
+- [ ] **Local passage timing reliability candidate (B468–B470/B481/B486/B487, ADR 0189).**
+  Frozen backend gate: 377 passes; final browser gate: 22 passes, plus independent real
+  Windows held-reader and cancellation checks. Unicode parity is verified; local rc2
+  packaging is pending; [verification](docs/verification-2026-11-20-timing-rc2.md). Real-library
+  WhisperX acceptance remains H15a; this candidate has not been loaded or published.
+
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
 It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime

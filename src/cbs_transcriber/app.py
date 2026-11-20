@@ -2304,6 +2304,8 @@ def create_app(
                         recording["duration"],
                         # Repair all leaves out what cannot be timed alone; one tag explains.
                         skip_invalid=len(wanted) > 1,
+                        # No 1 s alignment for text that cannot fit its window (ADR 0189).
+                        alignable_only=True,
                     )
                     if not set(unit["ids"]) & pending
                 ]

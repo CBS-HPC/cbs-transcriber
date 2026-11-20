@@ -46,6 +46,43 @@ def test_v6_failed_second_chunk_resumes_without_resubmitting_first(
     assert store.recording(recording["id"])["segments"][1]["start"] == 900
 
 
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (KeyError("char_start"), "Unexpected processing error: expected job or recording data"),
+        (PermissionError(13, "Permission denied"), "A local file was busy or could not be opened"),
+        (FileNotFoundError(2, "No such file"), "Local file operation failed. Check free space"),
+        (ValueError("Curated reason."), "Curated reason."),
+    ],
+)
+def test_failed_job_messages_name_the_kind_of_failure(
+    client, credentials, monkeypatch, error, expected
+):
+    """B469: a missing key or a busy file is not reported as a disk-space problem."""
+    store = client.app.state.store
+    project = store.create_project("Research")
+    recording = store.create_recording(project["id"], "interview.wav")
+    store.execute("UPDATE recordings SET status='ready',duration=60 WHERE id=?", (recording["id"],))
+    job = store.add_job(
+        recording["id"],
+        "transcribe",
+        {"settings": Settings(base_url=COMPATIBLE_API_URL).model_dump(), "revision": 0},
+    )
+    worker = JobQueue(store, credentials)
+
+    def process(identifier):
+        assert identifier == job["id"]
+        worker.stopping.set()  # One claimed job, then this synchronous worker ends.
+        raise error
+
+    monkeypatch.setattr(worker, "process", process)
+    worker.run()
+    failed = store.job(job["id"])
+    assert failed["state"] == "failed"
+    assert failed["message"].startswith(expected)
+    assert "char_start" not in failed["message"]
+
+
 def test_chunk_boundaries_prefer_silence_without_gaps():
     chunks = chunk_boundaries(2000, [895, 1790])
     assert chunks == [(0, 895), (895, 1790), (1790, 2000)]

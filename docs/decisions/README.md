@@ -188,5 +188,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; hidden in the MVP profile)
 - [0183 — Native batch early uploads, limits and plain status](0183-native-batch-early-uploads-limits-status.md)
 - [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile)
+- [0189 — Passage timing windows too short for their text are not aligned](0189-windows-too-short-for-their-text.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

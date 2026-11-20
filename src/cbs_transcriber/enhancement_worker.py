@@ -12,6 +12,7 @@ import os
 import platform
 import re
 import sys
+import time
 import unicodedata
 import wave
 from array import array
@@ -1238,6 +1239,27 @@ def write_json(path, value):
             os.close(descriptor)
 
 
+def write_progress(directory, stage, fraction, *, attempts=20, pause=0.01):
+    """Progress is advisory: the app polling it must never fail the work (B468).
+
+    On Windows the replace is refused while the app has progress.json open for a moment.
+    Retry briefly; if it stays busy, keep the previous stage. Output files use write_json,
+    whose errors always propagate."""
+    path = directory / "progress.json"
+    for attempt in range(attempts):
+        try:
+            write_json(path, {"stage": stage, "fraction": fraction})
+            return True
+        except PermissionError:
+            if attempt + 1 < attempts:
+                time.sleep(pause)
+    try:
+        path.with_suffix(".pending").unlink(missing_ok=True)
+    except PermissionError:
+        pass  # A reader may hold the advisory pending name too; a later write can reuse it.
+    return False
+
+
 def processing_environment(directory, stage, options, torch):
     """Observe a fixed worker-fact allowlist; never collect host names or environment vars."""
     import platform
@@ -2063,7 +2085,7 @@ def execute(request, directory, *, stage=None):
     def progress(stage, fraction):
         if stage == "loading" and RUNTIME_CACHE is not None:
             return  # Stage passes retain the last actual inference progress until new work starts.
-        write_json(directory / "progress.json", {"stage": stage, "fraction": fraction})
+        write_progress(directory, stage, fraction)
 
     def snapshot(key):
         repo, revision = MODELS[key]
@@ -2196,6 +2218,9 @@ def execute(request, directory, *, stage=None):
             )
             if CACHE_ALIGNMENT:
                 ALIGNMENT_CACHE = (identity, (model, metadata))
+        # The model is ready: Activity moves on from "Loading local models…" before the first
+        # window is aligned, not only after it (B470). Later windows report their own progress.
+        progress("aligning", 0.3)
         result = align_passages(
             whisperx,
             model,
@@ -2286,9 +2311,7 @@ def process_directory(directory, *, stage=None):
                 module.__file__ = str(helper)
                 exec(compile(raw, str(helper), "exec"), module.__dict__)
                 if not (directory / "audio.preparation.json").exists():
-                    write_json(
-                        directory / "progress.json", {"stage": "preparation", "fraction": 0.05}
-                    )
+                    write_progress(directory, "preparation", 0.05)
                 module.prepare(directory)
             offline = "0" if request["options"]["allow_downloads"] else "1"
             os.environ.update(
