@@ -810,8 +810,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Activity asks per batch whether to use a full GPU, stating its higher credit use; nothing
   switches without that click (amends ADR 0124). Detecting "no MIG free" needs UCloud capacity
   or queue evidence before activation.
-  Full-GPU ask: proposed design only in [ADR 0184](docs/decisions/0184-native-full-gpu-ask.md)
-  (V233/T154; not implemented or reviewed). User decisions 19 November: ask as soon as two
+  Full-GPU ask: [ADR 0184](docs/decisions/0184-native-full-gpu-ask.md) remains unintegrated.
+  Supplied-data capacity/never-started helpers are implemented and reviewed synthetically;
+  [verification and activation limits](docs/verification-2026-11-20-native-gpu-helpers.md).
+  (V233/T154; activation is not implemented or reviewed). User decisions 19 November: ask as soon as two
   capacity reads agree the MIG is full and a full B200 is free (no queue-time threshold),
   preferably before the POST; a queued MIG is cancelled and proven never started first; Retry
   returns to the MIG; hidden in MVP v2. Read-only live evidence is permitted once implemented;
