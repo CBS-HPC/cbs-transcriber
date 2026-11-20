@@ -188,6 +188,9 @@ class ProjectDeletionTasks:
     def __init__(self, store, queue, owner):
         self.store, self.queue, self.deletions = store, queue, owner
         self.lock = threading.Condition(threading.RLock())
+        # Serializes admission, so an exact replay that races its own first request finds
+        # the same task and shutdown never misses a task accepted while it begins.
+        self.admission = threading.Lock()
         self.tasks = {}
         self.inactive = {}
         self.waiting = deque()
@@ -245,6 +248,10 @@ class ProjectDeletionTasks:
 
     def start(self, project_id, *, operation_id, fingerprint=None, confirm_shared=False):
         """Accept one previewed and confirmed deletion; return (summary, created)."""
+        with self.admission:
+            return self._start(project_id, operation_id, fingerprint, confirm_shared)
+
+    def _start(self, project_id, operation_id, fingerprint, confirm_shared):
         digest = _digest(
             {
                 "project": project_id,
@@ -509,7 +516,7 @@ class ProjectDeletionTasks:
 
     def close(self):
         """Seal admission and keep every project not yet past its point of no return (S1)."""
-        with self.lock:
+        with self.admission, self.lock:
             self.closed = True
             for task in self.tasks.values():
                 if task.state == "running":

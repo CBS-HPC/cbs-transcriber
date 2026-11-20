@@ -21,7 +21,8 @@ const CBSProjectDeletions = (() => {
     };
   let signature = "",
     refreshing = null,
-    again = false;
+    again = false,
+    inflight = 0;
   const left = new Set();
   function taskId(job) {
     const id = job?.project_deletion?.id;
@@ -59,6 +60,14 @@ const CBSProjectDeletions = (() => {
   // Preview, confirm and hand off. Returns the accepted task, or null when declined or
   // when the dialog's view changed before the hand-off.
   async function start(project, current) {
+    inflight += 1;
+    try {
+      return await handOff(project, current);
+    } finally {
+      inflight -= 1;
+    }
+  }
+  async function handOff(project, current) {
     const summary = await api(`/projects/${project.id}/deletion-preview`, {
       method: "POST",
     });
@@ -224,5 +233,7 @@ const CBSProjectDeletions = (() => {
     await pollJobs().catch(() => {});
     redraw(id);
   });
-  return { start, card, observe, attention, refresh };
+  // Hand-offs still waiting for their preview or acceptance reply (tests observe it).
+  const busy = () => inflight > 0;
+  return { start, card, observe, attention, refresh, busy };
 })();

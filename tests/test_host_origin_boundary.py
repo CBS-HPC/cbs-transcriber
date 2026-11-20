@@ -11,6 +11,7 @@ from cbs_transcriber.app import create_app, create_chooser_app
     [
         "app.js",
         "background_exports.js",
+        "project_deletions.js",
         "deleted_passages.js",
         "manual_review.js",
         "change_steps.js",

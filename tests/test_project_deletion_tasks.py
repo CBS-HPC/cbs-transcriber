@@ -949,3 +949,21 @@ def test_staging_refusal_waits_visibly_and_keep_still_wins(client, monkeypatch):
     assert response.status_code in {200, 202}, response.text
     assert settled(client, task["id"])["state"] == "kept"
     assert_preserved(store, fixture)
+
+
+def test_d3_reserved_control_epoch_change_refuses_admission(client, monkeypatch):
+    store = client.app.state.store
+    project = store.create_project("Reserved control study")
+    recording = store.create_recording(project["id"], "a.wav")
+    job = queued_job(store, recording["id"])
+    epoch = [1]
+    # A source-inspection or input-intent job's generation/epoch authority, as captured.
+    monkeypatch.setattr(
+        deletions.Deletions, "_control", lambda self, row: ("intent", "g", epoch[0], False)
+    )
+    summary = preview(client, project["id"])
+    epoch[0] = 2  # Its own authority moved on (e.g. an explicit Prepare) after the preview.
+    response = start(client, project["id"], summary=summary)
+    assert response.status_code == 409 and "changed" in response.json()["detail"]
+    assert not tasks(client).tasks and not tasks(client).inactive
+    assert store.job(job["id"])["state"] == "queued"

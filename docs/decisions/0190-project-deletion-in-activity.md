@@ -72,7 +72,8 @@ running or waiting). It orchestrates the existing primitives only:
    route, refuses single-job UCloud blockers **before** any Stop, marks the operation as
    task-owned (it no longer expires and no `DELETE` continuation may drive it), writes the
    receipt and installs the project fence before replying. An exact replay returns the same
-   task; a changed body is refused without writes.
+   task; a changed body is refused without writes. Admission is serialized, so a replay
+   racing its own first request and an app shutdown both see a settled admission.
 2. **Stopping jobs** dispatches only the captured Stop controls (`_cancel`), checking Keep and
    shutdown before the first control and between generic dispatches. It then waits outside
    all locks for the complete existing drain evidence (`_pending`: control slots, worker

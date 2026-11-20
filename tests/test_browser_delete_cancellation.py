@@ -139,46 +139,31 @@ def test_late_delete_reply_does_not_navigate_away_from_new_recording(page, local
 
 
 @pytest.mark.parametrize("project_refresh", [False, True])
-def test_project_filesystem_failure_clears_progress_and_allows_retry(
-    page, local_app, project_refresh
-):
+def test_project_handoff_refusal_clears_progress_and_allows_retry(page, local_app, project_refresh):
+    """ADR 0190: the dialog only hands off; a refused hand-off stays in the dialog."""
     _, project, first, _ = setup_recordings(local_app)
     held, calls = [], []
-    message = "Windows could not remove the recording folder. Files and project were kept."
+    message = "This deletion changed or newer work started. Recordings were kept."
 
-    def deletion(route):
+    def handoff(route):
         calls.append(route.request.url)
-        if len(calls) == 1:
-            route.fulfill(
-                status=202,
-                json={
-                    "ok": False,
-                    "status": "cancelling",
-                    "operation_id": OPERATION,
-                    "message": "Stopping jobs before deletion…",
-                },
-            )
-        else:
-            held.append(route)
-            page.evaluate("window.projectDeleteReplyHeld = true")
-            page.evaluate("count => { window.projectDeleteRequestCount = count; }", len(calls))
+        held.append(route)
+        page.evaluate("count => { window.projectHandoffCount = count; }", len(calls))
 
-    page.route(
-        f"**/api/projects/{project['id']}*",
-        lambda route: deletion(route) if route.request.method == "DELETE" else route.continue_(),
-    )
+    page.route(f"**/api/projects/{project['id']}/deletion-tasks", handoff)
     page.goto(local_app.url + f"/#/projects/{project['id']}")
     page.locator("#project-settings-open").click()
     page.locator("#project-delete").click()
     page.locator("#delete-project-confirm").fill(project["name"])
     page.locator("#delete-project-submit").click()
-    page.wait_for_function("() => window.projectDeleteReplyHeld === true")
-    expect(page.locator("#delete-project-progress")).to_have_text("Stopping jobs before deletion…")
+    page.wait_for_function("() => window.projectHandoffCount === 1")
+    expect(page.locator("#delete-project-progress")).to_have_text("Checking what will be deleted…")
+    expect(page.locator("#delete-project-submit")).to_be_disabled()
     if project_refresh:
         # Polling can replace the project projection while this same dialog owns its request.
         page.evaluate("state.project = null")
     held.pop().fulfill(status=409, json={"detail": message})
-    page.wait_for_function("() => pendingDeletions.size === 0")
+    page.wait_for_function("() => !CBSProjectDeletions.busy()")
     expect(page.locator("#delete-project-dialog")).to_be_visible()
     expect(page.locator("#delete-project-error")).to_have_text(message)
     expect(page.locator("#delete-project-error")).to_be_visible()
@@ -186,45 +171,50 @@ def test_project_filesystem_failure_clears_progress_and_allows_retry(
     expect(page.locator("#delete-project-submit")).to_be_enabled()
     expect(page).to_have_url(local_app.url + f"/#/projects/{project['id']}")
     expect(page.locator(f'article[data-recording="{first["id"]}"]')).to_be_visible()
+    expect(page.locator("#jobs .job[data-project-deletion]")).to_have_count(0)
     page.locator("#delete-project-submit").click()
-    page.wait_for_function("() => window.projectDeleteRequestCount === 3")
+    page.wait_for_function("() => window.projectHandoffCount === 2")
     expect(page.locator("#delete-project-error")).to_be_hidden()
     expect(page.locator("#delete-project-progress")).to_be_visible()
     held.pop().fulfill(status=409, json={"detail": message})
-    page.wait_for_function("() => pendingDeletions.size === 0")
+    page.wait_for_function("() => !CBSProjectDeletions.busy()")
     expect(page.locator("#delete-project-error")).to_have_text(message)
     expect(page.locator("#delete-project-progress")).to_be_hidden()
     expect(page.locator("#delete-project-submit")).to_be_enabled()
 
 
-def test_reopened_project_delete_dialog_ignores_old_failure(page, local_app):
+def test_reopened_project_delete_dialog_ignores_old_handoff(page, local_app):
     _, project, _, _ = setup_recordings(local_app)
-    held = []
+    held, handoffs = [], []
 
-    def deletion(route):
-        if route.request.method == "DELETE":
-            held.append(route)
-            page.evaluate("window.oldProjectDeleteHeld = true")
-        else:
-            route.continue_()
+    def preview(route):
+        held.append(route)
+        page.evaluate("window.oldProjectPreviewHeld = true")
 
-    page.route(f"**/api/projects/{project['id']}*", deletion)
+    page.route(f"**/api/projects/{project['id']}/deletion-preview", preview)
+    page.route(
+        f"**/api/projects/{project['id']}/deletion-tasks",
+        lambda route: (handoffs.append(route.request.url), route.continue_()),
+    )
     page.goto(local_app.url + f"/#/projects/{project['id']}")
     page.locator("#project-settings-open").click()
     page.locator("#project-delete").click()
     page.locator("#delete-project-confirm").fill(project["name"])
     page.locator("#delete-project-submit").click()
-    page.wait_for_function("() => window.oldProjectDeleteHeld === true")
+    page.wait_for_function("() => window.oldProjectPreviewHeld === true")
     expect(page.locator("#delete-project-progress")).to_be_visible()
     page.locator('#delete-project-dialog [data-close="delete-project-dialog"]').first.click()
     page.locator("#project-settings-open").click()
     page.locator("#project-delete").click()
     page.locator("#delete-project-confirm").fill(project["name"])
     expect(page.locator("#delete-project-progress")).to_be_hidden()
-    held.pop().fulfill(status=409, json={"detail": "An earlier folder removal was refused."})
-    page.wait_for_function("() => pendingDeletions.size === 0")
+    # The closed dialog's preview completes; it must neither hand off nor touch the new one.
+    held.pop().continue_()
+    page.wait_for_function("() => !CBSProjectDeletions.busy()")
+    assert handoffs == []
     expect(page.locator("#delete-project-dialog")).to_be_visible()
     expect(page.locator("#delete-project-error")).to_be_hidden()
     expect(page.locator("#delete-project-progress")).to_be_hidden()
     expect(page.locator("#delete-project-confirm")).to_have_value(project["name"])
     expect(page.locator("#delete-project-submit")).to_be_enabled()
+    expect(page.locator("#projects .project-link.deleting")).to_have_count(0)
