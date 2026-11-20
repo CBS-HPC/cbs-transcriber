@@ -227,3 +227,58 @@ def test_late_keep_reports_actual_transaction_outcome_not_precommit_intent(
     else:
         assert replies[0].status_code in (200, 202), replies[0].text
         assert done["committed"] is False and project_exists(store, project["id"])
+
+
+def test_capture_reservation_releases_after_copy_exception(client, hold_stop):
+    owner = client.app.state.project_deletions
+    store = client.app.state.store
+    project = store.create_project("Capture exception")
+    preview = client.post(f"/api/projects/{project['id']}/deletion-preview").json()
+    with pytest.raises(RuntimeError, match="Synthetic copy failure"):
+        with owner.capture_exclusive():
+            raise RuntimeError("Synthetic copy failure")
+    task, created = owner.start(project["id"], operation_id=preview["operation_id"])
+    assert created is True
+    try:
+        assert hold_stop.entered.wait(10)
+        owner.keep(task["id"], project["id"])
+    finally:
+        hold_stop.release.set()
+    assert settled(client, task["id"])["state"] == "kept"
+    with owner.capture_exclusive():
+        assert not owner.fenced()
+
+
+def test_capture_reservation_refuses_entry_after_owner_closes(client):
+    owner = client.app.state.project_deletions
+    owner.close()
+    with pytest.raises(HTTPException) as refusal:
+        with owner.capture_exclusive():
+            raise AssertionError("A closed owner granted a fresh capture reservation")
+    assert refusal.value.status_code == 409
+
+
+def test_unknown_commit_facts_never_offer_keep_or_claim_project_deleted(client):
+    owner = client.app.state.project_deletions
+    task = project_deletion_tasks.Task(
+        "a" * 32,
+        "b" * 32,
+        "Unknown outcome",
+        "c" * 32,
+        "d" * 64,
+        "2026-11-20T22:00:00Z",
+        "2026-11-20T22:00:00Z",
+        committed=None,
+    )
+    with owner.lock:
+        owner.tasks[task.identifier] = task
+    try:
+        assert owner.summary(task)["can_keep"] is False
+        with pytest.raises(HTTPException) as refusal:
+            owner.keep(task.identifier, task.project_id)
+        assert refusal.value.status_code == 409
+        assert refusal.value.detail["code"] == "deletion_unresolved"
+        assert task.keep_requested is False
+    finally:
+        with owner.lock:
+            del owner.tasks[task.identifier]
