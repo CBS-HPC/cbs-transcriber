@@ -171,6 +171,10 @@ Functional acceptance does not establish speed.
   separate controls-ready, primary API, render and background-settled timing. Preserve exact
   timing/history/Working/inverse and snapshot/recovery contracts. These further changes are
   explicitly deferred until after MVP.
+  **Broadened 20 November (post-v2 weekend):** testing MVP v2 the user still finds manual
+  editing slow on long transcripts, not only Save and Split: opening and typing in long
+  passages, Save, Merge, Split and Delete on 600–2,000-passage transcripts. Measure each action
+  end to end (click to usable controls) with synthetic fixtures and fix the largest costs.
 
 Requested source cleanup is complete in main and Desktop: the retired external preparation
 bundle is removed, and both historical Markdown archives are under docs/archive with incoming
@@ -583,6 +587,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   blocking wording changes. ADR 0156 retains the older conservative generation for history.
   Automatic timing estimates and the broader redesign remain post-MVP;
   any future estimate must be labelled and distinct from aligned/verified timing.
+  **User design direction, 20 November (post-v2):** (1) the word-timing editor should look like
+  the ordinary Text editor, plus two boxes for the start and end time: the user puts the
+  cursor on a word and the boxes show that word's timing, editable in place (replacing the
+  ordinal/word dropdown). (2) The dotted underline of uncertain words should also show while
+  the Text editor is open, drawn in its highlighting surface behind the textarea; keep it
+  distinct from the spelling redesign's underline (for example dotted vs wavy) so both can
+  mark the same word. Preserve draft, caret, native Undo, typing focus and late-reply fences.
 - [x] **Realignment alignment-hint provenance — local child only.** ADR 0169 now seals the
   fresh host policy and invalidates whole-passage source alignment-fit hints after actual
   timing replacement/adoption, including omitted words. Exact legacy transforms, raw evidence,
