@@ -95,7 +95,7 @@ def release_hints(page):
 
 def test_long_real_save_and_split_do_not_repaint_again_when_changed_hints_arrive(page, local_app):
     store, identifier, result_id = seed(page, local_app, count=600)
-    expect(page.locator("#passage-0 .review-flag")).to_have_count(1)
+    expect(page.locator("#passage-0.review")).to_have_count(1)
     review = page.locator("#passage-10 [data-review-status]")
     expect(review).to_be_enabled()
     review.select_option("checked")
@@ -114,8 +114,8 @@ def test_long_real_save_and_split_do_not_repaint_again_when_changed_hints_arrive
     release_hints(page)
     assert page.evaluate("window.fullRenders") == 1
     assert page.evaluate("window.afterSave === document.getElementById('passage-10')")
-    expect(page.locator("#passage-0 .review-flag")).to_have_count(0)
-    expect(page.locator("#passage-10 .review-flag")).to_have_count(1)
+    expect(page.locator("#passage-0.review")).to_have_count(0)
+    expect(page.locator("#passage-10.review")).to_have_count(1)
     expect(review).to_have_value("checked")
     expect(page.locator("#timing-coverage")).to_contain_text("599 complete, 1 partial")
     current = store.recording(identifier)
@@ -247,6 +247,6 @@ def test_late_hints_preserve_an_open_draft_and_apply_on_cancel_without_rebuild(p
     ) == [3, 8]
     assert page.evaluate("currentHints().origin") == "new"
     page.locator('#passage-0 [data-action="cancel-edit"]:visible').click()
-    expect(page.locator("#transcript .review-flag")).to_have_count(0)
+    expect(page.locator("#transcript .passage.review")).to_have_count(0)
     assert page.evaluate("window.fullRenders") == 0
     assert page.evaluate("window.editWrites") == []

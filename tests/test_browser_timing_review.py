@@ -90,7 +90,7 @@ def test_missing_timing_is_found_by_show_and_next_to_review(page, local_app):
     reason = page.locator("#passage-1 [data-review-reason]")
     expect(reason).to_have_text("word timing missing")
     assert "Set automatically" in reason.get_attribute("title")
-    expect(status(page, 2)).to_have_value("needs_review")
+    expect(status(page, 2)).to_have_value("missing_timing")
     expect(page.locator("#passage-2 [data-review-reason]")).to_have_count(0)
     show(page).select_option("needs_review")
     expect(page.locator("#transcript > .passage:not([hidden])")).to_have_count(2)
@@ -116,6 +116,7 @@ def test_missing_timing_is_found_by_show_and_next_to_review(page, local_app):
     # A result never meant to have word timing is not flagged.
     page.goto(local_app.url + f"/#/recordings/{speakers}")
     expect(summary(page)).to_have_text("Manual review · Checked 0 of 1 · Needs review 0")
+    expect(status(page, 1)).to_have_value("not_checked")
     expect(page.locator("[data-review-reason]")).to_have_count(0)
 
 

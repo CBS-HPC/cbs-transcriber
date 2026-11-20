@@ -6243,22 +6243,7 @@ async function loadHints() {
 }
 
 function refreshPassageHintFlag(passage, reasons) {
-  const heading = passage.querySelector(".passage-heading");
-  let flag = heading.querySelector(".review-flag");
   passage.classList.toggle("review", !!reasons);
-  if (reasons) {
-    if (!flag) {
-      flag = document.createElement("span");
-      flag.className = "review-flag";
-      // Tags follow the review status dropdown when it is shown (user, 20 November).
-      (
-        heading.querySelector("[data-manual-review]") ||
-        heading.querySelector(".timestamp")
-      ).insertAdjacentElement("afterend", flag);
-    }
-    flag.textContent = "Review suggested";
-    flag.title = `Review suggested: ${reasons.join("; ")}. Model signals, not a measure of correctness.`;
-  } else flag?.remove();
 }
 function refreshTranscriptHints() {
   if (!state.recording) return;
@@ -6371,7 +6356,7 @@ function uncertaintyView() {
     ids.length === flagged.length
       ? `Re-transcribe all ${ids.length} of ${segments.length} flagged passages`
       : `Re-transcribe ${ids.length} of ${flagged.length} flagged passages`;
-  tag.title = `New wording from WhisperX for the passages marked "Review suggested", saved as a separate result to compare.${ids.length < flagged.length ? " Only flagged passages with a known audio interval of at most 60 seconds are sent, at most 200 at a time." : ""}`;
+  tag.title = `New wording from WhisperX for the passages flagged Uncertain, saved as a separate result to compare.${ids.length < flagged.length ? " Only flagged passages with a known audio interval of at most 60 seconds are sent, at most 200 at a time." : ""}`;
   updateTranscriptTags();
   $("#uncertainty-note").textContent = available
     ? `${view.flagged.size} passage(s) suggested for review${hints.edited_passages ? ` · ${hints.edited_passages} edited passage(s) no longer show model signals` : ""}`
@@ -6643,8 +6628,8 @@ function timingKind(segment, segments = state.recording.segments) {
 function eligiblePassage(segment, segments = state.recording.segments) {
   return timingKind(segment, segments) === "time";
 }
-// Missing word timing is a compact "Add word timing" tag in the passage heading, like
-// "Review suggested"; the reason is its tooltip. Other timing states keep a quiet note.
+// Missing word timing is a compact "Add word timing" tag in the passage heading;
+// its reason is the tooltip. Other timing states keep a quiet note.
 function timingReason(segment) {
   const currentWords = playbackWords(segment).size;
   return segment.edited &&
@@ -7690,7 +7675,7 @@ function renderTranscript() {
                 ? "Plays the original source passage; this fragment has no word timestamps"
                 : "Replay this passage";
           const reasons = review.flagged.get(segment.id);
-          return `<article class="${["passage", timingGap(segment, expectedTiming) && "timing-gap", reasons && "review"].filter(Boolean).join(" ")}" id="passage-${segment.id}" data-segment="${segment.id}"><div class="passage-heading"><span class="speaker-badge s${speakers.indexOf(segment.speaker) % 4}" title="${h(speakerName(recording, segment.speaker))}">${h(speakerName(recording, segment.speaker))}</span><button class="timestamp" data-action="seek" ${segment.start == null ? "disabled" : ""}>${time(segment.start)}</button>${reasons ? `<span class="review-flag" title="${h(`Review suggested: ${reasons.join("; ")}. Model signals, not a measure of correctness.`)}">Review suggested</span>` : ""}${timingTag(segment, expectedTiming)}<div class="passage-actions"><button data-action="replay" aria-label="${replayLabel} ${segmentIndex + 1}" ${replay ? "" : "disabled"} title="${replayHelp}">▷ ${replayLabel}</button><button data-action="edit" ${state.mode === "word" && !segment.word_timing ? 'disabled title="Use Free text or restore original timing"' : ""}>${state.mode === "word" ? "Correct" : "Edit"}</button>${state.mode === "free" ? `<button data-action="merge-up" ${segmentIndex === 0 ? "disabled" : ""}>Merge up</button><button data-action="merge-down" ${segmentIndex === recording.segments.length - 1 ? "disabled" : ""}>Merge down</button>${featureOn("retranscribe") ? `<button data-action="retranscribe" ${retranscribable(segment) ? "" : 'disabled title="Needs a known audio interval of at most 60 seconds"'}>Re-transcribe</button>` : ""}<button class="danger" data-action="delete" aria-label="Delete passage ${segmentIndex + 1}" title="Delete this passage; earlier versions remain in History">Delete</button>` : ""}${segment.edited ? '<button data-action="restore">↶ Restore original</button>' : ""}</div></div>${editing ? passageEditorMarkup(segment) : `<p class="passage-text"></p>`}${timingNote(segment, expectedTiming)}</article>`;
+          return `<article class="${["passage", timingGap(segment, expectedTiming) && "timing-gap", reasons && "review"].filter(Boolean).join(" ")}" id="passage-${segment.id}" data-segment="${segment.id}"><div class="passage-heading"><span class="speaker-badge s${speakers.indexOf(segment.speaker) % 4}" title="${h(speakerName(recording, segment.speaker))}">${h(speakerName(recording, segment.speaker))}</span><button class="timestamp" data-action="seek" ${segment.start == null ? "disabled" : ""}>${time(segment.start)}</button>${timingTag(segment, expectedTiming)}<div class="passage-actions"><button data-action="replay" aria-label="${replayLabel} ${segmentIndex + 1}" ${replay ? "" : "disabled"} title="${replayHelp}">▷ ${replayLabel}</button><button data-action="edit" ${state.mode === "word" && !segment.word_timing ? 'disabled title="Use Free text or restore original timing"' : ""}>${state.mode === "word" ? "Correct" : "Edit"}</button>${state.mode === "free" ? `<button data-action="merge-up" ${segmentIndex === 0 ? "disabled" : ""}>Merge up</button><button data-action="merge-down" ${segmentIndex === recording.segments.length - 1 ? "disabled" : ""}>Merge down</button>${featureOn("retranscribe") ? `<button data-action="retranscribe" ${retranscribable(segment) ? "" : 'disabled title="Needs a known audio interval of at most 60 seconds"'}>Re-transcribe</button>` : ""}<button class="danger" data-action="delete" aria-label="Delete passage ${segmentIndex + 1}" title="Delete this passage; earlier versions remain in History">Delete</button>` : ""}${segment.edited ? '<button data-action="restore">↶ Restore original</button>' : ""}</div></div>${editing ? passageEditorMarkup(segment) : `<p class="passage-text"></p>`}${timingNote(segment, expectedTiming)}</article>`;
         })
         .join("")
     : recording.active_transcript_id

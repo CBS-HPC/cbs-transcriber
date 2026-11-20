@@ -92,7 +92,7 @@ def open_filtered(page, fixture):
     expect(page.locator("[data-review-summary]")).to_have_text(
         "Manual review · Checked 1 of 5 · Needs review 1"
     )
-    expect(page.locator("#passage-3 .review-flag")).to_have_count(1)
+    expect(status(page, 4)).to_have_value("uncertain")
     expect(show(page)).to_be_visible()
     expect(show(page)).to_have_value("all")
 
@@ -160,7 +160,7 @@ def test_each_show_option_filters_with_counts_without_changing_marks(page, filte
     expect(uncertain).to_have_js_property("disabled", False)
     show(page).select_option("uncertain")
     expect_visible(page, ["3"])
-    expect(status(page, 4)).to_have_value("not_checked")
+    expect(status(page, 4)).to_have_value("uncertain")
     assert passage_review.read(store, rid, result) == before
     assert writes == []
 

@@ -45,8 +45,9 @@ def test_lowest_confidence_passages_and_words_are_marked_until_edited(page, loca
     expect(page.locator("#uncertainty-controls")).to_be_visible()
     expect(page.locator("#show-uncertainty")).to_be_checked()
     expect(page.locator(".passage.review")).to_have_count(1)
-    expect(page.locator("#passage-3 .review-flag")).to_have_text("Review suggested")
-    expect(page.locator("#passage-3 .review-flag")).to_have_attribute(
+    expect(page.locator("#passage-3 [data-review-status]")).to_have_value("uncertain")
+    expect(page.locator("#transcript .review-flag")).to_have_count(0)
+    expect(page.locator("#passage-3 [data-review-status]")).to_have_attribute(
         "title", __import__("re").compile("decoding confidence.*not a measure of correctness")
     )
     weak = page.locator("#passage-2 .uncertain-word")

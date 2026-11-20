@@ -141,10 +141,17 @@ def test_dirty_passage_cannot_be_checked_and_other_marks_keep_its_draft(page, re
         "node.selectionStart === 5 && node.selectionEnd === 12"
     )
     page.locator("#passage-0 [data-action=save-edit]").click()
-    expect(status(page, 1)).to_have_value("needs_review")
+    # The saved edit lacks complete timing: the new dropdown names that automatic
+    # reason, while the underlying stale-Checked review state remains Needs review.
+    expect(status(page, 1)).to_have_value("missing_timing")
     expect(status(page, 2)).to_have_value("checked")
     expect(status(page, 3)).to_have_value("checked")
-    assert saved_row(store, rid, result, "0")["status"] == "needs_review"
+    saved = saved_row(store, rid, result, "0")
+    assert (saved["status"], saved["automatic"], saved["stale"]) == (
+        "needs_review",
+        "word_timing_missing",
+        True,
+    )
 
 
 def test_failed_review_does_not_claim_checked_and_retries_its_saved_choice(page, reviewed):

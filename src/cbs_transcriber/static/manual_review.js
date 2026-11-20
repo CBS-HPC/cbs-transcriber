@@ -167,6 +167,47 @@ function manualReviewScope(view, response) {
       "The saved transcript changed. Reload it before marking passages.",
     );
 }
+// The dropdown shows suggestions without turning them into the researcher's marks.
+// An exact-content manual row wins; all derived options are display-only and disabled.
+function refreshAutomaticReviewStatus(view, row, sid, reasons) {
+  const saved = view.rows.get(sid);
+  const manual = saved?.review_revision > 0 && saved.stale === false;
+  const automatic =
+    !saved || manual
+      ? null
+      : reasons
+        ? {
+            value: "uncertain",
+            label: "Uncertain",
+            title: `Set automatically: ${reasons.join("; ")}. Model signals, not a measure of correctness. Choose a review status after checking this passage.`,
+          }
+        : saved.automatic === "word_timing_missing"
+          ? {
+              value: "missing_timing",
+              label: "Timing missing",
+              title: automaticReviewReasons.word_timing_missing.title,
+            }
+          : null;
+  const select = row.querySelector("[data-review-status]");
+  let option = select.querySelector("[data-automatic-review]");
+  if (automatic) {
+    if (!option) {
+      option = new Option();
+      option.dataset.automaticReview = "";
+      option.disabled = true;
+      select.add(option);
+    }
+    option.value = automatic.value;
+    option.textContent = automatic.label;
+    option.title = automatic.title;
+    select.value = automatic.value;
+  } else {
+    option?.remove();
+    select.value = saved?.status || "not_checked";
+  }
+  select.classList.toggle("review-status-automatic", !!automatic);
+  manualReviewControls(view, row, sid);
+}
 function manualReviewControls(view, row, sid) {
   const select = row.querySelector("[data-review-status]");
   select.disabled =
@@ -174,7 +215,9 @@ function manualReviewControls(view, row, sid) {
   select.querySelector('[value="checked"]').disabled = manualReviewDraft(sid);
   select.title = manualReviewDraft(sid)
     ? "Save or cancel this passage's correction before marking it Checked."
-    : "Review of the saved passage. Changing it later requires review again.";
+    : select.selectedOptions[0]?.dataset.automaticReview !== undefined
+      ? select.selectedOptions[0].title
+      : "Review of the saved passage. Changing it later requires review again.";
   const retry = row.querySelector("[data-review-retry]");
   if (retry) retry.disabled = select.disabled;
 }
@@ -252,7 +295,7 @@ function paintManualReviews(view, only = null) {
       });
       row.appendChild(select);
       // The status dropdown always comes first after the time, left of any tags
-      // ("Review suggested", word timing), so it stays in one place (user, 20 November).
+      // (word timing), so it stays in one place (user, 20 November).
       heading
         .querySelector(".timestamp")
         .insertAdjacentElement("afterend", row);
@@ -355,7 +398,14 @@ async function saveManualReview(view, sid, desired) {
     return;
   }
   const expected = view.rows.get(sid);
-  if (!expected || expected.status === desired) return;
+  if (
+    !expected ||
+    (expected.status === desired &&
+      !expected.automatic &&
+      expected.review_revision > 0 &&
+      expected.stale === false)
+  )
+    return;
   const operation = {};
   view.pending.set(sid, operation);
   view.errors.delete(sid);
@@ -498,13 +548,16 @@ function transcriptUncertainty() {
     };
   const share = Number(document.getElementById("uncertainty-share").value);
   const cached = transcriptFilterState.uncertain;
-  if (cached?.hints !== hints || cached.share !== share)
+  if (cached?.hints !== hints || cached.share !== share) {
+    const flagged = reviewMarks(hints, share).flagged;
     transcriptFilterState.uncertain = {
       hints,
       share,
-      ids: new Set(reviewMarks(hints, share).flagged.keys()),
+      flagged,
+      ids: new Set(flagged.keys()),
     };
-  return { ids: transcriptFilterState.uncertain.ids };
+  }
+  return transcriptFilterState.uncertain;
 }
 // true/false, or null when the deciding data is still loading.
 function transcriptFilterMatch(value, segment, view, uncertainty) {
@@ -534,6 +587,7 @@ function applyTranscriptFilter() {
     ? "Close the comparison to filter passages."
     : "Show only passages in one review state. Works together with search.";
   const uncertainty = transcriptUncertainty();
+  const flagged = uncertainty.flagged;
   if (transcriptFilterSelect.value === "uncertain" && uncertainty.reason)
     resetTranscriptFilter();
   const value = comparing ? "all" : transcriptFilterSelect.value;
@@ -554,6 +608,9 @@ function applyTranscriptFilter() {
     const sid = passage.dataset.segment;
     const segment = segments.get(sid);
     if (!segment) continue;
+    const reviewRow = passage.querySelector("[data-manual-review]");
+    if (view && reviewRow)
+      refreshAutomaticReviewStatus(view, reviewRow, sid, flagged?.get(sid));
     counts.all++;
     const status = view?.ready ? view.rows.get(sid)?.status : null;
     if (status) counts[status]++;
@@ -591,7 +648,7 @@ function applyTranscriptFilter() {
     uncertainty.reason ||
     (uncertainty.loading
       ? "Model uncertainty signals are loading."
-      : "Passages marked Review suggested at the chosen Show uncertainty level. Model signals only suggest; they never change review marks.");
+      : "Passages flagged Uncertain at the chosen Show uncertainty level, including passages with a manual review status. Model signals only suggest; they never change review marks.");
   transcriptFilterState.shown = shownCount;
   refreshManualReviewNavigation();
 }
