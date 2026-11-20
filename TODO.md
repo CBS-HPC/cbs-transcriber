@@ -625,7 +625,19 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   beside the status, the summary counts them, and Show/Next to review find them. Finished word
   timing stays in Activity with its outcome; the worker's own message is no longer replaced by
   "Complete"; passages being timed leave the Repair all count at once. Synthetic backend,
-  restore and browser checks pass; real-library acceptance is H15c.
+  restore and browser checks pass; real-library acceptance is H15c. Merged into
+  `claude/post-v2` at f2ea4ea after root review.
+- [ ] **Review status dropdown shows Uncertain and Timing missing — decided 20 November
+  (evening), post-v2, amends ADR 0191 and the review-hint display.** Testing the MVP v2
+  preview, the user asked to remove the separate "Review suggested" tag. Instead the passage's
+  status dropdown itself shows **Uncertain** (visually highlighted) for passages flagged by the
+  model's uncertainty hints, and **Timing missing** for passages that lack word timing. When a
+  passage is both uncertain and missing timing, **Uncertain wins**. These are automatic states
+  shown in the dropdown, not marks the researcher set; keep ADR 0191's rules: derived, never
+  stored as review rows, the researcher's own mark on the exact current content wins, and
+  untimed-by-design results are not flagged. Decide how "timing added" (ADR 0191) shows in the
+  same dropdown, keep the Show filter and Next to review consistent with the new values, and
+  keep the dotted uncertainty underline in the text. Needs an ADR amendment and browser tests.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
