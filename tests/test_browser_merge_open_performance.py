@@ -102,6 +102,6 @@ def test_merge_open_restarts_hints_if_initial_request_is_pending(page, local_app
     page.locator('#passage-0 [data-action="merge-down"]').click()
     expect(page.locator("#passage-merge-dialog")).to_be_visible()
     expect(page.locator("#show-uncertainty")).to_be_checked()
-    expect(page.locator("#transcript .review-flag")).to_have_count(1)
+    expect(page.locator("#transcript .passage.review")).to_have_count(1)
     page.evaluate("window.releaseOldHints()")
-    expect(page.locator("#transcript .review-flag")).to_have_count(1)
+    expect(page.locator("#transcript .passage.review")).to_have_count(1)
