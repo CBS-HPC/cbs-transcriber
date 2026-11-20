@@ -173,8 +173,9 @@ Functional acceptance does not establish speed.
   explicitly deferred until after MVP.
   **Broadened 20 November (post-v2 weekend):** testing MVP v2 the user still finds manual
   editing slow on long transcripts, not only Save and Split: opening and typing in long
-  passages, Save, Merge, Split and Delete on 600–2,000-passage transcripts. Measure each action
-  end to end (click to usable controls) with synthetic fixtures and fix the largest costs.
+  passages, Save, Merge, Split and Delete on 600–2,000-passage transcripts, and the per-passage
+  Undo merge (also reported slow). Measure each action end to end (click to usable controls)
+  with synthetic fixtures and fix the largest costs.
 
 Requested source cleanup is complete in main and Desktop: the retired external preparation
 bundle is removed, and both historical Markdown archives are under docs/archive with incoming
@@ -273,7 +274,16 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 - [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — stability before PII integration.**
   User priority, 11 November. On 20 November the user added Runtime implementation and testing
   to the post-v2 plan: it opens the way to other transcription models and to the AI-assisted
-  coding work. Live preparation and paid test jobs still need approval each time. The morning branch implements verified exact host/shell stamp
+  coding work. Live preparation and paid test jobs still need approval each time.
+  **20 November: the user deleted the old Runtime folder on the UCloud project drive**, which
+  held the retained `runtime-busy` preparation lock described below. The app's local records
+  of that failed preparation (job evidence, cleanup obligations, readiness stamps) are
+  unchanged. **Confirmed the same afternoon with the user's OK** (one read-only lookup through
+  the app's bounded file API, nothing created or changed): the `cbs-runtime` parent folder,
+  this version's runtime folder (`whisperx-3.8.6-cu128-a8f866300a50`), `.prepare-lock`,
+  `.in-use` and `stamp.json` are all absent. Next: reconcile those
+  local records so nothing still expects the old folder or lock, then plan a fresh preparation
+  under the user's explicit consent rather than the isolated-generation workaround. The morning branch implements verified exact host/shell stamp
   validation and PREPARE=1 legacy-reader/retained-lock refusal before new job submission
   (ADR 0172), plus the separately reviewed configured-model preparation plan (ADR 0173).
   These fixes do not reclaim the historical lock or establish live Runtime acceptance.
