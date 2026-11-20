@@ -2475,6 +2475,8 @@ function updateSelection() {
     !!state.project && recordingListProject === state.project.id;
   $("#recordings").hidden = !currentList;
   if (!currentList) $("#empty-project").hidden = true;
+  // Project export lists the shown recordings, so it waits for this project's list (B467).
+  $("#project-export-open").disabled = !currentList;
   $("#transcribe-selected").disabled =
     !currentList ||
     pendingBulkLanguage ||
@@ -3415,9 +3417,10 @@ $("#export-open").addEventListener("click", () => {
   );
   openExport({ result: result ? { ...state.recording, ...result } : null });
 });
-$("#project-export-open").addEventListener("click", () =>
-  openExport({ project: state.project.id }),
-);
+$("#project-export-open").addEventListener("click", () => {
+  if (state.project && recordingListProject === state.project.id)
+    openExport({ project: state.project.id });
+});
 function currentExport(context) {
   return (
     exportContext === context &&
