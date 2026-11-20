@@ -510,9 +510,16 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   *interrupted* note via a small receipt folder (no schema change); nothing resumes. Synthetic
   backend scenarios (Codex A1–M1 where feasible), new browser cases and the existing deletion
   suites pass. Recording deletes keep the dialog-driven flow (it would need recording-level
-  inactivity in every route and editor). Open: independent review, wiring the backup
-  capture's reciprocal fence into `ProjectDeletionTasks.inhibitors` when T161 is built, and
-  real-device/UCloud acceptance (H24).
+  inactivity in every route and editor). Evening independent review on
+  `codex/night-deletion-fixes-20261120` reproduced and fixed existing backup-capture admission
+  overlap, premature Keep/COMMIT claims and a Keep-before-Stop reserved-control race
+  (B513-B515, V254-V256); R5 lost-Trash-reply tests now cover Runtime and native owners.
+  The corrected frozen backend inventory has 376 distinct passes/two skips; the final fixed
+  source passed all 22 relevant browser cases. Independent source/backend review is Go; see
+  [the night verification receipt](docs/verification-2026-11-20-night-deletion.md). The earlier
+  deep-path harness failures are retained (B516); production path guards are unchanged.
+  Still unmerged/unloaded at this component checkpoint; whole-browser and real-device/UCloud
+  H24 acceptance remain separate. Future backup Activity UI (T161) remains a proposal.
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and

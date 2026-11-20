@@ -560,11 +560,13 @@ class Deletions:
             return ("intent", intent["generation"], intent["epoch"], intent["cancel_requested"])
         return None
 
-    def _stop_unsubmitted_native(self, operation):
+    def _stop_unsubmitted_native(self, operation, should_continue=None):
         """Caller holds the claim lock: durable Stop for confirmed shared native batches."""
         from . import native_startup
 
         for key, batch_id in sorted(operation.batches):
+            if should_continue is not None and not should_continue():
+                return
             if key != "native_batch_id":
                 continue
             batch = self.store.native_batch(batch_id)
@@ -589,16 +591,18 @@ class Deletions:
         # outside that lock and fences shared ownership against this complete allowlist.
         # A deletion task's Keep stops further dispatches; accepted Stops stay (ADR 0190).
         with self.queue.lock:
-            if operation.started:
+            if operation.started or (should_continue is not None and not should_continue()):
                 return
             self._validate(operation)
             # Record each affected unsubmitted native batch's Stop before cancelling any
             # admission below: cancelling a selection's last unjoined file seals its batch
             # in that same transaction, and the coordinator must never see a seal without the
             # Stop (ADR 0183). Its submission intent also refuses a recorded Stop atomically.
-            self._stop_unsubmitted_native(operation)
+            self._stop_unsubmitted_native(operation, should_continue)
             generic = []
             for identifier in sorted(operation.jobs):
+                if should_continue is not None and not should_continue():
+                    break
                 job = self._job(identifier)
                 shared_active = any(
                     _needs_stop(
@@ -985,7 +989,7 @@ class Deletions:
             self._validate(operation)
             return not self._pending(operation)
 
-    def finish_task(self, operation, decide, *, on_commit=None, remote=True):
+    def finish_task(self, operation, decide, *, on_commit=None, remote=True, commit_guard=None):
         """The task's last phase. The SQLite Delete commit is the point of no return.
 
         `decide` runs last inside the writer transaction and raises Kept to roll it back.
@@ -993,14 +997,14 @@ class Deletions:
         """
         try:
             with self._file_action():
-                return self._finish_task(operation, decide, on_commit, remote)
+                return self._finish_task(operation, decide, on_commit, remote, commit_guard)
         except LocalActionBusy:
             return {"status": "waiting", "message": "Waiting for another file operation…"}
         except HTTPException as error:
             # Stale capture or a single-job UCloud blocker found before staging: kept.
             return {"status": "failed", "message": _refusal(error)}
 
-    def _finish_task(self, operation, decide, on_commit, remote):
+    def _finish_task(self, operation, decide, on_commit, remote, commit_guard):
         with self.queue.lock, self.store.snapshot_lock:
             self._validate(operation)
             if self._pending(operation):
@@ -1039,39 +1043,42 @@ class Deletions:
                 with self.staging():
                     try:
                         with self.queue.lock, self.store.snapshot_lock:
-                            with self.store.connection() as db:
-                                db.execute("BEGIN IMMEDIATE")
-                                self._validate(operation)
-                                if self._pending(operation, own=own):
-                                    return {"status": "waiting", "message": "Waiting for jobs…"}
-                                self._single_remote(operation)
-                                paths, project_file, recording = self._owned_paths(operation)
-                                plan = deletion_files.prepare(
-                                    self.store,
-                                    operation.identifier,
-                                    operation.kind,
-                                    operation.target,
-                                    operation.recordings,
-                                    paths,
-                                    project_file,
-                                )
-                                self._remember_files(
-                                    {
-                                        "id": operation.identifier,
-                                        "state": "recovery_pending",
-                                        "committed": None,
-                                        "busy": True,
-                                        "target_kind": operation.kind,
-                                        "target_name": operation.target_name,
-                                        "created": now(),
-                                        "message": "Staging files for deletion…",
-                                    }
-                                )
-                                deletion_files.stage(self.store, plan)
-                                self._apply_releases(db, releases, target)
-                                self._delete_rows(db, operation)
-                                # Last: Keep and this commit are serialized by the task.
-                                decide(final=True)
+                            with ExitStack() as commit_scope:
+                                with self.store.connection() as db:
+                                    db.execute("BEGIN IMMEDIATE")
+                                    self._validate(operation)
+                                    if self._pending(operation, own=own):
+                                        return {"status": "waiting", "message": "Waiting for jobs…"}
+                                    self._single_remote(operation)
+                                    paths, project_file, recording = self._owned_paths(operation)
+                                    plan = deletion_files.prepare(
+                                        self.store,
+                                        operation.identifier,
+                                        operation.kind,
+                                        operation.target,
+                                        operation.recordings,
+                                        paths,
+                                        project_file,
+                                    )
+                                    self._remember_files(
+                                        {
+                                            "id": operation.identifier,
+                                            "state": "recovery_pending",
+                                            "committed": None,
+                                            "busy": True,
+                                            "target_kind": operation.kind,
+                                            "target_name": operation.target_name,
+                                            "created": now(),
+                                            "message": "Staging files for deletion…",
+                                        }
+                                    )
+                                    deletion_files.stage(self.store, plan)
+                                    self._apply_releases(db, releases, target)
+                                    self._delete_rows(db, operation)
+                                    # Last: Keep and this commit are serialized by the task.
+                                    decide(final=True)
+                                    if commit_guard is not None:
+                                        commit_scope.enter_context(commit_guard())
                             operation.complete = True
                             self._remember_files(
                                 {

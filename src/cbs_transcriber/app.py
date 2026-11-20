@@ -923,6 +923,13 @@ def create_app(
         with hf_manager.exclusive(), export_manager.exclusive():
             yield
 
+    @contextmanager
+    def backup_capture_guard():
+        # A deletion can be stopping jobs before a file journal/queue worker exists.
+        # Reserve both admissions atomically; keep its own staging path independent.
+        with project_tasks.capture_exclusive(), background_exclusive():
+            yield
+
     processing_started = False
     profiles_initialized = False
     initialization_lock = threading.Lock()
@@ -1046,7 +1053,7 @@ def create_app(
         queue,
         credentials,
         mutation_allowed=local_mutation_allowed,
-        capture_guard=background_exclusive,
+        capture_guard=backup_capture_guard,
         mutation_exempt=project_deletion_tasks.keep_path,
     )
 

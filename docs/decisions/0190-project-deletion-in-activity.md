@@ -60,6 +60,18 @@ whose remote owner was already released and fenced. For a task:
 The legacy HTTP `DELETE` continuation keeps its earlier ordering unchanged for older clients
 and for recording deletion (see *Recordings* below).
 
+### Reciprocal complete-backup admission
+
+Independent review found that the existing complete-backup route could start while a task
+was stopping/draining, before either a queue worker or a local deletion journal exposed it.
+A dedicated task-owner capture reservation now serializes both admissions under the short
+admission/state locks. An inactive project refuses capture before copying; an active capture
+reservation refuses new deletion before Stop. The counter spans capture waits and copying,
+releases on exceptions, and refuses admission after owner close. No mutex is held across a
+long copy. A task's own staging keeps its existing guard, so it does not refuse itself; Keep
+remains reachable. This is required for the existing capture route, independently of future
+background-backup UI (B513, V254).
+
 ### Server-owned task
 
 `project_deletion_tasks.ProjectDeletionTasks` is installed by the app factory, tied to the
@@ -93,10 +105,14 @@ recancels anything.
 
 `POST /api/project-deletion-tasks/{id}/keep` (bound to the task's project id) only sets the
 task's Keep flag under its decision lock and wakes the executor. The last step inside the
-Delete writer takes the same lock: if Keep was requested it raises and the transaction rolls
-back; otherwise it marks the task as committing and Keep is refused from then on (409,
-`deletion_committed`). Exactly one wins. A COMMIT that raises is classified from fresh
-database facts after the connection closes, never from the task.
+Delete writer enters a decision guard that stays held through the Store connection's exit:
+if Keep won first the writer rolls back; if COMMIT is already in flight, an overlapping Keep
+waits for its actual outcome. Keep and shutdown never hold the manager lock while waiting
+for that guard. A successful COMMIT can refuse Keep (`deletion_committed`) or return the
+already-terminal deleted summary; a known rollback leaves the project keepable. If COMMIT
+raises, fresh database facts after connection closure classify the outcome before releasing
+the guard. Unknown facts disable Keep with `deletion_unresolved`; they never claim removal.
+This corrects the early pre-COMMIT refusal found in independent review (B514).
 
 Staging promotion excludes HTTP mutations and the staging journal makes the existing global
 file-recovery block refuse them, so a plain POST could not reach the task in time. The exact
@@ -189,3 +205,12 @@ change considerably, so it remains a later decision.
   library switching); backup capture admission is not wired yet.
 - Human acceptance (H24) still needs a real many-recording project, Keep during each stage,
   closing the app early and real UCloud owners; synthetic tests do not establish them.
+
+## Independent review follow-up, 20 November evening
+
+Keep is rechecked after the queue claim and between special/native controls (B515, V256),
+so a Keep that wins before any Stop leaves reserved inspection/input-intent jobs unchanged.
+Independent R5 tests exercise Runtime and native lost Trash replies through the real helper:
+local deletion remains committed, the original release receipt survives, Retry addresses the
+same folder, and parent listing confirms absence without touching a sibling. No real UCloud
+operation, schema migration, publication or preview activation is part of these checks.

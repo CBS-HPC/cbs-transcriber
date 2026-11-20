@@ -445,30 +445,53 @@ def test_k4_keep_and_commit_have_exactly_one_winner(client, monkeypatch, winner)
     fixture = seed(store, count=1)
     project_id = fixture["project"]["id"]
     gate = Gate()
-    original = TaskOwner._decide
+    original = TaskOwner._commit_guard
 
-    def decide(self, task, *, final):
-        if final and winner == "keep":
-            gate.hold()  # Keep arrives before the decision lock is taken.
-        original(self, task, final=final)
-        if final and winner == "commit":
-            gate.hold()  # The decision is taken; Keep arrives before the COMMIT.
+    @contextmanager
+    def commit_guard(self, task):
+        if winner == "keep":
+            gate.hold()  # Keep reaches the task before COMMIT owns the decision.
+        with original(self, task):
+            if winner == "commit":
+                gate.hold()  # Keep must wait for the actual transaction outcome.
+            yield
 
-    monkeypatch.setattr(TaskOwner, "_decide", decide)
+    monkeypatch.setattr(TaskOwner, "_commit_guard", commit_guard)
     task = start(client, project_id).json()
     assert gate.entered.wait(10)
-    response = client.post(
-        f"/api/project-deletion-tasks/{task['id']}/keep", json={"project_id": project_id}
-    )
-    gate.release.set()
+    if winner == "keep":
+        response = client.post(
+            f"/api/project-deletion-tasks/{task['id']}/keep", json={"project_id": project_id}
+        )
+        gate.release.set()
+    else:
+        replies = []
+        thread = threading.Thread(
+            target=lambda: replies.append(
+                client.post(
+                    f"/api/project-deletion-tasks/{task['id']}/keep",
+                    json={"project_id": project_id},
+                )
+            ),
+            daemon=True,
+        )
+        thread.start()
+        gate.release.set()
+        thread.join(10)
+        assert not thread.is_alive() and replies
+        response = replies[0]
     done = settled(client, task["id"])
     if winner == "keep":
         assert response.status_code == 202, response.text
         assert done["state"] == "kept" and project_exists(store, project_id)
         assert_preserved(store, fixture)
     else:
-        assert response.status_code == 409, response.text
-        assert response.json()["detail"]["code"] == "deletion_committed"
+        if response.status_code == 409:
+            assert response.json()["detail"]["code"] == "deletion_committed"
+        else:
+            assert response.status_code == 200, response.text
+            assert response.json()["committed"] is True
+            assert response.json()["can_keep"] is False
         assert done["state"] == "deleted" and not project_exists(store, project_id)
 
 

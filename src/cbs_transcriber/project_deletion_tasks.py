@@ -19,6 +19,7 @@ import os
 import re
 import threading
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Annotated
@@ -196,6 +197,7 @@ class ProjectDeletionTasks:
         self.waiting = deque()
         self.thread = None
         self.closed = False
+        self.captures = 0
         # Seam for reciprocal admission fences, e.g. a running backup capture (T161). Each
         # callable returns a refusal or None; a refusal stops a new task before any Stop.
         self.inhibitors = []
@@ -225,6 +227,20 @@ class ProjectDeletionTasks:
                 raise HTTPException(
                     409, "Wait for the project deletion in Activity to finish or keep it."
                 )
+
+    @contextmanager
+    def capture_exclusive(self):
+        """Reserve backup admission before it can wait for/copy library bytes."""
+        with self.admission, self.lock:
+            if self.closed:
+                raise HTTPException(409, "This library is closing.")
+            self.require_idle()
+            self.captures += 1
+        try:
+            yield
+        finally:
+            with self.lock:
+                self.captures -= 1
 
     def refusal(self, method, path):
         """A mutation addressed to an inactive project's resources, else None."""
@@ -271,6 +287,10 @@ class ProjectDeletionTasks:
                             409, "This deletion was already accepted with other confirmations."
                         )
                     return self.summary(task), False
+            if self.captures:
+                raise HTTPException(
+                    409, "Wait for the library backup to finish before deleting a project."
+                )
             if project_id in self.inactive:
                 raise HTTPException(409, DELETING)
             if sum(task.state == "running" for task in self.tasks.values()) >= MAX_ACTIVE:
@@ -338,20 +358,29 @@ class ProjectDeletionTasks:
     # ---------- Controls ----------
 
     def keep(self, identifier, project_id):
-        """Signal Keep only; the executor rolls back and records the outcome (K5)."""
+        """Signal Keep, or wait for an overlapping COMMIT's actual outcome."""
         with self.lock:
             task = self.tasks.get(identifier)
             if task is None or task.project_id != project_id:
                 raise HTTPException(404, "This deletion is no longer listed. Refresh Activity.")
+        # The writer may need self.lock after COMMIT. Never wait for its decision while
+        # holding that lock; revalidate the task after acquiring the decision instead.
+        with task.decision, self.lock:
+            if self.tasks.get(identifier) is not task:
+                raise HTTPException(404, "This deletion is no longer listed. Refresh Activity.")
             if task.state != "running":
                 return self.summary(task)
-            with task.decision:
-                if task.committing or task.committed:
-                    raise HTTPException(
-                        409,
-                        {"code": "deletion_committed", "message": TOO_LATE, **self.summary(task)},
-                    )
-                task.keep_requested = True
+            if task.committed is True:
+                raise HTTPException(
+                    409,
+                    {"code": "deletion_committed", "message": TOO_LATE, **self.summary(task)},
+                )
+            if task.committed is None:
+                raise HTTPException(
+                    409,
+                    {"code": "deletion_unresolved", "message": UNRESOLVED, **self.summary(task)},
+                )
+            task.keep_requested = True
             self._touch(task)
             self.lock.notify_all()
             return self.summary(task)
@@ -398,8 +427,29 @@ class ProjectDeletionTasks:
         with task.decision:
             if task.keep_requested or task.closing:
                 raise deletions.Kept()
-            if final:
-                task.committing = True
+
+    @contextmanager
+    def _commit_guard(self, task):
+        """Serialize an overlapping Keep with COMMIT, including a lost reply."""
+        with task.decision:
+            if task.keep_requested or task.closing:
+                raise deletions.Kept()
+            task.committing = True
+            try:
+                yield
+            except BaseException:
+                # The Store connection is closed before this guard exits. A COMMIT may
+                # have succeeded before raising; only fresh database facts can tell.
+                try:
+                    exists = self._project_exists(task.project_id)
+                except Exception:  # noqa: BLE001
+                    exists = None
+                task.committed = None if exists is None else not exists
+                raise
+            else:
+                task.committed = True
+            finally:
+                task.committing = False
 
     def _pause(self, task):
         with self.lock:
@@ -433,6 +483,7 @@ class ProjectDeletionTasks:
                 partial(self._decide, task),
                 on_commit=partial(self._committed, task),
                 remote=not self.closed,
+                commit_guard=partial(self._commit_guard, task),
             )
             if outcome["status"] != "waiting":
                 break
@@ -516,14 +567,18 @@ class ProjectDeletionTasks:
 
     def close(self):
         """Seal admission and keep every project not yet past its point of no return (S1)."""
-        with self.admission, self.lock:
-            self.closed = True
-            for task in self.tasks.values():
-                if task.state == "running":
-                    with task.decision:
-                        task.closing = True
-            self.lock.notify_all()
-            thread = self.thread
+        with self.admission:
+            with self.lock:
+                self.closed = True
+                pending = [task for task in self.tasks.values() if task.state == "running"]
+                thread = self.thread
+            # A COMMIT may already own a decision. It must be able to finish without
+            # waiting for the manager lock held by shutdown (or by Keep).
+            for task in pending:
+                with task.decision:
+                    task.closing = True
+            with self.lock:
+                self.lock.notify_all()
         if thread is not None:
             thread.join()
 
@@ -563,7 +618,8 @@ class ProjectDeletionTasks:
             "revision": task.revision,
             "committed": task.committed,
             "can_keep": task.state == "running"
-            and not (task.committing or task.committed or task.keep_requested or task.closing),
+            and task.committed is False
+            and not (task.committing or task.keep_requested or task.closing),
             "keep_requested": task.keep_requested,
             "project_inactive": self.inactive.get(task.project_id) == task.identifier,
             "cleanup_pending": task.local_cleanup or task.remote_pending,

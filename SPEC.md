@@ -340,6 +340,20 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V256: A project task checks Keep/shutdown again after claiming the queue and before each
+  reserved inspection/input-intent or unsubmitted-native Stop dispatch. Keep that wins before
+  the first claim leaves every captured control unchanged; already accepted Stops stay
+  stopped. Legacy cancellation without a task predicate is unchanged (B515, ADR 0190).
+- V255: Keep overlapping the final Delete writer waits for its actual COMMIT outcome without
+  holding the task-manager lock. A final deletion response requires observed committed rows;
+  rollback permits keeping the live project, and unreadable outcome facts disable Keep with
+  deletion_unresolved. The decision guard spans the closed Store connection, including lost
+  replies, and shutdown never waits for it while holding the manager lock (B514, V252).
+- V254: Existing complete-backup capture and project-deletion admission reserve one another
+  before any Stop or capture copy, including a deletion still draining before its file journal
+  exists. A short shared admission boundary decides the winner; the reservation is released
+  on every capture exit. Keep and a task's own staging are not blocked by this fence. No new
+  capture/deletion authority is stored in backup packages (B513, ADR 0190).
 - V253: Graceful shutdown keeps every project not yet past its point of no return (Activity
   *interrupted*) and drains the deletion executor under the serving lease before other
   managers close. Receipts in the library's `project-deletions/` folder are observational:
@@ -2183,7 +2197,7 @@ T90f|x|older-recording selected-source byte/epoch proof and absolute bounded tim
 
 T158|x|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, truthful errors/alignment stage and impossible-window admission/skip (ADR0189); 377 backend and final 22 browser cases pass with independent review and exact Unicode parity; isolated local rc2 wheel/constraints and 155 helper/profile cases verified (6ff03df); no installation/publication/reload, real H15a pending|V241,V242,V3,V5,V8,ADR0189
 T159|~|Separate cursor-word timing interaction prototype f140a34 from4574083: OFF by default, native Text retained, start/end drafts in memory only, no save/API/CAS changes; 15 browser cases and independent limited-scope Go; boundary/selection/one-character and production save UX remain undecided; unmerged|V239,V240,V201,I.transcript
-T160|x|Project deletion in Activity (claude/deletion-activity, ADR 0190): server-owned task with stages, inactive project, Keep project to the SQLite commit, atomic owner release receipts, interrupted notes after an early close, no automatic resume; 38 backend scenario cases (Codex A1–M1 except R5), 4 new and 4 adapted browser cases and the existing deletion suites pass; independent review and real-device/UCloud acceptance (H24) pending; recordings unchanged|V250,V251,V252,V253,V148,ADR0092,ADR0101,ADR0102,ADR0190
+T160|x|Project deletion in Activity implemented on claude/deletion-activity and independently hardened on codex/night-deletion-fixes-20261120: reciprocal existing-backup admission, actual COMMIT-bound Keep, Keep-before-Stop and R5 lost-Trash-reply recovery; corrected staged backend inventory 376 passes/two skips and final22 relevant browser passes on fixed source with exact before/after hashes; fullbrowser729 and realH24 notclaimed, recording deletes unchanged, no loaded-app/main claim|V250,V251,V252,V253,V254,V255,V256,V148,ADR0092,ADR0101,ADR0102,ADR0190
 T161|~|Backup preparation in Activity: reviewed backend proposal plus3 current-behavior characterization passes; exact control bypass, cancellable admission, publishing/recovery and reciprocal deletion admission fences proposed; durable storage/restore policy undecided, no production task implemented|V3,V5,V8,ADR0096,ADR0158
 
 ## §B Bug memory
@@ -2316,3 +2330,7 @@ B500|2026-11-20|Codex's deletion review: Delete recorded each batch owner's UClo
 B501|2026-11-20|Project deletion in Activity (before commit): a settled task wrote its receipt before lifting the project fence, so a status read could show the deletion kept while the project still refused edits|V251,ADR0190; the terminal state and the fence change together under the task lock, then the receipt is written; K1 asserts the kept card already reports the project active
 B502|2026-11-20|Project deletion in Activity (before commit): a page inside a project deleted from another tab stayed open, because the ordinary poll's own project refresh superseded the deletion module's refresh and the next poll then saw nothing new|V251,ADR0190; every poll re-checks whether the open project is inactive and leaves once per deletion (no repeated unsaved-draft prompt); browser regression covers the other-tab case
 B503|2026-11-20|Project deletion in Activity (before commit): the start body accepted "yes" for confirm_shared through lax coercion, turning a retyped lost-reply replay into a different confirmation instead of a refused body|V250,ADR0190; the start request model is strict, so a retyped body is refused (422) without writes and only an exact replay returns the same task
+B513|2026-11-20|Independent deletion review reproduced both admission orders: an existing portable-backup capture returned 201 while a project deletion was still stopping before any file journal, and direct deletion admission could start while capture held its copy guard|V254,ADR0190; a counter reserved under the task admission/state locks fences both directions through capture exit, including exceptions; only backup capture uses it so Keep and deletion staging remain reachable; deterministic red/green tests, no schema or restore authority change
+B514|2026-11-20|The task set committing before Store.connection exited, so Keep returned deletion_committed while SQLite COMMIT was still pending and could subsequently roll back; the old K4 test explicitly expected that false early claim|V255,V252,ADR0190; hold the task decision through connection exit and fresh classification of raised COMMIT, move Keep/shutdown waits outside the manager lock, disable unknown-outcome Keep, and require a real outcome before a final response; independent late-Keep rollback/success and unknown-outcome tests retain both winner oracles
+B515|2026-11-20|Keep won after stop_for_task checked its flag but before _cancel claimed the queue; reserved source inspection and input-intent cancellation still ran, although no Stop had been accepted before Keep|V256,ADR0190; recheck the predicate at queue claim and each reserved/native dispatch, preserve the legacy None predicate, and assert exact frozen jobs/inspection cache remain unchanged when Keep wins
+B516|2026-11-20|The expanded night regression used a deeper generated Windows basetemp than the earlier focused gate; ten successful portable-route scenarios hit the unchanged staging/destination path-budget guard or its secondary wait symptom|Harness-only correction: rerun the complete 30-case portable_routes module from a fresh short synthetic base with identical source, tests and assertions; all 30 pass. Reconcile exact case identities into the 378-case inventory (376 passes, two skips), retaining the original 366-pass/two-skip/ten-failure receipt. No new product invariant or guard relaxation is needed
