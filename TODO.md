@@ -10,6 +10,10 @@ Supporting references: [application audit plan](docs/audits/application-audit-pl
 [transcription and Activity audit](docs/audits/transcription-batch-2026-10-30.md),
 [weekend plan and Settings backup design](docs/work-plans/weekend-2026-10-31.md),
 [SPEC](SPEC.md), and [architecture decisions](docs/decisions/README.md).
+
+Checks only a person can do before public release (real devices, accounts, recordings and
+desktop software) are collected in the [human release checklist](docs/testing/human-release-checklist.md),
+started 20 November. Add a check there whenever new behavior is verified only synthetically.
 The [post-MVP audit and proposed sequence](docs/work-plans/post-mvp-2026-11-10.md) separates
 missing implementation, pending acceptance, workflow decisions and explicitly parked work.
 The [11 November implementation plan](docs/work-plans/post-mvp-2026-11-11.md) tracks the
