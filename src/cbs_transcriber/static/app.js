@@ -3696,9 +3696,21 @@ function renderResults() {
   const workingResult = r.transcripts.find(
     (result) => result.id === working?.result_id,
   );
-  $("#working-version-status").textContent = working
+  const workingText = working
     ? `Working transcript: ${workingResult?.label || "Saved result"} · Version ${working.sequence}. Project exports use this saved version.`
     : "No Working version designated. Project exports will skip this recording.";
+  // The Working result is tagged in the result lists (user request 20 November); the sentence
+  // stays as the selector's tooltip and screen-reader description, and shows only when none.
+  $("#working-version-status").textContent = workingText;
+  $("#working-version-status").classList.toggle("sr-only", !!working);
+  $("#result-select").title = workingText;
+  const workingTag = (result) =>
+    working?.result_id !== result.id
+      ? ""
+      : result.id === r.active_transcript_id &&
+          working.version_id === r.active_version?.id
+        ? " · Working"
+        : ` · Working (version ${working.sequence})`;
   $("#working-mark-current").disabled =
     !r.active_transcript_id ||
     pendingResultMutations.has(r.id) ||
@@ -3715,7 +3727,7 @@ function renderResults() {
     ? results
         .map(
           (t) =>
-            `<option value="${t.id}" ${t.id === r.active_transcript_id ? "selected" : ""}>${h(resultLabel(t))}</option>`,
+            `<option value="${t.id}" ${t.id === r.active_transcript_id ? "selected" : ""}>${h(resultLabel(t) + workingTag(t))}</option>`,
         )
         .join("")
     : '<option value="">No transcript yet</option>';
@@ -3733,7 +3745,7 @@ function renderResults() {
       .filter((t) => t.id !== r.active_transcript_id)
       .map(
         (t) =>
-          `<option value="${t.id}" ${t.id === state.comparison?.id ? "selected" : ""}>${h(resultLabel(t))}</option>`,
+          `<option value="${t.id}" ${t.id === state.comparison?.id ? "selected" : ""}>${h(resultLabel(t) + workingTag(t))}</option>`,
       )
       .join("");
   $("#compare-result").disabled =
