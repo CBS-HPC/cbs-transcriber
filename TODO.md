@@ -21,12 +21,23 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+20 November offline weekend composition: `codex/weekend-post-v2-20261120` combines
+the reviewed timing, spelling/Text uncertainty, disabled Runtime supersession and
+unused native capacity helpers at product `4574083`. Focused staged gates and
+independent source Go are recorded in the [composition receipt](docs/verification-2026-11-20-weekend-composition.md).
+The local rc2 wheel remains separate/frozen at `6ff03df`; no main merge/push,
+publication, installation or app reload occurred. Real provider/device acceptance
+and the remaining weekend features are open; Runtime switches remain off and
+the native helper has no paid-control integration.
+
+
 20 November Codex editor checkpoint on `codex/weekend-spelling-20261120`: Claude's
 recording vocabulary/Activity downloads/double-click redesign was independently checked,
 and dotted model uncertainty now appears in the actual Text draft without changing its
 native editing state (T157/ADR0188). **165 distinct focused cases pass**, with the
 cached-engine harness limitation recorded in the [verification receipt](docs/verification-2026-11-20-editor-spelling.md).
-This separate branch is not integrated, loaded or released. Spelling stays hidden in MVP.
+That editor branch is now included in the offline composition above; it remains
+unloaded/unreleased. Spelling stays hidden in MVP.
 Spelling bug IDs were reconciled to B488–B491; core export/timing keeps B467–B470.
 
 12 November handover: [the continuation plan](docs/work-plans/mvp-v2-continuation-2026-11-12.md)
