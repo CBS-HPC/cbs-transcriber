@@ -3690,6 +3690,30 @@ function resultLabel(result) {
       : result.label;
   return `${label} · ${new Date(result.created).toLocaleString("en-GB")}`;
 }
+// When its toolbar row has room, the transcript search grows so its right edge meets the
+// transcript panel's (the Versions row's) right edge (user request 20 November). Where the row
+// is already wider than the panel it keeps its default width, so the toolbar never wraps more.
+function alignTranscriptSearch() {
+  const search = document.querySelector(".editor-actions .transcript-search"),
+    input = search?.querySelector("input"),
+    edge = document.querySelector(".result-controls");
+  if (!input || !edge || !search.getClientRects().length) return;
+  input.style.width = "";
+  const room = Math.floor(
+    edge.getBoundingClientRect().right - search.getBoundingClientRect().right,
+  );
+  if (room > 0)
+    input.style.width = `${input.getBoundingClientRect().width + room}px`;
+}
+const searchAlignment = new ResizeObserver(() => alignTranscriptSearch());
+for (const element of [
+  document.querySelector(".editor-actions"),
+  document.querySelector(".result-controls"),
+  ...document.querySelectorAll(
+    ".editor-actions > :not(.editor-action-end), .editor-action-buttons",
+  ),
+])
+  if (element) searchAlignment.observe(element);
 function renderResults() {
   const r = state.recording;
   const working = r.result_roles?.working;
@@ -7910,8 +7934,16 @@ $("#transcript").addEventListener(
     }
     if (action === "cancel-edit") {
       pendingWorkingEditChoice = null;
+      // Cancel keeps the transcript where it was; the browser may only clamp it. Removing the
+      // spelling panel and editor above the focused button would otherwise let the browser's
+      // scroll anchoring move it, so anchoring stays off until that layout has been applied.
+      const transcript = $("#transcript"),
+        scroll = transcript.scrollTop;
+      transcript.style.overflowAnchor = "none";
       clearEdit();
       if (!closePassageEditorInPlace(segment)) renderTranscript();
+      transcript.scrollTop = scroll;
+      requestAnimationFrame(() => (transcript.style.overflowAnchor = ""));
     }
     if (action === "save-edit") {
       const button = event.target;

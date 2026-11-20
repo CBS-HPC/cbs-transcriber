@@ -163,6 +163,11 @@ def test_cancel_discards_only_open_draft_and_preserves_search_scroll_audio_and_r
     original = draft.input_value()
     draft.fill("An intentionally discarded local draft")
     expect(review.locator('option[value="checked"]')).to_be_disabled()
+    # In the full profile the local spelling panel (ADR 0185) loads after the editor opens and
+    # changes its height; record the scroll only once it has settled.
+    if page.evaluate("featureOn('spelling')"):
+        expect(passage.locator("[data-spelling-enable]")).to_be_enabled()
+        page.wait_for_timeout(300)
     cancel = passage.locator('[data-action="cancel-edit"]').first
     cancel.scroll_into_view_if_needed()
     other = 2 if target == 0 else target - 1

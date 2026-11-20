@@ -100,6 +100,11 @@ def assert_review_header_edges(page, comparison=False):
     toolbar = page.locator(".editor-actions").bounding_box()
     assert search["x"] >= toolbar["x"] - 1
     assert search["x"] + search["width"] <= toolbar["x"] + toolbar["width"] + 1
+    # With room on its row the search ends where the transcript panel ends (user request 20
+    # Nov); a row already wider than the panel keeps the default width and never wraps more.
+    grown = page.locator("#transcript-search").evaluate("input => input.style.width")
+    right, panel_right = search["x"] + search["width"], panel["x"] + panel["width"]
+    assert abs(right - panel_right) < 2 if grown else right >= panel_right - 2
     assert abs(versions["x"] + versions["width"] - panel["x"] - panel["width"]) < 2
     assert abs(versions["y"] - compare["y"]) < 2
     assert abs(versions["height"] - compare["height"]) < 2
