@@ -33,6 +33,9 @@
 | Remote cleanup | Moving an app-owned run's input/output tree to UCloud Trash after local preservation or exact deletion consent, confirmed by listing its parent; the user empties Trash; independent retry. |
 | Deletion release | A confirmed decision for exact batch-owned folders, kept independently of removed project/job rows so failed cleanup stays actionable; never a new transcription or Trash purge. |
 | Local deletion stage | An exact managed path renamed into a same-volume marked wrapper before logical SQLite deletion; recovery restores live targets or cleans already committed targets, without replaying Delete. |
+| Project deletion task | The server-owned Activity task that stops a confirmed project's captured jobs, removes it from the library and removes its files; the Delete dialog only hands off (ADR 0190). |
+| Point of no return | The SQLite commit that removes a project's rows. Keep project, a failure or closing the app before it keeps the project; nothing after it recreates rows. |
+| Inactive project | A project whose deletion task is running: greyed "Deleting…", not openable, refusing edits and new work while other projects stay usable. |
 | Native batch | One UCloud allocation shared by selected recordings with identical native settings; each recording keeps its own job and result. |
 | Early native selection | Two or more selected native files whose batch exists from the first admitted file; each file uploads once its own inspection passes (ADR 0183). |
 | Dropped file | A file of an early native selection whose inspection or preparation failed; it keeps its own outcome and never joins the allocation. |

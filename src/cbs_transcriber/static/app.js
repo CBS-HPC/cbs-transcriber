@@ -1719,9 +1719,11 @@ async function refreshProjects() {
 }
 function renderProjects() {
   $("#projects").innerHTML = state.projects
-    .map(
-      (project) =>
-        `<a href="#/projects/${project.id}" class="project-link ${state.project?.id === project.id ? "active" : ""}"><span class="folder" aria-hidden="true">▱</span><span class="project-label">${h(project.name)}</span><span class="project-count">${project.recordings}</span></a>`,
+    .map((project) =>
+      project.deleting
+        ? // Inactive while its Activity deletion runs: not openable (ADR 0190).
+          `<span class="project-link deleting" aria-disabled="true" title="This project is being deleted. Follow it in Activity."><span class="folder" aria-hidden="true">▱</span><span class="project-label">${h(project.name)}</span><span class="project-tag">Deleting…</span></span>`
+        : `<a href="#/projects/${project.id}" class="project-link ${state.project?.id === project.id ? "active" : ""}"><span class="folder" aria-hidden="true">▱</span><span class="project-label">${h(project.name)}</span><span class="project-count">${project.recordings}</span></a>`,
     )
     .join("");
 }
@@ -2366,6 +2368,14 @@ async function route() {
     state.project = state.projects.find(
       (project) => project.id === recording.project_id,
     );
+    if (state.project?.deleting) {
+      // An inactive project's recordings do not open; show the project list.
+      history.replaceState(null, "", "#/");
+      state.project = null;
+      toast("This project is being deleted. Follow it in Activity.");
+      await route();
+      return;
+    }
     state.recording = recording;
     renderProjects();
     await openEditor();
@@ -2378,7 +2388,12 @@ async function route() {
   state.comparison = null;
   state.project = match
     ? state.projects.find((p) => p.id === match[2])
-    : state.projects[0] || null;
+    : state.projects.find((p) => !p.deleting) || null;
+  if (state.project?.deleting) {
+    history.replaceState(null, "", "#/");
+    toast("This project is being deleted. Follow it in Activity.");
+    state.project = state.projects.find((p) => !p.deleting) || null;
+  }
   state.selected.clear();
   updateSelection();
   $("#library-view").hidden = false;
@@ -3036,16 +3051,15 @@ $("#delete-project-form").addEventListener(
     }
     button.disabled = true;
     $("#delete-project-error").hidden = true;
+    $("#delete-project-progress").textContent =
+      "Checking what will be deleted…";
+    $("#delete-project-progress").hidden = false;
+    // ADR 0190: the server owns the deletion. Once it is accepted the dialog closes at
+    // once and Activity shows its stages and Keep project; nothing here drives it.
+    let task;
     try {
-      const deleted = await deleteManaged(
-        `/projects/${project.id}`,
-        current,
-        (message) => {
-          $("#delete-project-progress").textContent = message;
-          $("#delete-project-progress").hidden = false;
-        },
-      );
-      if (!deleted || !current()) return;
+      task = await CBSProjectDeletions.start(project, current);
+      if (!task || !current()) return;
     } catch (error) {
       if (!current()) return;
       // Keep the reason inside the dialog (e.g. unresolved UCloud jobs block deletion).
@@ -3061,11 +3075,13 @@ $("#delete-project-form").addEventListener(
       }
     }
     dialog.close();
+    $("#activity").hidden = false;
+    await pollJobs().catch(() => {});
     // A newer poll read can supersede this refresh; the home view below needs the new list.
     while (!(await refreshProjects())) if (epoch !== viewEpoch) return;
     if (epoch !== viewEpoch) return;
     if (location.hash) location.hash = "";
-    await route();
+    else await route();
   }),
 );
 $("#add-files").addEventListener("click", () => $("#media-files").click());
@@ -12584,6 +12600,11 @@ function activityJobs(jobs) {
   });
 }
 function needsActivityAttention(job) {
+  if (job.kind === "project-delete")
+    return (
+      typeof CBSProjectDeletions !== "undefined" &&
+      CBSProjectDeletions.attention(job)
+    );
   if (job.kind === "hf_setup")
     return (
       ["failed", "interrupted"].includes(job.state) ||
@@ -12660,6 +12681,10 @@ function runtimeBatchProgress(job) {
 }
 function activityCard(job, expanded) {
   if (job.kind === "hf_setup") return hfSetupCard(job);
+  if (job.kind === "project-delete")
+    return typeof CBSProjectDeletions === "undefined"
+      ? ""
+      : CBSProjectDeletions.card(job);
   if (job.kind === "export") return CBSBackgroundExports.card(job);
   if (job.kind === "spelling_dictionary")
     return typeof spellingDictionaryCard === "function"
@@ -12716,6 +12741,9 @@ async function pollJobs() {
   jobsRenderedSequence = sequence;
   state.jobs = latest;
   CBSBackgroundExports.observe(latest);
+  // Inactive projects follow their server-owned deletion (ADR 0190).
+  if (typeof CBSProjectDeletions !== "undefined")
+    CBSProjectDeletions.observe(latest);
   // An open editor waiting for its dictionary checks again once Activity says it is ready.
   if (typeof observeSpellingDictionaries === "function")
     observeSpellingDictionaries(latest);
@@ -12784,7 +12812,11 @@ function mergeActivityHidden(value) {
 }
 function activityRemovable(job) {
   // Server-lifetime cards have their own Discard/Dismiss controls.
-  if (["export", "hf_setup", "spelling_dictionary"].includes(job.kind))
+  if (
+    ["export", "hf_setup", "spelling_dictionary", "project-delete"].includes(
+      job.kind,
+    )
+  )
     return false;
   if (job.runtime_preparation_id)
     return !!runtimePreparationId(job) && job.can_remove === true;

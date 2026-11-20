@@ -225,13 +225,25 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** Blockers are shown and explained; nothing outside the library is touched.
 - **Status:** Not run.
 
-### H24 · Project deletion in Activity (later)
+### H24 · Project deletion in Activity
 
-- **Do:** After the post-v2 change, delete a project with many recordings, press Keep project
-  during "Stopping jobs", then repeat and close the app before the point of no return.
-- **Pass when:** Only that project is inactive, Keep project keeps it, and closing the app early
-  keeps it too (decided 20 November).
-- **Status:** Not built yet. The v2 dialog can still be closed during the final step.
+- **Do:** On a build with ADR 0190, use a throwaway project with many recordings (some with
+  running local jobs, and one with a UCloud batch if available). (1) Delete it: the dialog
+  should close at once and Activity should show "Deleting project …" with Stopping jobs,
+  Removing from the library and Removing files. Try to open the project, its recordings and a
+  second browser tab inside it. (2) Repeat with a second project and press **Keep project**
+  during "Stopping jobs". (3) Repeat and close the app (Ctrl+C) during "Stopping jobs", then
+  start it again. (4) On Windows, hold a file of the project open in another program while
+  deleting, then retry the local cleanup card.
+- **Pass when:** Only the deleting project is greyed "Deleting…" and cannot be opened or
+  changed, while other projects keep working; the tab inside it returns to the project list.
+  (1) ends with "Project deleted." and its folders gone (and the UCloud working folder in
+  UCloud Trash). (2) keeps the project and its files; jobs already stopped stay stopped and
+  nothing restarts. (3) keeps the project and Activity says the deletion did not finish;
+  nothing resumes. (4) keeps a Local file cleanup card until Retry succeeds.
+- **Status:** Not run. Implemented on `claude/deletion-activity` (ADR 0190) with synthetic
+  backend and Chromium tests only; real Windows/macOS file locks, app shutdown and UCloud
+  Trash are unverified.
 
 ## Accessibility and browsers
 

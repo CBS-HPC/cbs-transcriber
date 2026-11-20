@@ -1,5 +1,7 @@
 """Project deletion is out of the header and needs the exact project name."""
 
+import time
+
 import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
@@ -7,6 +9,15 @@ from test_browser import open_project_settings
 from test_browser import page as page
 
 pytestmark = pytest.mark.browser
+
+
+def deleted(store, project_id=None, timeout=10):
+    """The dialog hands off to the server at once (ADR 0190); deletion finishes there."""
+    query = "SELECT id FROM projects" + (" WHERE id=?" if project_id else "")
+    deadline = time.monotonic() + timeout
+    while store.all(query, (project_id,) if project_id else ()):
+        assert time.monotonic() < deadline, "The server-owned deletion did not finish"
+        time.sleep(0.05)
 
 
 def test_project_settings_rows_and_name_confirmed_deletion(page, local_app):
@@ -42,7 +53,7 @@ def test_project_settings_rows_and_name_confirmed_deletion(page, local_app):
     page.screenshot(path="test-results/project-delete-dialog.png")
     submit.click()
     expect(page.locator("#delete-project-dialog")).to_be_hidden()
-    assert not store.all("SELECT id FROM projects WHERE id=?", (project["id"],))
+    deleted(store, project["id"])
     expect(page).to_have_url(local_app.url + "/#")
     # With no project left, home shows the empty-library CBS brand (replaced the old hero text).
     expect(
@@ -71,7 +82,7 @@ def test_project_shown_on_the_home_page_can_be_deleted(page, local_app, address)
     expect(page.locator("#project-title")).to_have_text("Second study")
     assert f"#/projects/{second['id']}" not in page.url
     delete_open_project(page, "Second study")
-    assert not store.all("SELECT id FROM projects")
+    deleted(store)
     expect(page.locator("#project-title")).to_have_text("")
     expect(
         page.locator("#welcome").get_by_role("heading", name="Transcriber", exact=True)

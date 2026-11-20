@@ -612,6 +612,63 @@ def record_deleted_members(store, identifier, job_ids):
     )
 
 
+def _batch_in(db, identifier):
+    from .store import Store
+
+    return Store._native_batch(
+        db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
+    )
+
+
+def _merge_run_in(db, batch, update):
+    batch["params"]["ucloud_run"].update(update)
+    db.execute(
+        "UPDATE native_batch_runs SET params=?,updated=? WHERE id=?",
+        (json.dumps(batch["params"]), now(), batch["id"]),
+    )
+    return _batch_in(db, batch["id"])
+
+
+def confirm_release_in(db, identifier, *, target, deleted_job_ids):
+    """confirm_release inside the caller's open writer transaction (ADR 0190).
+
+    A project deletion task commits the decision with its logical Delete: Keep, failure or an
+    early close leaves no release decision. The remote steps run only after that commit.
+    """
+    from . import restored_owners
+
+    restored_owners.require_owned(db, "native_batch", identifier)
+    batch = _batch_in(db, identifier)
+    if batch["state"] in {"queued", "running"}:
+        raise ValueError("Stop the UCloud batch before releasing its folder.")
+    if not set(deleted_job_ids) <= {member["job_id"] for member in batch["members"]}:
+        raise ValueError("The deleted files do not belong to this UCloud batch.")
+    run = batch["params"].get("ucloud_run", {})
+    update = {
+        "release_decision": run.get("release_decision")
+        or {"kind": "deletion", "decided_at": now(), "target": target},
+        "deleted_members": _deleted_list(run, deleted_job_ids),
+        "cancel_requested": True,
+    }
+    if run.get("cleanup_state") not in native.CLEANED and (
+        run.get("owned_folder") or run.get("root_created")
+    ):
+        update.update(cleanup_state="pending", cleanup_stage="release_confirmed")
+    return _merge_run_in(db, batch, update)
+
+
+def record_deleted_members_in(db, identifier, job_ids):
+    """record_deleted_members inside the caller's open writer transaction (ADR 0190)."""
+    from . import restored_owners
+
+    restored_owners.require_owned(db, "native_batch", identifier)
+    batch = _batch_in(db, identifier)
+    if not set(job_ids) <= {member["job_id"] for member in batch["members"]}:
+        raise ValueError("The deleted files do not belong to this UCloud batch.")
+    run = batch["params"].get("ucloud_run", {})
+    return _merge_run_in(db, batch, {"deleted_members": _deleted_list(run, job_ids)})
+
+
 def release_info(batch):
     """Activity projection of a Delete-consented release; no credentials or text bodies."""
     run = batch["params"].get("ucloud_run", {})

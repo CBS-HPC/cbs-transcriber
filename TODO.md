@@ -23,10 +23,10 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 20 November final follow-on tasks (local, separate from verified source): cursor-word timing
 prototype `f140a34` has 15 browser passes but no persistence and remains unmerged/OFF by default
-(T159). Project deletion in Activity has a proposed contract and 30 scenario oracles (T160).
-Backup in Activity has a reviewed proposal and three characterization passes, including the
-necessary reciprocal deletion/capture admission fence (T161). These plans are not accepted
-ADRs or implemented task services. Save/Split benchmarking was deferred at the user's request;
+(T159). Project deletion in Activity is now implemented on `claude/deletion-activity`
+(ADR 0190, T160); independent review and H24 remain. Backup in Activity has a reviewed
+proposal and three characterization passes, including the necessary reciprocal
+deletion/capture admission fence (T161); that plan is not an accepted ADR or task service. Save/Split benchmarking was deferred at the user's request;
 no usable timing samples were collected. Exact private artifacts are in the Claude handoff.
 
 
@@ -488,7 +488,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   and tested synthetically. Complete remaining crash, platform, filesystem and live acceptance;
   keep unresolved deletion/cleanup visible. Real Cloud Files, Mac and power-loss behavior are
   not established by those tests.
-- [ ] **Project deletion in Activity — decided 20 November, post-v2.** Testing MVP v2 the
+- [x] **Project deletion in Activity — decided 20 November, post-v2.** Testing MVP v2 the
   user deleted a 12-recording project; the Delete dialog could still be closed while the final
   step ran, so the open project stayed visible until a refresh removed it. Today the open
   dialog drives deletion (it re-sends Delete each second while jobs stop; closing it abandons
@@ -502,6 +502,17 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   stays permanent and recovery relies on backups ("Recently deleted" and automatic pre-delete
   backups were not chosen). No quick fix for v2: the full version only, in post-v2 work. Needs
   its own ADR (job semantics); apply the same model to recording deletes where it fits.
+  **Implemented on `claude/deletion-activity` (ADR 0190, V250–V253, T160, B500–B503):** a
+  server-owned task with the three stages and Keep project; the point of no return is the
+  SQLite Delete commit, with owner UCloud release receipts now written in that same
+  transaction and Trash only afterwards; only that project is inactive (UI, and server 409
+  `project_deleting` refusals); early close keeps the project and leaves an
+  *interrupted* note via a small receipt folder (no schema change); nothing resumes. Synthetic
+  backend scenarios (Codex A1–M1 where feasible), new browser cases and the existing deletion
+  suites pass. Recording deletes keep the dialog-driven flow (it would need recording-level
+  inactivity in every route and editor). Open: independent review, wiring the backup
+  capture's reciprocal fence into `ProjectDeletionTasks.inhibitors` when T161 is built, and
+  real-device/UCloud acceptance (H24).
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and

@@ -193,5 +193,6 @@ record explicitly rather than rewriting its historical rationale.
 
 - [0188 — Uncertainty decoration inside native Text drafts](0188-text-editor-uncertainty-decoration.md)
 - [0189 — Passage timing windows too short for their text are not aligned](0189-windows-too-short-for-their-text.md)
+- [0190 — Project deletion in Activity](0190-project-deletion-in-activity.md) (post-v2; implemented on `claude/deletion-activity`; recordings keep the dialog flow)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

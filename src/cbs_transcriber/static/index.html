@@ -28,6 +28,7 @@
     <script src="/static/app.js" defer></script>
     <script src="/static/spelling.js" defer></script>
     <script src="/static/background_exports.js" defer></script>
+    <script src="/static/project_deletions.js" defer></script>
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
     <script src="/static/change_steps.js" defer></script>
@@ -1434,8 +1435,9 @@
         <p class="settings-note">
           This permanently removes the project's recordings, transcripts,
           results, notes and history from this app, including its managed folder
-          copies. It cannot be undone. Running jobs will be cancelled before
-          files are removed.
+          copies. It cannot be undone once the project is removed from the
+          library. The deletion continues in Activity, where Keep project stops
+          it until then; running jobs are stopped first.
         </p>
         <label
           >Type the project name <strong id="delete-project-name"></strong> to

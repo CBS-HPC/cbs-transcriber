@@ -54,6 +54,7 @@ APP_ENTRIES = frozenset(
         "projects",
         "backups",
         "local-deletions",
+        "project-deletions",
         "runtime-batches",
         "runtime-preparations",
         "portable-captures",
