@@ -36,7 +36,8 @@ FEATURES = {
     "undo_last_change": "Undo last change, Redo, the History change list and branch view",
     "spelling": "Local spelling assistance",
 }
-PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES)}
+# MVP v2 shows Undo last change, History and Branches (user decision, 20 November 2026).
+PROFILES = {"full": frozenset(), "mvp": frozenset(FEATURES) - {"undo_last_change"}}
 LABEL = re.compile(r"[A-Za-z0-9 ._()+-]{1,40}")
 HIDDEN_PROVIDER_TYPES = {"custom": "custom_providers", "ucloud-vllm": "custom_providers"}
 

@@ -4,7 +4,10 @@ Accepted 19 November 2026. The user chose every recommended answer of the
 [history/undo proposal](../proposals/history-undo-2026-11-18.md) (decisions in
 [editor-review-decisions](../work-plans/editor-review-decisions-2026-11-12.md) section 4).
 Slice 1 (this record) is implemented behind the `undo_last_change` release-profile feature:
-on in `full`, hidden in `mvp` until the user decides whether MVP v2 shows it.
+on in `full`, hidden in `mvp` until the user decides whether MVP v2 shows it. On 20 November,
+testing MVP v2, the user decided **yes**: the `mvp` profile now shows Undo last change, Redo,
+the History change list (ADR 0181) and the branch view (ADR 0182). The per-passage Undo
+merge/split and deleted-passage controls remain the fallback for any profile hiding the feature.
 
 ## Decision
 

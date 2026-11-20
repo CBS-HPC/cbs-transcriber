@@ -529,12 +529,39 @@ def test_change_rows_join_the_shared_vocabulary_report_and_sqlite_backup(client,
     assert restored[-1][1] == encode_payload(current["segments"], current["speakers"])[1]
 
 
-def test_mvp_profile_hides_steps_and_refuses_new_undo(tmp_path):
+def test_mvp_profile_offers_undo_since_the_v2_decision(tmp_path):
     from conftest import MemoryCredentials
     from fastapi.testclient import TestClient
 
     from cbs_transcriber.app import create_app
 
+    # The user chose on 20 November that MVP v2 shows Undo last change, History and Branches.
+    app = create_app(tmp_path, start_worker=False, credentials=MemoryCredentials(), release="mvp")
+    with TestClient(app, headers={"X-CBS-Request": "1"}) as mvp:
+        store = mvp.app.state.store
+        project = store.create_project("Synthetic MVP undo")
+        recording = store.create_recording(project["id"], "synthetic.wav")
+        store.add_result(
+            recording["id"],
+            normalize_segments([{"text": TEXTS[0], "speaker": "A", "start": 0, "end": 1}]),
+            {},
+            "First",
+            {},
+        )
+        current = edit(mvp, store.recording(recording["id"]), 0, "Alpha edited")
+        assert "undo" in offered(mvp, current)
+        response = step(mvp, current)
+        assert response.status_code == 200, response.text
+        assert store.recording(recording["id"])["segments"][0]["text"] == TEXTS[0]
+
+
+def test_a_profile_hiding_undo_hides_steps_and_refuses_new_undo(tmp_path, monkeypatch):
+    from conftest import MemoryCredentials
+    from fastapi.testclient import TestClient
+
+    from cbs_transcriber.app import create_app
+
+    monkeypatch.setitem(release_profile.PROFILES, "mvp", frozenset(release_profile.FEATURES))
     app = create_app(tmp_path, start_worker=False, credentials=MemoryCredentials(), release="mvp")
     with TestClient(app, headers={"X-CBS-Request": "1"}) as mvp:
         store = mvp.app.state.store

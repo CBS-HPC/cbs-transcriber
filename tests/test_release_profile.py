@@ -51,7 +51,8 @@ def test_resolution_order_cli_environment_packaged_then_full(tmp_path):
     assert (build.name, build.label, build.disabled) == (
         "mvp",
         "MVP rc1",
-        set(release_profile.FEATURES),
+        # MVP v2 shows Undo last change, History and Branches (user, 20 November).
+        set(release_profile.FEATURES) - {"undo_last_change"},
     )
     # The environment overrides the packaged choice; the command line overrides both.
     assert (
