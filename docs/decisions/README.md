@@ -187,6 +187,8 @@ record explicitly rather than rewriting its historical rationale.
 - [0181 — History change list and Revert this change](0181-history-change-list.md) (slice 2 implemented; hidden in the MVP profile)
 - [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; hidden in the MVP profile)
 - [0183 — Native batch early uploads, limits and plain status](0183-native-batch-early-uploads-limits-status.md)
-- [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile)
+- [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile; panel replaced by 0187)
+- [0186 — Recording spelling vocabulary that inherits the project's words](0186-recording-spelling-vocabulary.md) (hidden in the MVP profile)
+- [0187 — Spelling: Activity dictionary downloads and on-demand suggestions](0187-spelling-activity-downloads-and-on-demand-suggestions.md) (hidden in the MVP profile)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

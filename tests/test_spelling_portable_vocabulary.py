@@ -39,19 +39,25 @@ def vocabulary(project_id=PROJECT):
     }
 
 
+RECORDING = "c" * 32
+
+
 class Observed:
     """The contained reader supplies bounded text, strict JSON and fixed owner lookups."""
 
-    def __init__(self, value, projects=(PROJECT,)):
+    def __init__(self, value, projects=(PROJECT,), recordings=(RECORDING,)):
         self.raw = value if isinstance(value, str) or value is None else json.dumps(value)
-        self.projects = set(projects)
+        self.owners = {"projects": set(projects), "recordings": set(recordings)}
         self.guards = 0
 
     def one(self, sql, parameters=()):
         if sql == f"SELECT id FROM settings WHERE id={ROW}":
             return None if self.raw is None else (ROW,)
-        assert sql == "SELECT id FROM projects WHERE id=?"
-        return (parameters[0],) if parameters[0] in self.projects else None
+        table = {
+            "SELECT id FROM projects WHERE id=?": "projects",
+            "SELECT id FROM recordings WHERE id=?": "recordings",
+        }[sql]
+        return (parameters[0],) if parameters[0] in self.owners[table] else None
 
     def text(self, table, column, key, value, *, maximum):
         assert (table, column, key, value, maximum) == ("settings", "value", "id", ROW, 4 * 1024**2)
@@ -74,6 +80,14 @@ def test_standalone_validator_keeps_exact_literal_order_bytes_and_revisions():
     assert worker._spelling_vocabulary(observed) == (ROW, raw)
     assert observed.guards >= 9
     assert worker._spelling_vocabulary(Observed(None)) is None
+
+
+def test_standalone_validator_keeps_schema_two_recording_words():
+    """ADR 0186: a non-empty recording map is schema 2, checked against live recordings."""
+    value = vocabulary()
+    value.update(schema=2, recordings={RECORDING: {"revision": 3, "words": ["Søren", "O’Brien"]}})
+    raw = json.dumps(value, ensure_ascii=False)
+    assert worker._spelling_vocabulary(Observed(raw)) == (ROW, raw)
 
 
 @pytest.mark.parametrize(
@@ -123,15 +137,37 @@ def test_standalone_validator_refuses_invalid_private_terms(bad_word):
         "orphan_owner",
         "too_many_projects",
         "null_scope",
+        "schema_two_without_recordings",
+        "empty_recordings",
+        "recordings_in_schema_one",
+        "orphan_recording",
+        "bad_recording_owner",
+        "too_many_recordings",
+        "bad_recording_words",
     ],
 )
 def test_standalone_validator_refuses_unknown_shapes_limits_or_owners(damage):
     value = vocabulary()
     personal = value["personal"]
+    recording = {"revision": 0, "words": []}
     if damage == "schema_bool":
         value["schema"] = True
     elif damage == "schema_future":
+        value.update(schema=3, recordings={RECORDING: recording})
+    elif damage == "schema_two_without_recordings":
         value["schema"] = 2
+    elif damage == "empty_recordings":
+        value.update(schema=2, recordings={})
+    elif damage == "recordings_in_schema_one":
+        value["recordings"] = {RECORDING: recording}
+    elif damage == "orphan_recording":
+        value.update(schema=2, recordings={"d" * 32: recording})
+    elif damage == "bad_recording_owner":
+        value.update(schema=2, recordings={"../outside": recording})
+    elif damage == "too_many_recordings":
+        value.update(schema=2, recordings={f"{n:032x}": recording for n in range(4097)})
+    elif damage == "bad_recording_words":
+        value.update(schema=2, recordings={RECORDING: {"revision": 0, "words": ["two words"]}})
     elif damage == "extra_root":
         value["dictionary_url"] = "https://private.invalid/never-used"
     elif damage == "extra_scope":
@@ -229,7 +265,31 @@ def test_vocab_round_trip_preserves_only_validated_data_and_legacy_absence(
     )
 
 
-@pytest.mark.parametrize("damage", ["orphan", "duplicate_key", "oversized"])
+def test_recording_words_survive_isolated_restore_byte_exact(source, tmp_path, wav_bytes):
+    store, project, _ = source
+    recording = store.create_recording(project["id"], "synthetic.wav")
+    directory = store.directory(recording["id"])
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "original.wav").write_bytes(wav_bytes)
+    store.execute("UPDATE recordings SET status='ready' WHERE id=?", (recording["id"],))
+    value = vocabulary(project["id"])
+    value.update(schema=2, recordings={recording["id"]: {"revision": 2, "words": ["Søren"]}})
+    raw = json.dumps(value, ensure_ascii=False)
+    package = capture(source, tmp_path, raw)
+    target = destination(tmp_path, "spelling-recording-words")
+    result = portable_restore.restore_library(
+        package["folder"],
+        expected_commit_sha256=package["commit_sha256"],
+        target=target,
+        live_root=store.root,
+    )
+    assert result["state"] == "complete"
+    restored = Store(target)
+    assert restored.one(f"SELECT value FROM settings WHERE id={ROW}")["value"] == raw
+    assert restored.one("SELECT id FROM recordings WHERE id=?", (recording["id"],))
+
+
+@pytest.mark.parametrize("damage", ["orphan", "duplicate_key", "oversized", "orphan_recording"])
 def test_invalid_vocabulary_refuses_before_promotion_or_registration(source, tmp_path, damage):
     value = vocabulary(source[1]["id"])
     if damage == "orphan":
@@ -237,6 +297,9 @@ def test_invalid_vocabulary_refuses_before_promotion_or_registration(source, tmp
         raw = json.dumps(value)
     elif damage == "duplicate_key":
         raw = '{"schema":1,"schema":1,"personal":{"revision":0,"words":[]},"projects":{}}'
+    elif damage == "orphan_recording":
+        value.update(schema=2, recordings={"e" * 32: {"revision": 0, "words": ["PrivateName"]}})
+        raw = json.dumps(value)
     else:
         raw = " " * (4 * 1024**2 + 1)
     package = capture(source, tmp_path, raw)

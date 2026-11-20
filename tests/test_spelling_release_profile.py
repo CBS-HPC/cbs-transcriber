@@ -82,6 +82,10 @@ def test_mvp_refuses_new_spelling_work_but_keeps_existing_private_data(
         ).json() == {"revision": 1, "words": ["Alpha", "Beta"]}
         project_path = f"/api/projects/{project['id']}/spelling/vocabulary"
         assert full.put(project_path, json={"revision": 0, "words": ["Gamma"]}).status_code == 200
+        recording_path = f"/api/recordings/{rid}/spelling/vocabulary"
+        assert full.put(recording_path, json={"revision": 0, "words": ["Zeta"]}).status_code == 200
+        # The automatic download queued by enabling found the dictionary already installed.
+        full.app.state.spelling_downloads.run_pending()
     downloads = list(synthetic_dictionaries)
     assert len(downloads) == 3
 
@@ -101,6 +105,28 @@ def test_mvp_refuses_new_spelling_work_but_keeps_existing_private_data(
         assert listed["en"]["ready"] is True
         assert mvp.get("/api/spelling/vocabulary").json()["words"] == ["Alpha", "Beta"]
         assert mvp.get(project_path).json() == {"revision": 1, "words": ["Gamma"]}
+        assert mvp.get(recording_path).json() == {
+            "revision": 1,
+            "words": ["Zeta"],
+            "project": {"id": project["id"], "revision": 1, "words": ["Gamma"]},
+        }
+        # No Activity download starts: not on a language save, not on request or Retry.
+        language = mvp.put(
+            f"/api/projects/{project['id']}/language", json={"language": "da", "revision": 0}
+        )
+        assert language.status_code == 200, language.text
+        assert mvp.get("/api/spelling/dictionary-tasks").json() == {"tasks": []}
+        refused(
+            mvp.post(
+                "/api/spelling/dictionary-tasks",
+                json={"settings_revision": 1, "consent": True, "language": "da"},
+            )
+        )
+        refused(mvp.post("/api/spelling/dictionary-tasks/" + "a" * 32 + "/retry"))
+        assert mvp.request("DELETE", "/api/spelling/dictionary-tasks/" + "a" * 32).status_code == (
+            404
+        )
+        assert not [job for job in mvp.get("/api/jobs").json() if "spelling" in job["kind"]]
         # No new work: preferences, checks, suggestions and retrieval are refused before
         # their handlers, so no worker starts and nothing is downloaded.
         refused(
@@ -131,6 +157,9 @@ def test_mvp_refuses_new_spelling_work_but_keeps_existing_private_data(
             mvp.put("/api/spelling/vocabulary", json={"revision": 1, "words": ["Alpha", "Delta"]})
         )
         refused(mvp.put(project_path, json={"revision": 1, "words": ["Gamma", "Epsilon"]}))
+        refused(mvp.put(recording_path, json={"revision": 1, "words": ["Zeta", "Eta"]}))
+        removed = mvp.put(recording_path, json={"revision": 1, "words": []})
+        assert removed.json() == {"revision": 2, "words": []}, removed.text
         assert mvp.get("/api/spelling/vocabulary").json() == {
             "revision": 1,
             "words": ["Alpha", "Beta"],

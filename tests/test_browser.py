@@ -161,6 +161,12 @@ def provider_advanced(page):
         page.locator("#provider-advanced > summary").click()
 
 
+def settings_tabs(page):
+    """The Settings tab names; Spelling (ADR 0187) only where the profile offers it."""
+    spelling = ["Spelling"] if page.evaluate("featureOn('spelling')") else []
+    return ["UCloud", "Hugging Face", "Local Processing", *spelling]
+
+
 def select_export_formats(page, *formats):
     """Choose the exact format checkboxes in the export dialog."""
     choices = page.locator("#export-dialog [data-export-format]")
@@ -1107,7 +1113,7 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#bulk-provider-kind")).to_have_value("")
     expect(page.locator("#bulk-provider")).not_to_contain_text("gpt-transcribe")
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.get_by_role("tab", name="UCloud", exact=True)).to_have_attribute(
         "aria-selected", "true"
     )
@@ -1159,7 +1165,7 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#base-url")).to_have_value("https://cloud.sdu.dk")
     expect(page.get_by_role("button", name="Save settings")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).press("End")
-    expect(page.get_by_role("tab", name="Local Processing", exact=True)).to_be_focused()
+    expect(page.get_by_role("tab", name=settings_tabs(page)[-1], exact=True)).to_be_focused()
     page.keyboard.press("Home")
     expect(page.get_by_role("tab", name="UCloud", exact=True)).to_be_focused()
     expect(page.locator("#provider-fields")).to_be_visible()
@@ -1920,7 +1926,7 @@ def test_browser_deferred_vllm_keeps_saved_results_and_frozen_jobs(page, local_a
     expect(page.locator(f'#file-provider option[value="{saved["id"]}"]')).to_have_count(0)
     page.locator("#settings-open").click()
     # Direct OpenAI is retired (V212); deferred vLLM never gets its own tab back.
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.locator("#ucloud-vllm-setup")).not_to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator("#ucloud-panel")).to_contain_text("Transcriber Batch")

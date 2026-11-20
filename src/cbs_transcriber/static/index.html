@@ -1213,6 +1213,29 @@
         Import adds a UCloud JSON or CSV transcript as a new result; the
         existing results are kept.
       </p>
+      <!-- Private spelling vocabulary (ADR 0186): hidden in the MVP profile. -->
+      <div class="file-settings-actions" data-feature="spelling">
+        <button
+          type="button"
+          class="button subtle"
+          id="spelling-file-project-vocabulary"
+          data-feature="spelling"
+        >
+          Project vocabulary
+        </button>
+        <button
+          type="button"
+          class="button subtle"
+          id="spelling-recording-vocabulary"
+          data-feature="spelling"
+        >
+          Recording vocabulary
+        </button>
+      </div>
+      <p class="settings-note" data-feature="spelling">
+        Spelling accepts the words in your personal, project and recording
+        vocabularies. A recording inherits its project's words.
+      </p>
       <div class="project-danger">
         <p class="settings-note">
           Deleting removes this recording with its transcripts, results, notes
@@ -1360,13 +1383,26 @@
         One word or name per line. These entries stay private in this library.
       </p>
       <label
-        >Vocabulary<textarea
+        ><span id="spelling-vocabulary-label">Vocabulary</span
+        ><textarea
           id="spelling-vocabulary-text"
           spellcheck="false"
           maxlength="200000"
           rows="10"
+          aria-labelledby="spelling-vocabulary-label"
         ></textarea>
       </label>
+      <div id="spelling-vocabulary-inherited" hidden>
+        <label
+          >Inherited from the project (read-only; edit them in Project
+          vocabulary)<textarea
+            id="spelling-vocabulary-project-words"
+            spellcheck="false"
+            rows="4"
+            readonly
+          ></textarea>
+        </label>
+      </div>
       <p id="spelling-vocabulary-status" class="field-note" role="status"></p>
       <div class="dialog-actions">
         <button type="button" class="button" id="spelling-vocabulary-cancel">
@@ -2654,6 +2690,18 @@
           >
             Local Processing
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-spelling"
+            data-provider-tab="spelling"
+            data-feature="spelling"
+            aria-controls="spelling-panel"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Spelling
+          </button>
         </div>
         <fieldset
           id="hf-panel"
@@ -2764,38 +2812,6 @@
           <button id="enhance-check" class="button" type="button">
             Check this computer again
           </button>
-          <!-- Local spelling (ADR 0185): hidden in the MVP profile. -->
-          <section id="spelling-settings" data-feature="spelling">
-            <h3 class="settings-subhead">Local spelling</h3>
-            <p class="field-note">
-              Only the open passage is checked. Text and private vocabulary stay
-              on this computer. Browser spellcheck stays off.
-            </p>
-            <label class="checkbox-label"
-              ><input type="checkbox" id="spelling-enabled" />Check spelling in
-              passage edits</label
-            >
-            <label class="checkbox-label"
-              ><input type="checkbox" id="spelling-auto-download" />Download
-              public spelling dictionaries when needed</label
-            >
-            <button type="button" class="button" id="spelling-settings-save">
-              Save spelling settings
-            </button>
-            <button
-              type="button"
-              class="button subtle"
-              id="spelling-personal-vocabulary"
-            >
-              Personal vocabulary
-            </button>
-            <p
-              id="spelling-settings-status"
-              class="field-note"
-              role="status"
-            ></p>
-            <ul id="spelling-installed" class="spelling-dictionaries"></ul>
-          </section>
           <details id="local-concurrency" class="enhance-rules">
             <summary>Parallel local tasks</summary>
             <p class="settings-note">
@@ -2925,6 +2941,59 @@
             <p id="rule-status" class="settings-note" role="status"></p>
           </details>
           <p id="processing-status" class="settings-note" role="status"></p>
+          <div class="dialog-actions">
+            <button type="button" class="button" data-close="settings-dialog">
+              Close
+            </button>
+          </div>
+        </fieldset>
+        <!-- Local spelling (ADR 0185/0187): its own tab, hidden in the MVP profile. -->
+        <fieldset
+          id="spelling-panel"
+          role="tabpanel"
+          aria-labelledby="tab-spelling"
+          data-feature="spelling"
+          hidden
+          disabled
+        >
+          <section id="spelling-settings" data-feature="spelling">
+            <p class="settings-note">
+              Spelling checks the open passage on this computer. Its text and
+              your vocabulary are never sent anywhere. Coloured underlines mark
+              possible issues; Ctrl+click (⌘+click on a Mac) an underlined word,
+              or press Alt+Enter inside it, for a suggestion.
+            </p>
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-enabled" />Check spelling in
+              passage edits</label
+            >
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-auto-download" />Download
+              public dictionaries automatically for the languages chosen in
+              projects and recordings</label
+            >
+            <button type="button" class="button" id="spelling-settings-save">
+              Save spelling settings
+            </button>
+            <button
+              type="button"
+              class="button subtle"
+              id="spelling-personal-vocabulary"
+            >
+              Personal vocabulary
+            </button>
+            <p
+              id="spelling-settings-status"
+              class="field-note"
+              role="status"
+            ></p>
+            <h3 class="settings-subhead">Dictionaries</h3>
+            <p class="field-note">
+              Dictionary files are public downloads and contain no transcript
+              text. Downloads run in Activity.
+            </p>
+            <ul id="spelling-installed" class="spelling-dictionaries"></ul>
+          </section>
           <div class="dialog-actions">
             <button type="button" class="button" data-close="settings-dialog">
               Close

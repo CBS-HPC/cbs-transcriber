@@ -158,6 +158,9 @@ GUARDED = [
     ("post", "/api/recordings/r/spelling/check", "spelling"),
     ("post", "/api/recordings/r/spelling/suggest", "spelling"),
     ("post", "/api/recordings/r/spelling/dictionary", "spelling"),
+    # Activity dictionary downloads and their Retry (ADR 0187).
+    ("post", "/api/spelling/dictionary-tasks", "spelling"),
+    ("post", "/api/spelling/dictionary-tasks/t/retry", "spelling"),
 ]
 
 RECOVERY = [
@@ -188,6 +191,7 @@ RECOVERY = [
     # reads and dictionary removal are covered in test_spelling_release_profile.py).
     ("put", "/api/spelling/vocabulary"),
     ("put", "/api/projects/p/spelling/vocabulary"),
+    ("put", "/api/recordings/r/spelling/vocabulary"),
 ]
 
 

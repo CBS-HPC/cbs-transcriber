@@ -74,11 +74,13 @@ GUARDED_ROUTES = tuple(
             rf"/api/recordings/{_ID}/transcripts/{_ID}/(?:undo|redo)-last",
             "undo_last_change",
         ),
-        # Spelling (ADR 0185): enabling/changing preferences, checks, suggestions and public
-        # dictionary retrieval. Reads, dictionary removal and vocabulary removals stay open;
-        # vocabulary additions are refused in the handler.
+        # Spelling (ADR 0185/0187): enabling/changing preferences, checks, suggestions and
+        # public dictionary retrieval, including Activity downloads and their Retry. Reads,
+        # dictionary removal, dismissing a finished download and vocabulary removals stay
+        # open; vocabulary additions are refused in the handler.
         ("PUT", r"/api/spelling/settings", "spelling"),
         ("POST", rf"/api/recordings/{_ID}/spelling/(?:check|suggest|dictionary)", "spelling"),
+        ("POST", rf"/api/spelling/dictionary-tasks(?:/{_ID}/retry)?", "spelling"),
     )
 )
 

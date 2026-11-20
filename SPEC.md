@@ -122,10 +122,13 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   GET/PUT /api/local-concurrency reads and partially updates parallel local task limits.
 - I.spelling: GET/PUT /api/spelling/settings (revisioned preferences), GET /api/spelling/
   dictionaries and DELETE /api/spelling/dictionaries/{language} (public cache status/removal),
-  GET/PUT /api/spelling/vocabulary and /api/projects/{id}/spelling/vocabulary (independently
-  revisioned private words); POST /api/recordings/{id}/spelling/check|suggest derive the
-  effective language and return UTF-16 draft ranges; POST /api/recordings/{id}/spelling/
-  dictionary is the separate explicit retrieval and carries no transcript text (ADR 0185).
+  GET/PUT /api/spelling/vocabulary, /api/projects/{id}/spelling/vocabulary and
+  /api/recordings/{id}/spelling/vocabulary (independently revisioned private words; the
+  recording GET adds its inherited project words, ADR 0186); POST /api/recordings/{id}/spelling/
+  check|suggest derive the effective language and return UTF-16 draft ranges; GET/POST
+  /api/spelling/dictionary-tasks, POST .../{id}/retry and DELETE .../{id} manage Activity
+  dictionary downloads (ADR 0187); POST /api/recordings/{id}/spelling/dictionary remains the
+  earlier synchronous explicit retrieval. Retrieval carries no transcript text (ADR 0185).
 - I.providers: named provider configurations; bulk and per-recording selection; explicit
   multi-provider queue requests. Legacy /api/settings edits the default configuration.
 - I.results: per-recording saved transcripts, active result selection, independent edits,
@@ -337,17 +340,44 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V239: Possible spelling issues are coloured in a layer behind the transparent Text textarea
+  (red wavy line below the amber dotted uncertainty position, so both can mark one word),
+  never in a fixed panel or visible status line; the layer never writes the textarea's value,
+  selection, focus or scroll. Ctrl+click (⌘+click on macOS) on a coloured word or Alt+Enter
+  inside it opens a popover with the suggestion, Add to recording/project vocabulary and Ignore
+  once; Escape returns to the unchanged caret. A chosen suggestion replaces exactly the flagged
+  range through the browser's editing command, so native Undo restores it, after all V234
+  checks. The editor toolbar's Spelling checkbox is the remembered library preference. Settings
+  → Spelling owns spelling settings and dictionaries; Local Processing does not (ADR 0187).
+- V238: Public dictionary downloads run as server-lifetime Activity tasks, one at a time
+  through the existing pinned install path and cache lock, with ready, failed/Retry and Dismiss
+  and no persistence; shutdown interrupts them without publishing partial files. Automatic
+  downloads need checking and automatic downloads on and cover languages chosen as project
+  defaults or recording overrides; triggers are a settings save, a project or recording
+  language save (single or bulk), project creation with a language and the editor's first use,
+  never startup. Turning either preference off stops unpublished automatic downloads; a failed
+  language waits for Retry or explicit consent. With automatic downloads off, only an explicit
+  Download or Retry downloads. Nothing runs in MVP (ADR 0187).
+- V237: A recording's spelling words inherit, and never remove, its project's words; checking
+  uses personal ∪ project ∪ recording words. Row 13 stays schema 1 until a recording has words,
+  then schema 2 with a non-empty recordings map, and returns to schema 1 when the last entry
+  goes. Recording scopes have their own CAS revision checked with the live recording in the same
+  writer transaction and in the check/suggest context. Recording and project Delete fence each
+  deleted recording's revision and remove its entry before the owner rows in the same writer
+  transaction; restore validates schema 2 against captured recordings (ADR 0186).
 - V236: The `spelling` release-profile feature is on in full and hidden in MVP. MVP refuses
-  spelling preference saves, Check, Suggest and public dictionary retrieval with 403
+  spelling preference saves, Check, Suggest and public dictionary retrieval (including Activity
+  dictionary tasks and their Retry) with 403
   feature_disabled before their handlers and hides every entry point (static data-feature
   markup, featureOn in spelling.js), so MVP pages make no spelling requests. Existing private
   data stays available: reads, dictionary removal, vocabulary saves that only remove words
   (additions refused in the revision-checked writer), project-Delete cleanup and backup/restore
   retention. catalogs/release.json is unchanged (user decision 19 November; ADR 0185).
-- V235: Private personal/project spelling vocabulary lives in settings row 13 and operational
-  preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions and live
-  project ownership; project Delete fences only that project's revision and removes its entry
-  in the same transaction. Vocabulary stays out of transcript exports and research reports.
+- V235: Private personal/project/recording spelling vocabulary lives in settings row 13 and
+  operational preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions
+  and live project or recording ownership; Delete fences only the deleted owners' revisions and
+  removes their entries in the same transaction. Vocabulary stays out of transcript exports and
+  research reports.
   Backups keep it; isolated restore retains only strictly validated data-only row 13 with live
   owners and never operational preferences. Malformed vocabulary refuses before promotion.
 - V234: Spelling suggestions change only the current open Text draft after exact recording/
@@ -357,8 +387,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   pinned public retrieval carries no text/credentials, preserves opt-out and needs consent when
   automatic retrieval is off. The bounded, credential-free engine child is killed/reaped on any
   deadline, including partial startup; one preferred suggestion is requested. Busy Check
-  retries only its exact current draft with bounded backoff; Suggest/install never retry
-  automatically. Dictionary removal preserves replaced/linked targets and refuses after
+  retries only its exact current draft with bounded backoff; Suggest never retries and only an
+  explicit Retry restarts a failed download. Dictionary removal preserves replaced/linked targets and refuses after
   shutdown. Vendor spellcheck stays disabled. Not a hostile-filesystem claim (ADR 0185).
 - V233: Proposed, not implemented. A native MIG owner asks about a full B200 only when two
   products reads agree the exact MIG is FULL and the full GPU AVAILABLE/BUSY, with verified
@@ -2080,6 +2110,7 @@ T151|~|History change list: bounded list metadata, word-level What changed, undo
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); hidden in MVP|V226,V225,I.version-graph,ADR0182
 T153|~|Native batches: plain Activity status, Settings → UCloud upload/batch limits and per-file early uploads with sealed single-owner submission; synthetic mocked checks pass (claude/native-batch); live UCloud timing/throughput and the full-GPU choice remain|V229,V230,V231,V232,V22,V142,V187,I.native-batch,ADR0183
 T155|~|Local DA checking and en-GB checking/one preferred suggestion ported from the private preview into v2 (claude/spelling-hidden) with private vocabulary, bounded worker/cache and draft/timing guards; settings rows moved to 12/13; on in full, hidden/refused in MVP with reads and removals kept; scoped backend/browser/MVP checks pass; real-user, licence and platform acceptance remain|V234,V235,V236,I.spelling,ADR0185
+T156|~|Spelling redesign (claude/spelling-redesign, 20 November): recording vocabulary inheriting project words in File Settings; automatic dictionary downloads as Activity tasks; coloured words with a Ctrl+click/Alt+Enter suggestion popover replacing the fixed panel; remembered toolbar toggle; Settings → Spelling tab; synthetic unit/browser/MVP checks pass; macOS/Firefox/Safari, screen readers and real users unverified; still hidden in MVP|V237,V238,V239,V236,I.spelling,ADR0186,ADR0187
 T154|.|Proposed only: per-batch full-GPU ask when no native 1g MIG is free; design ADR0184 with the user's 19 November decisions, no code, review or live evidence; read-only live reads permitted once implemented|V233,V76,V217,V220,ADR0184
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
@@ -2206,3 +2237,5 @@ B463|2026-11-19|Early-selection hazards (B462): batch-wide claim/finish writes i
 B464|2026-11-19|Porting the 9 November spelling preview into v2 found its settings rows 10/11 already owned by checked-provider receipts and runtime generations; unchanged, saving spelling preferences would overwrite the provider receipts, and a library with runtime generations would fail the vocabulary validator, refusing project Delete and restore|V235,ADR0185; move spelling to rows 12/13 in the service, Delete fence and repinned restore validator; regression that a vocabulary-shaped row 11 is never restored as spelling data
 B465|2026-11-19|The funding observer's watchdog woke a stalled worker only by closing the SDK client, and its wake-up was claimed for Windows alone: a stdlib loopback probe showed a close from another thread does not wake a blocked read on Linux (WSL2), shutdown does not wake it on Windows, and closing the client never reached a TLS handshake on any platform because httpcore returns the TLS socket only afterwards|V221,T146; shut down a duplicate descriptor taken at TCP connect, then close the client; shut down connections completing after the deadline at once; per-platform loopback tests run everywhere and a no-shutdown mutation fails them; macOS and a full Linux run unverified
 B466|2026-11-20|With spelling suggestions on, Cancel on a passage editor scrolled through a long transcript moved it by about 76 px: removing the spelling panel and editor above the focused Cancel button let the browser's scroll anchoring re-anchor the view before the editor closed|Cancel pauses scroll anchoring on the transcript while it clears the draft and closes the editor in place, keeps the earlier scroll (the browser may only clamp it) and resumes anchoring next frame; the 600-passage Cancel regression now waits for the spelling panel and asserts the clamped position
+B467|2026-11-20|Spelling redesign (before commit): opening the suggestion popover with Alt+Enter dropped keyboard focus to the page body, because the popover re-rendered with every button disabled while its suggestion loaded and focus could not stay on a disabled button|V239,ADR0187; the popover is itself focusable, keyboard-opened popovers keep focus inside across re-rendering and move it to the suggestion when it arrives; browser regression asserts the suggestion is focused and Escape returns to the unchanged caret
+B468|2026-11-20|Spelling redesign (before commit): moving the spelling settings into a Settings tab panel and adding File Settings vocabulary buttons left those elements without their own data-feature mark, so MVP code that un-hid them made them display again (only their wrappers were hidden); the moved dictionary list also inherited the global right-floating 9 px field-note style|V236,ADR0187; every spelling entry point carries data-feature="spelling" itself and the MVP browser check un-hides each new one; the Spelling panel, popover and vocabulary dialog set readable non-floating notes

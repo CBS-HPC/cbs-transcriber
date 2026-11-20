@@ -1,5 +1,11 @@
 # 0185 — Local spelling assistance for an open passage
 
+> Update 20 November 2026: the issue panel, in-editor download notice and Local Processing
+> section are replaced by [ADR 0187](0187-spelling-activity-downloads-and-on-demand-suggestions.md)
+> (coloured words, Ctrl+click/Alt+Enter popover, Activity downloads, Settings → Spelling), and
+> [ADR 0186](0186-recording-spelling-vocabulary.md) adds recording vocabulary. The engine,
+> pins, worker bounds, privacy, retention and MVP refusals below are unchanged.
+
 Accepted for v2 on 19 November 2026: the user chose **"Hidden in v2"**. The previously tested
 preview ships in the code behind the `spelling` release-profile feature (ADR 0145): on in
 `full`, hidden and refused in `mvp`. The user's later underline-in-editor design is not part of

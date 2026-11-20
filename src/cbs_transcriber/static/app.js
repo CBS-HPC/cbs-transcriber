@@ -9126,6 +9126,8 @@ function showProviderTab(tab) {
   $("#hf-panel").disabled = true;
   $("#processing-panel").hidden = true;
   $("#processing-panel").disabled = true;
+  $("#spelling-panel").hidden = true;
+  $("#spelling-panel").disabled = true;
   $("#provider-fields").hidden = false;
   $("#provider-fields").disabled = false;
   $("#provider-fields").setAttribute("aria-labelledby", `tab-${tab}`);
@@ -9378,6 +9380,8 @@ async function showHuggingFaceTab() {
   $("#provider-fields").disabled = true;
   $("#processing-panel").hidden = true;
   $("#processing-panel").disabled = true;
+  $("#spelling-panel").hidden = true;
+  $("#spelling-panel").disabled = true;
   $("#hf-panel").hidden = false;
   $("#hf-panel").disabled = true;
   $("#hf-settings-token").value = "";
@@ -9573,7 +9577,7 @@ async function showProcessingTab() {
     button.setAttribute("aria-selected", String(selected));
     button.tabIndex = selected ? 0 : -1;
   });
-  for (const id of ["#provider-fields", "#hf-panel"]) {
+  for (const id of ["#provider-fields", "#hf-panel", "#spelling-panel"]) {
     $(id).hidden = true;
     $(id).disabled = true;
   }
@@ -9615,7 +9619,6 @@ async function showProcessingTab() {
   if (local.status) renderLocalRuntime(local.status);
   else checkLocalRuntime().catch(() => {});
   loadLocalConcurrency().catch(() => {});
-  if (typeof loadSpellingSettings === "function") loadSpellingSettings();
   await renderCloudEnhancementStatus().catch(() => null);
 }
 // Parallel local tasks per step (ADR 0146): a value equal to this computer's automatic
@@ -9949,6 +9952,8 @@ for (const [id, field] of Object.entries(NATIVE_LIMIT_FIELDS)) {
 function switchProviderTab(tab) {
   if (tab === "huggingface") return showHuggingFaceTab();
   if (tab === "processing") return showProcessingTab();
+  // Settings → Spelling (ADR 0187) lives in spelling.js; a hidden feature never opens it.
+  if (tab === "spelling" && featureOn("spelling")) return showSpellingTab();
   if (tab !== "ucloud") tab = "ucloud";
   showProviderTab(tab);
   const existing = state.providers.find(
@@ -12153,6 +12158,8 @@ async function runJobCancel(button) {
 }
 function jobActions(job) {
   if (job.kind === "hf_setup") return hfSetupActions(job);
+  // Dictionary downloads (ADR 0187) render their own Retry/Dismiss; never queue controls.
+  if (job.kind === "spelling_dictionary") return "";
   if (job.runtime_preparation_id) return runtimePreparationActions(job);
   if (job.local_deletion) {
     const item = job.local_deletion;
@@ -12449,6 +12456,8 @@ function needsActivityAttention(job) {
       )
     );
   if (job.kind === "export") return !["queued", "running"].includes(job.state);
+  if (job.kind === "spelling_dictionary")
+    return ["failed", "interrupted"].includes(job.state);
   if (job.runtime_preparation_id)
     return !runtimePreparationId(job) || job.needs_attention === true;
   if (job.local_deletion) return true;
@@ -12516,6 +12525,10 @@ function runtimeBatchProgress(job) {
 function activityCard(job, expanded) {
   if (job.kind === "hf_setup") return hfSetupCard(job);
   if (job.kind === "export") return CBSBackgroundExports.card(job);
+  if (job.kind === "spelling_dictionary")
+    return typeof spellingDictionaryCard === "function"
+      ? spellingDictionaryCard(job)
+      : "";
   if (job.runtime_preparation_id) {
     const identifier = runtimePreparationId(job),
       progress = Number.isFinite(job.progress)
@@ -12567,6 +12580,9 @@ async function pollJobs() {
   jobsRenderedSequence = sequence;
   state.jobs = latest;
   CBSBackgroundExports.observe(latest);
+  // An open editor waiting for its dictionary checks again once Activity says it is ready.
+  if (typeof observeSpellingDictionaries === "function")
+    observeSpellingDictionaries(latest);
   refreshPassageRepairs();
   const activities = activityJobs(state.jobs);
   $("#job-count").textContent = activities.filter((job) =>
@@ -12631,7 +12647,9 @@ function mergeActivityHidden(value) {
     if (typeof updated === "string") activityHidden.set(id, updated);
 }
 function activityRemovable(job) {
-  if (["export", "hf_setup"].includes(job.kind)) return false;
+  // Server-lifetime cards have their own Discard/Dismiss controls.
+  if (["export", "hf_setup", "spelling_dictionary"].includes(job.kind))
+    return false;
   if (job.runtime_preparation_id)
     return !!runtimePreparationId(job) && job.can_remove === true;
   if (job.local_deletion) return false;

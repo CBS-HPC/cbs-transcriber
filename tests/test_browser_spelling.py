@@ -1,4 +1,9 @@
-"""Real spelling UI against tiny pinned dictionaries; no public downloads or private library."""
+"""Real spelling UI against tiny pinned dictionaries; no public downloads or private library.
+
+ADR 0185 with the 20 November redesign (ADR 0186/0187): coloured words behind the textarea,
+Ctrl+click or Alt+Enter for a suggestion popover, a remembered toolbar toggle, Activity
+dictionary downloads and recording vocabulary.
+"""
 
 import json
 from copy import deepcopy
@@ -21,6 +26,7 @@ from cbs_transcriber.transcripts import normalize_segments
 
 pytestmark = pytest.mark.browser
 page = test_browser.page
+CTRL = ["Control"]
 
 
 @pytest.fixture(autouse=True)
@@ -62,12 +68,19 @@ def spelled(tmp_path, monkeypatch):
         "_catalog",
         lambda value=None: original_catalog(catalog if value is None else value),
     )
-    downloads = []
+    downloads, gate, control = [], Event(), SimpleNamespace(fail=False)
+    gate.set()
 
     def download(entry, target, *, guard=None):
         assert entry["url"] in bodies, "A test tried to download a public dictionary."
+        # A cleared gate holds the synthetic download; shutdown still stops it.
+        while not gate.wait(0.02):
+            if guard:
+                guard()
         if guard:
             guard()
+        if control.fail:
+            raise OSError("Synthetic offline dictionary host")
         downloads.append(deepcopy(entry))
         target.write_bytes(bodies[entry["url"]])
 
@@ -107,14 +120,18 @@ def spelled(tmp_path, monkeypatch):
     fixture = SimpleNamespace(
         app=app,
         store=store,
+        service=app.server.config.app.state.spelling,
         project=project["id"],
         rid=rid,
         result=result["id"],
         other=other,
         downloads=downloads,
+        gate=gate,
+        control=control,
         cache=tmp_path / "cache",
     )
     yield fixture
+    gate.set()
     app.stop()
 
 
@@ -133,33 +150,55 @@ def request(fixture, method, path, body=None):
     return response.json()
 
 
-def preferences(fixture, *, enabled=True, auto_download=True):
-    current = request(fixture, "GET", "/spelling/settings")
-    return request(
-        fixture,
-        "PUT",
-        "/spelling/settings",
-        {"revision": current["revision"], "enabled": enabled, "auto_download": auto_download},
-    )
+def quietly(fixture, *, enabled=True, auto_download=True, install=()):
+    """Save preferences and install dictionaries without the HTTP automatic trigger."""
+    current = fixture.service.settings()["revision"]
+    fixture.service.save_settings(current, enabled, auto_download)
+    for language in install:
+        fixture.service.install_language(language, consent=True)
 
 
-def editor(page, fixture, rid=None):
+def editor(page, fixture, rid=None, passage=0):
     page.goto(fixture.app.url + f"/#/recordings/{rid or fixture.rid}")
-    page.locator('#passage-0 [data-action="edit"]').click()
+    page.locator(f'#passage-{passage} [data-action="edit"]').click()
     expect(page.locator("[data-spelling-panel]")).to_be_visible()
-    return page.locator('#passage-0 [data-editor-pane="text"] textarea')
+    return page.locator(f'#passage-{passage} [data-editor-pane="text"] textarea')
 
 
-def ready(page):
-    expect(page.locator("[data-spelling-issues] summary")).to_have_text(
-        "1 possible spelling issue", timeout=15000
+def marks(page):
+    return page.locator(".passage-spelling-overlay .spelling-flag")
+
+
+def status(page):
+    return page.locator("[data-spelling-status]")
+
+
+def ready(page, *words):
+    expect(marks(page)).to_have_text(list(words or ["helllo"]), timeout=15000)
+
+
+def popover(page):
+    return page.locator("[data-spelling-popover]")
+
+
+def ctrl_click(page, index=0):
+    """Ctrl+click the middle of a coloured word, through the textarea above it."""
+    mark = marks(page).nth(index).bounding_box()
+    draft = page.locator('[data-editor-pane="text"]:not([hidden]) textarea')
+    box = draft.bounding_box()
+    draft.click(
+        position={
+            "x": mark["x"] + mark["width"] / 2 - box["x"],
+            "y": mark["y"] + mark["height"] / 2 - box["y"],
+        },
+        modifiers=CTRL,
     )
-    page.locator("[data-spelling-issues]").evaluate("node => { node.open = true; }")
+    expect(popover(page)).to_be_visible()
 
 
 def settings(page):
     page.locator("#settings-open").click()
-    page.locator("#tab-processing").click()
+    page.locator("#tab-spelling").click()
     expect(page.locator("#spelling-settings-save")).to_be_enabled()
 
 
@@ -168,11 +207,11 @@ def close_settings(page):
     expect(page.locator("#settings-dialog")).to_be_hidden()
 
 
-def wait_held(page, held):
+def wait_held(page, held, count=1):
     deadline = monotonic() + 8
-    while not held and monotonic() < deadline:
+    while len(held) < count and monotonic() < deadline:
         page.wait_for_timeout(10)
-    assert held, "The synthetic request was never intercepted."
+    assert len(held) >= count, "The synthetic request was never intercepted."
 
 
 def release(held):
@@ -184,203 +223,262 @@ def release(held):
         assert "already handled" in str(error) or "Target" in str(error)
 
 
-def test_default_off_first_use_notice_and_utf16_suggestion_only_change_draft(page, spelled):
-    checks, installs = [], []
-    held = []
+def activity_card(page):
+    return page.locator("[data-spelling-task]")
 
-    def check(route):
-        checks.append(route.request.post_data_json)
-        route.continue_()
 
-    def install(route):
-        installs.append(route.request.post_data_json)
-        held.append((route, route.fetch()))
-
-    page.route("**/spelling/check", check)
-    page.route("**/spelling/dictionary", install)
+def test_first_use_downloads_in_activity_and_suggestion_is_undoable_input(page, spelled):
+    checks, dictionary_requests = [], []
+    page.on(
+        "request",
+        lambda req: (
+            checks.append(req.post_data_json)
+            if req.url.endswith("/spelling/check")
+            else dictionary_requests.append(req.post_data_json)
+            if req.url.endswith("/spelling/dictionary-tasks") and req.method == "POST"
+            else None
+        ),
+    )
     before = spelled.store.recording(spelled.rid)
     versions = len(spelled.store.result_versions(spelled.rid, spelled.result))
+    spelled.gate.clear()
     draft = editor(page, spelled)
     enable = page.locator("[data-spelling-enable]")
     expect(enable).to_be_enabled()
     expect(enable).not_to_be_checked()
+    # No fixed issue box: only the toolbar switch and a screen-reader status.
+    expect(page.locator("[data-spelling-issues], .spelling-issues")).to_have_count(0)
     assert request(spelled, "GET", "/spelling/settings")["auto_download"] is True
-    assert not checks and not installs and not spelled.downloads
+    assert not checks and not dictionary_requests and not spelled.downloads
     assert draft.evaluate("node => node.spellcheck") is False
-    assert page.locator("[data-timing-text]").evaluate_all(
-        "nodes => nodes.every(node => node.spellcheck === false)"
-    )
     enable.check()
-    wait_held(page, held)
-    expect(page.locator("[data-spelling-status]")).to_contain_text("No transcript text is sent")
-    assert set(installs[0]) == {"settings_revision", "consent"}
-    assert installs[0]["consent"] is False
-    assert len(spelled.downloads) == 3
-    release(held)
+    # Enabling queues the selected language's dictionary in Activity; the editor waits.
+    expect(status(page)).to_contain_text("Follow it in Activity", timeout=8000)
+    expect(status(page)).to_contain_text("no transcript text is sent")
+    assert all(
+        set(body) == {"settings_revision", "consent", "recording_id"}
+        for body in (dictionary_requests)
+    )
+    assert all(body["consent"] is False for body in dictionary_requests)
+    page.locator("#activity-open").click()
+    card = activity_card(page)
+    expect(card).to_contain_text("English (United Kingdom, -ise) spelling dictionary")
+    expect(card).to_contain_text("No transcript text or vocabulary is sent")
+    expect(card.locator(".badge")).to_have_text("running")
+    assert not spelled.downloads
+    spelled.gate.set()
+    expect(card.locator(".badge")).to_have_text("ready", timeout=10000)
+    expect(card.locator('[data-spelling-task-action="dismiss"]')).to_be_enabled()
+    page.locator("#activity-close").click()
     ready(page)
-    issue = page.locator('[data-spelling-issue="0"]')
-    expect(issue.locator("strong")).to_have_text("helllo")
-    issue.locator('[data-spelling-action="suggest"]').click()
-    suggestion = issue.locator("[data-spelling-suggestion]", has_text="hello").first
+    assert len(spelled.downloads) == 3
+    expect(status(page)).to_contain_text("1 possible spelling issue coloured")
+    expect(page.locator(".passage-spelling-toggle")).to_have_attribute(
+        "title", status(page).text_content()
+    )
+    ctrl_click(page)
+    expect(popover(page)).to_have_attribute("role", "dialog")
+    expect(popover(page).locator(".spelling-popover-word")).to_have_text("helllo")
+    suggestion = popover(page).locator("[data-spelling-suggestion]", has_text="hello").first
     expect(suggestion).to_be_visible(timeout=10000)
     draft.evaluate(
         "node => { window.spellingInputEvents = 0; "
         "node.addEventListener('input', () => window.spellingInputEvents++); }"
     )
     suggestion.click()
+    expect(popover(page)).to_have_count(0)
     expect(draft).to_have_value("😀 hello hello world")
     assert draft.evaluate("node => node.selectionStart === 14 && node.selectionEnd === 14")
     assert page.evaluate("() => window.spellingInputEvents") == 1
     assert spelled.store.recording(spelled.rid) == before
     assert len(spelled.store.result_versions(spelled.rid, spelled.result)) == versions
-    # The chosen suggestion is ordinary input: after the typing pause its draft is checked.
-    # Measure the debounce below only once that check has settled (no timing race).
-    deadline = monotonic() + 8
-    while monotonic() < deadline and not any(
-        body["text"] == "😀 hello hello world" for body in checks
-    ):
-        page.wait_for_timeout(10)
-    expect(page.locator("[data-spelling-status]")).to_have_text(
-        "No spelling issues found in this draft."
-    )
+    # The replacement is ordinary input: the browser's own Undo restores the word.
+    page.keyboard.press("Control+z")
+    expect(draft).to_have_value("😀 hello helllo world")
+    ready(page)
     count = len(checks)
     draft.fill("hello neww")
     page.wait_for_timeout(120)
     draft.fill("hello draftt")
     page.wait_for_timeout(200)
     assert len(checks) == count
-    expect(page.locator("[data-spelling-issues] summary")).to_have_text("1 possible spelling issue")
-    expect(page.locator('[data-spelling-issue="0"] strong')).to_have_text("draftt")
+    ready(page, "draftt")
     assert checks[-1]["text"] == "hello draftt"
     assert all(set(body) == {"text", "request_id"} for body in checks)
     page.locator("[data-editor-mode]").select_option("timing")
     expect(page.locator("[data-spelling-panel]")).to_have_count(0)
+    expect(page.locator(".passage-spelling-overlay")).to_have_count(0)
     count = len(checks)
     page.wait_for_timeout(600)
     assert len(checks) == count
 
 
-def test_auto_download_optout_requires_click_and_settings_cache_removal_persists(page, spelled):
-    preferences(spelled, auto_download=False)
+def test_keyboard_route_focuses_popover_and_escape_returns_to_the_caret(page, spelled):
+    quietly(spelled, install=["en"])
     draft = editor(page, spelled)
-    expect(page.locator("[data-spelling-download]")).to_be_enabled()
+    ready(page)
+    # The caret inside the coloured word (UTF-16 offset 11 lies within "helllo").
+    draft.evaluate("node => { node.focus(); node.setSelectionRange(11, 11); }")
+    page.keyboard.press("Alt+Enter")
+    expect(popover(page)).to_be_visible()
+    suggestion = popover(page).locator("[data-spelling-suggestion]").first
+    expect(suggestion).to_be_focused(timeout=10000)
+    page.keyboard.press("Escape")
+    expect(popover(page)).to_have_count(0)
+    expect(draft).to_be_focused()
+    assert draft.evaluate("node => node.selectionStart === 11 && node.selectionEnd === 11")
+    expect(draft).to_have_value("😀 hello helllo world")
+    expect(page.locator("#passage-0 .passage-editor")).to_be_visible()
+    # Ignore once is reachable from the keyboard as well.
+    page.keyboard.press("Alt+Enter")
+    expect(suggestion).to_be_focused(timeout=10000)
+    page.keyboard.press("Tab")
+    page.keyboard.press("Tab")
+    page.keyboard.press("Tab")
+    expect(popover(page).locator('[data-spelling-action="ignore"]')).to_be_focused()
+    page.keyboard.press("Enter")
+    expect(marks(page)).to_have_count(0)
+    expect(status(page)).to_have_text("No remaining spelling issues to review.")
+    expect(draft).to_be_focused()
+
+
+def test_toolbar_toggle_is_remembered_for_other_passages_and_reloads(page, spelled):
+    quietly(spelled, install=["en"])
+    editor(page, spelled)
+    ready(page)
+    page.locator("[data-spelling-enable]").uncheck()
+    expect(marks(page)).to_have_count(0)
+    expect(status(page)).to_contain_text("Local spelling is off")
+    page.locator('#passage-0 [data-editor-pane="text"] [data-action="cancel-edit"]').click()
+    page.locator('#passage-1 [data-action="edit"]').click()
+    expect(page.locator("#passage-1 [data-spelling-enable]")).to_be_enabled()
+    expect(page.locator("#passage-1 [data-spelling-enable]")).not_to_be_checked()
+    page.reload()
+    page.locator('#passage-0 [data-action="edit"]').click()
+    expect(page.locator("[data-spelling-enable]")).to_be_enabled()
+    expect(page.locator("[data-spelling-enable]")).not_to_be_checked()
+    page.locator("[data-spelling-enable]").check()
+    ready(page)
+    assert request(spelled, "GET", "/spelling/settings")["enabled"] is True
+
+
+def test_auto_download_optout_needs_a_click_and_settings_tab_manages_dictionaries(page, spelled):
+    quietly(spelled, auto_download=False)
+    calls = []
+    page.on("request", lambda req: calls.append(req.url) if "dictionary-tasks" in req.url else 0)
+    draft = editor(page, spelled)
+    download = page.locator("[data-spelling-download]")
+    expect(download).to_be_enabled()
     page.wait_for_timeout(650)
-    assert not spelled.downloads
-    page.locator("[data-spelling-download]").click()
+    assert not spelled.downloads and not calls
+    download.click()
     ready(page)
     assert len(spelled.downloads) == 3
+    expect(download).to_be_hidden()
     settings(page)
+    expect(page.locator("#spelling-panel")).to_be_visible()
+    expect(page.locator("#processing-panel")).to_be_hidden()
     expect(page.locator("#spelling-auto-download")).not_to_be_checked()
     installed = page.locator("#spelling-installed")
-    expect(installed).to_contain_text("English (United Kingdom, -ise)")
-    expect(installed).to_contain_text("LicenseRef-SCOWL-2020-12-07")
-    expect(installed.get_by_role("link", name="Licence and attribution ↗")).to_have_attribute(
+    english = installed.locator('[data-spelling-dictionary="en"]')
+    expect(english).to_contain_text("English (United Kingdom, -ise)")
+    expect(english).to_contain_text("LicenseRef-SCOWL-2020-12-07")
+    expect(english).to_contain_text("Ready on this computer.")
+    expect(english.get_by_role("link", name="Licence and attribution ↗")).to_have_attribute(
         "href",
         "https://github.com/wooorm/dictionaries/blob/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en-GB/license",
     )
+    expect(installed.locator('[data-spelling-dictionary="da"]')).to_contain_text("Not downloaded")
     page.locator("#spelling-enabled").uncheck()
     page.locator("#spelling-settings-save").click()
     expect(page.locator("#spelling-settings-status")).to_have_text("Spelling settings saved.")
-    page.locator('[data-spelling-remove="en"]').click()
-    expect(installed).to_contain_text("No spelling dictionaries installed")
+    english.locator('[data-spelling-remove="en"]').click()
+    expect(english).to_contain_text("Not downloaded")
     close_settings(page)
     expect(draft).to_have_value("😀 hello helllo world")
     page.reload()
     settings(page)
     expect(page.locator("#spelling-enabled")).not_to_be_checked()
     expect(page.locator("#spelling-auto-download")).not_to_be_checked()
+    # Local Processing keeps only automatic local processing (user, 20 November).
+    page.locator("#tab-processing").click()
+    expect(page.locator("#processing-panel")).to_be_visible()
+    expect(page.locator("#processing-panel #spelling-enabled")).to_have_count(0)
     assert len(spelled.downloads) == 3
 
 
 def test_damaged_installed_dictionary_remains_visible_for_explicit_removal(page, spelled):
-    preferences(spelled, auto_download=False)
-    editor(page, spelled)
-    page.locator("[data-spelling-download]").click()
-    ready(page)
+    quietly(spelled, auto_download=False, install=["en"])
     installed = list(spelled.cache.rglob("dictionary.aff"))
     assert len(installed) == 1
     installed[0].write_bytes(installed[0].read_bytes() + b"\n# synthetic damage\n")
+    page.goto(spelled.app.url)
     settings(page)
-    listing = page.locator("#spelling-installed")
-    expect(listing).to_contain_text("English (United Kingdom, -ise)")
-    expect(listing).to_contain_text("Dictionary files need attention")
-    expect(listing.locator('[data-spelling-remove="en"]')).to_be_enabled()
-    listing.locator('[data-spelling-remove="en"]').click()
-    expect(listing).to_contain_text("No spelling dictionaries installed")
+    english = page.locator('#spelling-installed [data-spelling-dictionary="en"]')
+    expect(english).to_contain_text("Dictionary files need attention")
+    expect(english.locator('[data-spelling-remove="en"]')).to_be_enabled()
+    english.locator('[data-spelling-remove="en"]').click()
+    expect(english).to_contain_text("Not downloaded")
     assert not installed[0].exists()
     assert len(spelled.downloads) == 3
 
 
-def test_busy_dictionary_install_keeps_an_explicit_download_retry_usable(page, spelled):
-    preferences(spelled, auto_download=False)
+def test_failed_download_offers_retry_in_activity_and_waits_for_a_busy_cache(page, spelled):
+    quietly(spelled, auto_download=False)
+    spelled.control.fail = True
     editor(page, spelled)
-    expect(page.locator("[data-spelling-download]")).to_be_enabled()
-    before = spelled.store.recording(spelled.rid)
-    installs = []
-
-    def capture_install(route):
-        response = route.fetch()
-        installs.append(response.json())
-        route.fulfill(response=response)
-
-    page.route("**/spelling/dictionary", capture_install)
-    cache_lock = spelled.app.server.config.app.state.spelling.cache_lock
-    assert cache_lock.acquire(timeout=2)
-    try:
-        page.locator("[data-spelling-download]").click()
-        wait_held(page, installs)
-        assert installs == [{"status": "busy"}]
-        expect(page.locator("[data-spelling-download]")).to_be_enabled()
-        expect(page.locator("[data-spelling-status]")).to_contain_text("busy")
-        page.wait_for_timeout(650)
-        assert len(installs) == 1 and not spelled.downloads
-    finally:
-        cache_lock.release()
     page.locator("[data-spelling-download]").click()
-    ready(page)
-    assert len(installs) == 2 and len(spelled.downloads) == 3
-    assert spelled.store.recording(spelled.rid) == before
-
-
-def test_late_busy_install_cannot_replace_same_view_optout_status(page, spelled):
-    preferences(spelled, auto_download=False)
-    draft = editor(page, spelled)
-    expect(page.locator("[data-spelling-download]")).to_be_enabled()
-    before = spelled.store.recording(spelled.rid)
-    held = []
-
-    def hold_busy_install(route):
-        response = route.fetch()
-        assert response.json() == {"status": "busy"}
-        held.append((route, response))
-
-    page.route("**/spelling/dictionary", hold_busy_install)
-    cache_lock = spelled.app.server.config.app.state.spelling.cache_lock
+    page.locator("#activity-open").click()
+    card = activity_card(page)
+    expect(card.locator(".badge")).to_have_text("failed", timeout=10000)
+    expect(card).to_contain_text("Check the internet connection")
+    expect(card).not_to_contain_text("Synthetic offline")
+    expect(page.locator("[data-spelling-download]")).to_be_visible()
+    expect(status(page)).to_contain_text("did not finish")
+    spelled.control.fail = False
+    cache_lock = spelled.service.cache_lock
     assert cache_lock.acquire(timeout=2)
     try:
-        page.locator("[data-spelling-download]").click()
-        wait_held(page, held)
+        card.locator('[data-spelling-task-action="retry"]').click()
+        expect(card.locator(".badge")).to_have_text("running", timeout=8000)
+        page.wait_for_timeout(500)
+        assert not spelled.downloads
     finally:
         cache_lock.release()
+    expect(card.locator(".badge")).to_have_text("ready", timeout=10000)
+    assert len(spelled.downloads) == 3
+    card.locator('[data-spelling-task-action="dismiss"]').click()
+    expect(card).to_have_count(0)
+    page.locator("#activity-close").click()
+    ready(page)
+
+
+def test_optout_during_a_consented_download_keeps_the_editor_off(page, spelled):
+    quietly(spelled, auto_download=False)
+    draft = editor(page, spelled)
+    before = spelled.store.recording(spelled.rid)
+    spelled.gate.clear()
+    page.locator("[data-spelling-download]").click()
+    expect(status(page)).to_contain_text("Follow it in Activity")
     page.locator("[data-spelling-enable]").uncheck()
-    expect(page.locator("[data-spelling-status]")).to_contain_text("Local spelling is off")
-    release(held)
-    page.wait_for_timeout(750)
-    expect(page.locator("[data-spelling-status]")).to_contain_text("Local spelling is off")
+    expect(status(page)).to_contain_text("Local spelling is off")
+    spelled.gate.set()
+    page.wait_for_timeout(2500)
+    expect(status(page)).to_contain_text("Local spelling is off")
     expect(page.locator("[data-spelling-enable]")).not_to_be_checked()
+    expect(marks(page)).to_have_count(0)
     expect(draft).to_have_value("😀 hello helllo world")
-    assert not spelled.downloads
     assert spelled.store.recording(spelled.rid) == before
 
 
 def test_busy_check_resumes_latest_unchanged_draft_and_stops_on_optout_or_cancel(
     page, spelled, monkeypatch
 ):
-    preferences(spelled)
+    quietly(spelled, install=["en"])
     draft = editor(page, spelled)
     ready(page)
     before = spelled.store.recording(spelled.rid)
-    worker = spelled.app.server.config.app.state.spelling.worker
+    worker = spelled.service.worker
     exchange = worker._exchange
     entered, released = Event(), Event()
     checks = []
@@ -408,9 +506,9 @@ def test_busy_check_resumes_latest_unchanged_draft_and_stops_on_optout_or_cancel
     try:
         draft.fill("hello neww")
         draft.evaluate("node => { window.spellingBusyDraft = node; node.setSelectionRange(7, 7); }")
-        expect(page.locator("[data-spelling-status]")).to_contain_text("Waiting for local spelling")
+        expect(status(page)).to_contain_text("Waiting for local spelling")
         released.set()
-        expect(page.locator('[data-spelling-issue="0"] strong')).to_have_text("neww", timeout=8000)
+        ready(page, "neww")
         assert checks[:2] == ["hello oldd", "hello neww"]
         assert checks[-1] == "hello neww" and 3 <= len(checks) <= 5
         expect(draft).to_have_value("hello neww")
@@ -436,14 +534,14 @@ def test_busy_check_resumes_latest_unchanged_draft_and_stops_on_optout_or_cancel
     page.route("**/api/spelling/settings", hold_optout)
     try:
         draft.fill("hello nextt")
-        expect(page.locator("[data-spelling-status]")).to_contain_text("Waiting for local spelling")
+        expect(status(page)).to_contain_text("Waiting for local spelling")
         page.locator("[data-spelling-enable]").uncheck()
         wait_held(page, preference_writes)
         count = len(checks)
         page.wait_for_timeout(900)
         assert len(checks) == count
         preference_writes.pop().continue_()
-        expect(page.locator("[data-spelling-status]")).to_contain_text("Local spelling is off")
+        expect(status(page)).to_contain_text("Local spelling is off")
         expect(draft).to_have_value("hello nextt")
     finally:
         for route in preference_writes:
@@ -452,11 +550,11 @@ def test_busy_check_resumes_latest_unchanged_draft_and_stops_on_optout_or_cancel
         worker.lock.release()
 
     page.locator("[data-spelling-enable]").check()
-    ready(page)
+    ready(page, "nextt")
     assert worker.lock.acquire(timeout=2)
     try:
         draft.fill("hello otherr")
-        expect(page.locator("[data-spelling-status]")).to_contain_text("Waiting for local spelling")
+        expect(status(page)).to_contain_text("Waiting for local spelling")
         page.locator('#passage-0 [data-editor-pane="text"] [data-action="cancel-edit"]').click()
         expect(page.locator("[data-spelling-panel]")).to_have_count(0)
         count = len(checks)
@@ -470,37 +568,55 @@ def test_busy_check_resumes_latest_unchanged_draft_and_stops_on_optout_or_cancel
 @pytest.mark.parametrize("language", ["fr", "da"])
 def test_recording_language_controls_support_and_danish_is_check_only(page, spelled, language):
     language_preferences.save(spelled.store, "recording", spelled.rid, language, 0)
-    preferences(spelled)
+    quietly(spelled, install=["da"] if language == "da" else [])
     calls = []
     page.on("request", lambda req: calls.append(req.url))
     editor(page, spelled)
     if language == "fr":
-        expect(page.locator("[data-spelling-status]")).to_contain_text("No spelling dictionary")
+        expect(status(page)).to_contain_text("No spelling dictionary")
+        expect(page.locator(".passage-spelling-toggle")).to_have_attribute(
+            "title", "No spelling dictionary is available for this recording language."
+        )
+        expect(marks(page)).to_have_count(0)
         assert not spelled.downloads
-        expect(page.locator("[data-spelling-issues]")).to_be_hidden()
     else:
         ready(page)
-        expect(page.locator("[data-spelling-action=suggest]")).to_have_count(0)
-        expect(page.locator('[data-spelling-issue="0"]')).to_contain_text(
-            "Correct this word in the passage"
-        )
+        ctrl_click(page)
+        expect(popover(page)).to_contain_text("This dictionary has no suggestions")
+        expect(popover(page).locator("[data-spelling-suggestion]")).to_have_count(0)
         assert len(spelled.downloads) == 3
         assert not any(url.endswith("/spelling/suggest") for url in calls)
 
 
-@pytest.mark.parametrize("stage", ["check", "suggest", "dictionary"])
+@pytest.mark.parametrize("stage", ["check", "suggest", "dictionary-tasks"])
 def test_late_spelling_reply_cannot_retarget_a_new_recording(page, spelled, stage):
-    preferences(spelled)
+    quietly(spelled, install=[] if stage == "dictionary-tasks" else ["en"])
     held = []
 
     def hold(route):
-        held.append((route, route.fetch()))
+        if held or route.request.method != "POST":
+            route.continue_()
+        else:
+            held.append((route, route.fetch()))
 
-    page.route(f"**/recordings/{spelled.rid}/spelling/{stage}", hold)
+    pattern = (
+        "**/spelling/dictionary-tasks"
+        if stage == "dictionary-tasks"
+        else f"**/recordings/{spelled.rid}/spelling/{stage}"
+    )
+    page.route(pattern, hold)
     editor(page, spelled)
     if stage == "suggest":
         ready(page)
-        page.locator('[data-spelling-action="suggest"]').click()
+        mark = marks(page).first.bounding_box()
+        box = page.locator("#passage-0 textarea").bounding_box()
+        page.locator("#passage-0 textarea").click(
+            position={
+                "x": mark["x"] + mark["width"] / 2 - box["x"],
+                "y": mark["y"] + mark["height"] / 2 - box["y"],
+            },
+            modifiers=CTRL,
+        )
     wait_held(page, held)
     page.evaluate("rid => { location.hash = '/recordings/' + rid; }", spelled.other)
     expect(page.locator("#recording-title")).to_have_text("second")
@@ -508,15 +624,14 @@ def test_late_spelling_reply_cannot_retarget_a_new_recording(page, spelled, stag
     fresh = page.locator('#passage-0 [data-editor-pane="text"] textarea')
     expect(fresh).to_have_value("hello world")
     release(held)
-    expect(page.locator("[data-spelling-status]")).to_have_text(
-        "No spelling issues found in this draft.", timeout=15000
-    )
-    expect(page.locator("[data-spelling-issue]")).to_have_count(0)
+    expect(status(page)).to_have_text("No spelling issues found in this draft.", timeout=15000)
+    expect(marks(page)).to_have_count(0)
+    expect(popover(page)).to_have_count(0)
     expect(fresh).to_have_value("hello world")
 
 
 def test_old_check_and_suggestion_cannot_change_new_draft_or_language(page, spelled):
-    preferences(spelled)
+    quietly(spelled, install=["en"])
     draft = editor(page, spelled)
     ready(page)
     held = []
@@ -525,13 +640,14 @@ def test_old_check_and_suggestion_cannot_change_new_draft_or_language(page, spel
         held.append((route, route.fetch()))
 
     page.route("**/spelling/suggest", hold)
-    page.locator('[data-spelling-action="suggest"]').click()
+    ctrl_click(page)
     wait_held(page, held)
     draft.fill("hello neww")
     draft.evaluate("node => node.setSelectionRange(4, 4)")
+    expect(popover(page)).to_have_count(0)
     release(held)
-    expect(page.locator('[data-spelling-issue="0"] strong')).to_have_text("neww")
-    expect(page.locator("[data-spelling-suggestion]")).to_have_count(0)
+    ready(page, "neww")
+    expect(popover(page)).to_have_count(0)
     expect(draft).to_have_value("hello neww")
     assert draft.evaluate("node => node.selectionStart") == 4
     page.unroute("**/spelling/suggest", hold)
@@ -545,8 +661,8 @@ def test_old_check_and_suggestion_cannot_change_new_draft_or_language(page, spel
     page.locator('#language-picker-form button[type="submit"]').click()
     expect(page.locator("#file-language")).to_be_enabled()
     release(held)
-    expect(page.locator("[data-spelling-status]")).to_contain_text("No spelling dictionary")
-    expect(page.locator("[data-spelling-issue]")).to_have_count(0)
+    expect(status(page)).to_contain_text("No spelling dictionary")
+    expect(marks(page)).to_have_count(0)
     expect(draft).to_have_value("hello draftt")
 
 
@@ -582,7 +698,7 @@ def test_old_preferences_cannot_overwrite_a_newer_settings_save(page, spelled):
 
 
 def test_old_suggest_cannot_release_new_draft_action_busy_guard(page, spelled):
-    preferences(spelled)
+    quietly(spelled, install=["en"])
     draft = editor(page, spelled)
     ready(page)
     held = []
@@ -591,28 +707,26 @@ def test_old_suggest_cannot_release_new_draft_action_busy_guard(page, spelled):
         held.append((route, route.fetch()))
 
     page.route("**/spelling/suggest", hold)
-    page.locator('[data-spelling-action="suggest"]').click()
+    ctrl_click(page)
     wait_held(page, held)
     draft.fill("hello neww otherr")
-    expect(page.locator("[data-spelling-issues] summary")).to_have_text(
-        "2 possible spelling issues"
-    )
-    issue = page.locator('[data-spelling-issue="0"]')
-    expect(issue.locator("strong")).to_have_text("neww")
-    issue.locator('[data-spelling-action="suggest"]').click()
-    deadline = monotonic() + 8
-    while len(held) < 2 and monotonic() < deadline:
-        page.wait_for_timeout(10)
-    assert len(held) == 2
+    ready(page, "neww", "otherr")
+    ctrl_click(page, 0)
+    wait_held(page, held, 2)
+    ignore = popover(page).locator('[data-spelling-action="ignore"]')
+    expect(ignore).to_be_disabled()
     release(held)
-    page.locator('[data-spelling-issue="1"] [data-spelling-action="ignore"]').click()
-    expect(issue.locator('[data-spelling-action="suggest"]')).to_be_disabled()
+    page.wait_for_timeout(300)
+    expect(ignore).to_be_disabled()
+    expect(popover(page).locator(".spelling-popover-word")).to_have_text("neww")
     release(held)
-    expect(issue.locator("[data-spelling-suggestion]").first).to_be_visible()
-    page.screenshot(path=str(Path(gettempdir()) / "cbs-spelling-issues-nov9.png"))
+    expect(popover(page).locator("[data-spelling-suggestion]").first).to_be_visible()
+    expect(ignore).to_be_enabled()
+    page.screenshot(path=str(Path(gettempdir()) / "cbs-spelling-popover-nov20.png"))
+    page.keyboard.press("Escape")
     settings(page)
     expect(page.locator("#spelling-installed")).to_contain_text("English")
-    page.screenshot(path=str(Path(gettempdir()) / "cbs-spelling-settings-nov9.png"))
+    page.screenshot(path=str(Path(gettempdir()) / "cbs-spelling-settings-nov20.png"))
 
 
 @pytest.fixture
@@ -624,10 +738,11 @@ def mvp_profile(monkeypatch):
 def test_mvp_profile_hides_every_spelling_entry_point_and_requests_nothing(
     page, mvp_profile, spelled
 ):
-    service = spelled.app.server.config.app.state.spelling
+    service = spelled.service
     # Existing private data from an earlier full build, with checking switched on.
     service.save_settings(0, True, True)
     service.save_vocabulary(0, ["PrivateName"], spelled.project)
+    service.save_vocabulary(0, ["RecordingName"], recording_id=spelled.rid)
     calls = []
     page.on("request", lambda req: calls.append(req.url) if "/spelling/" in req.url else None)
     page.goto(spelled.app.url + f"/#/recordings/{spelled.rid}")
@@ -638,10 +753,15 @@ def test_mvp_profile_hides_every_spelling_entry_point_and_requests_nothing(
     draft.fill("hello helllo world")
     page.wait_for_timeout(700)
     expect(page.locator("[data-spelling-panel]")).to_have_count(0)
+    expect(page.locator(".passage-spelling-overlay")).to_have_count(0)
     # Static entry points stay hidden even if later code shows them again.
     for selector in (
+        "#tab-spelling",
+        "#spelling-panel",
         "#spelling-settings",
         "#spelling-project-vocabulary",
+        "#spelling-file-project-vocabulary",
+        "#spelling-recording-vocabulary",
         "#spelling-vocabulary-dialog",
     ):
         page.evaluate("selector => { document.querySelector(selector).hidden = false; }", selector)
@@ -651,7 +771,11 @@ def test_mvp_profile_hides_every_spelling_entry_point_and_requests_nothing(
             )
             == "none"
         )
-    page.evaluate("() => { refreshSpellingEditor(true); openSpellingVocabulary('personal'); }")
+    page.evaluate(
+        "() => { refreshSpellingEditor(true); openSpellingVocabulary('personal'); "
+        "openSpellingVocabulary('recording', state.recording.id); showSpellingTab(); "
+        "observeSpellingDictionaries([]); }"
+    )
     page.evaluate("() => loadSpellingSettings()")
     assert (
         page.evaluate("() => document.querySelector('#spelling-vocabulary-dialog').open") is False
@@ -661,66 +785,83 @@ def test_mvp_profile_hides_every_spelling_entry_point_and_requests_nothing(
     page.locator("#tab-processing").click()
     expect(page.locator("#enhance-device")).to_be_enabled()
     expect(page.locator("#spelling-settings")).to_be_hidden()
+    expect(page.locator("#tab-spelling")).to_be_hidden()
     page.wait_for_timeout(300)
     assert calls == [] and not spelled.downloads and not spelled.cache.exists()
     # The private words remain readable through the API in MVP.
     path = f"/projects/{spelled.project}/spelling/vocabulary"
     assert request(spelled, "GET", path)["words"] == ["PrivateName"]
+    words = request(spelled, "GET", f"/recordings/{spelled.rid}/spelling/vocabulary")["words"]
+    assert words == ["RecordingName"]
 
 
-def test_ignore_once_project_and_personal_words_stay_private_with_vocabulary_cas(page, spelled):
-    preferences(spelled)
+def test_ignore_once_recording_and_project_words_stay_private_with_cas(page, spelled):
+    quietly(spelled, install=["en"])
     draft = editor(page, spelled)
     ready(page)
     before = spelled.store.recording(spelled.rid)
-    page.locator('[data-spelling-action="ignore"]').click()
-    expect(page.locator("[data-spelling-issue]")).to_have_count(0)
-    expect(page.locator("[data-spelling-status]")).to_have_text(
-        "No remaining spelling issues to review."
-    )
+    ctrl_click(page)
+    popover(page).locator('[data-spelling-action="ignore"]').click()
+    expect(marks(page)).to_have_count(0)
+    expect(status(page)).to_have_text("No remaining spelling issues to review.")
     assert request(spelled, "GET", "/spelling/vocabulary")["words"] == []
     draft.fill("hello helllo")
     ready(page)
-    page.locator('[data-spelling-action="project"]').click()
-    expect(page.locator("[data-spelling-status]")).to_have_text(
-        "No spelling issues found in this draft."
-    )
-    path = f"/projects/{spelled.project}/spelling/vocabulary"
-    assert request(spelled, "GET", path)["words"] == ["helllo"]
+    ctrl_click(page)
+    popover(page).locator('[data-spelling-action="project"]').click()
+    expect(status(page)).to_have_text("No spelling issues found in this draft.")
+    project_path = f"/projects/{spelled.project}/spelling/vocabulary"
+    assert request(spelled, "GET", project_path)["words"] == ["helllo"]
     draft.fill("hello neww")
-    ready(page)
-    page.locator('[data-spelling-action="personal"]').click()
-    expect(page.locator("[data-spelling-status]")).to_have_text(
-        "No spelling issues found in this draft."
-    )
-    assert request(spelled, "GET", "/spelling/vocabulary")["words"] == ["neww"]
-    page.locator('[data-spelling-vocabulary="project"]').click()
+    ready(page, "neww")
+    ctrl_click(page)
+    popover(page).locator('[data-spelling-action="recording"]').click()
+    expect(status(page)).to_have_text("No spelling issues found in this draft.")
+    recording_path = f"/recordings/{spelled.rid}/spelling/vocabulary"
+    assert request(spelled, "GET", recording_path)["words"] == ["neww"]
+    assert request(spelled, "GET", "/spelling/vocabulary")["words"] == []
+    # The other recording inherits the project's word but not this recording's.
+    assert request(spelled, "GET", f"/recordings/{spelled.other}/spelling/vocabulary") == {
+        "revision": 0,
+        "words": [],
+        "project": {"id": spelled.project, "revision": 1, "words": ["helllo"]},
+    }
+    page.locator('#passage-0 [data-editor-pane="text"] [data-action="cancel-edit"]').click()
+    # File Settings offers both the project and the recording vocabulary.
+    page.locator("#file-settings-open").click()
+    page.locator("#spelling-recording-vocabulary").click()
+    dialog = page.locator("#spelling-vocabulary-dialog")
+    expect(dialog.locator("#spelling-vocabulary-title")).to_have_text("Recording vocabulary")
     vocab = page.locator("#spelling-vocabulary-text")
-    expect(vocab).to_have_value("helllo")
+    inherited = page.locator("#spelling-vocabulary-project-words")
+    expect(vocab).to_have_value("neww")
+    expect(inherited).to_have_value("helllo")
+    expect(inherited).to_have_attribute("readonly", "")
     vocab.fill("CancelledPrivateName")
     page.locator("#spelling-vocabulary-cancel").click()
-    assert request(spelled, "GET", path)["words"] == ["helllo"]
-    page.locator('[data-spelling-vocabulary="project"]').click()
-    expect(vocab).to_have_value("helllo")
+    assert request(spelled, "GET", recording_path)["words"] == ["neww"]
+    page.locator("#spelling-recording-vocabulary").click()
+    expect(vocab).to_have_value("neww")
     vocab.fill("PrivateName")
-    current = request(spelled, "GET", path)
-    request(spelled, "PUT", path, {"revision": current["revision"], "words": ["OtherName"]})
+    current = request(spelled, "GET", recording_path)
+    request(spelled, "PUT", recording_path, {"revision": current["revision"], "words": ["Other"]})
     page.locator("#spelling-vocabulary-save").click()
     expect(page.locator("#spelling-vocabulary-status")).to_contain_text("changed")
     expect(vocab).to_have_value("PrivateName")
-    assert request(spelled, "GET", path)["words"] == ["OtherName"]
+    assert request(spelled, "GET", recording_path)["words"] == ["Other"]
     page.locator("#spelling-vocabulary-cancel").click()
-    page.locator('[data-spelling-vocabulary="personal"]').click()
-    expect(vocab).to_have_value("neww")
-    vocab.fill("neww\nSavedName")
+    page.locator("#spelling-file-project-vocabulary").click()
+    expect(dialog.locator("#spelling-vocabulary-title")).to_have_text("Project vocabulary")
+    expect(page.locator("#spelling-vocabulary-inherited")).to_be_hidden()
+    expect(vocab).to_have_value("helllo")
+    vocab.fill("helllo\nSavedName")
     page.locator("#spelling-vocabulary-save").click()
-    expect(page.locator("#spelling-vocabulary-dialog")).to_be_hidden()
-    assert request(spelled, "GET", "/spelling/vocabulary")["words"] == ["neww", "SavedName"]
-    page.locator('[data-spelling-vocabulary="personal"]').click()
-    expect(vocab).to_have_value("neww\nSavedName")
-    expect(page.locator("#spelling-vocabulary-cancel")).to_be_enabled()
+    expect(dialog).to_be_hidden()
+    assert request(spelled, "GET", project_path)["words"] == ["helllo", "SavedName"]
+    page.locator("#spelling-recording-vocabulary").click()
+    expect(inherited).to_have_value("helllo\nSavedName")
     page.locator("#spelling-vocabulary-cancel").click()
-    expect(page.locator("#spelling-vocabulary-dialog")).to_be_hidden()
+    expect(dialog).to_be_hidden()
     assert spelled.store.recording(spelled.rid) == before
     assert all(
         b"PrivateName" not in path.read_bytes() and b"SavedName" not in path.read_bytes()

@@ -591,10 +591,21 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Preserve recording language, private vocabulary, draft/timing guards and saved opt-out. The
   [original design](docs/proposals/offline-spelling-2026-11-05.md) retains the wider future plan.
   On 12 November the user proposed underlines directly in the Text editor with on-demand
-  alternatives instead of the separate spelling panel. Right-click/keyboard access is the
-  recommendation; the trigger remains undecided. Preserve double-click selection, caret,
-  native Undo, timing and local-only processing; no UI integration is authorized by this proposal
-  and the hidden v2 port keeps the reviewed panel.
+  alternatives instead of the separate spelling panel.
+  - [x] **Redesign of 20 November** (branch claude/spelling-redesign, T156, still hidden in
+    MVP). The user asked for recording vocabulary inheriting project words, automatic
+    dictionary downloads in Activity and on-demand suggestions without fixed boxes, then chose
+    Ctrl+click (⌘+click on macOS; Alt+Enter from the keyboard), no line under the text box with
+    coloured words and a remembered Spelling checkbox, popover actions recording/project/Ignore,
+    and a Settings → Spelling tab. Implemented with [ADR 0186](docs/decisions/0186-recording-spelling-vocabulary.md)
+    and [ADR 0187](docs/decisions/0187-spelling-activity-downloads-and-on-demand-suggestions.md);
+    synthetic unit, browser and MVP checks pass (B467, B468 fixed before commit).
+  - [ ] Not yet verified: macOS ⌘+click and Option+Enter, Firefox/Safari Undo after a chosen
+    suggestion, screen-reader announcements, a real-library look, real dictionaries with
+    researchers, and downgrading to an earlier v2 build once recording words exist (ADR 0186
+    records that limit). Post-v2 work (user, 20 November): spelling stays hidden in v2 and
+    the v2 → main merge does not wait for this branch. A later uncertainty underline in the
+    Text editor should use its own layer; ADR 0187 keeps spelling's wavy line below it.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
