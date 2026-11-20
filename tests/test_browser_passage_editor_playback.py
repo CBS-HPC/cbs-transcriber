@@ -38,8 +38,18 @@ def test_inline_replay_keeps_draft_caret_and_passage_boundary(page, local_app):
     replay.click()
     assert page.locator("#audio").evaluate("e => e.paused")
     expect(draft).to_be_focused()
-    draft.press("Shift+Tab")
+    # Once preferences load, Spelling is a native tab stop between Text and Replay.
+    if page.evaluate("() => featureOn('spelling')"):
+        spelling = passage.locator("[data-spelling-enable]")
+        expect(spelling).to_be_visible()
+        expect(spelling).to_be_enabled()
+        draft.press("Shift+Tab")
+        expect(spelling).to_be_focused()
+        page.keyboard.press("Shift+Tab")
+    else:
+        draft.press("Shift+Tab")
     expect(replay).to_be_focused()
+    assert draft.evaluate("e => e.selectionStart") == 4
     page.locator("#audio").evaluate("e => e.playbackRate = 4")
     replay.press("Enter")
     expect(replay).to_be_focused()

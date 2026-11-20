@@ -122,10 +122,13 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   GET/PUT /api/local-concurrency reads and partially updates parallel local task limits.
 - I.spelling: GET/PUT /api/spelling/settings (revisioned preferences), GET /api/spelling/
   dictionaries and DELETE /api/spelling/dictionaries/{language} (public cache status/removal),
-  GET/PUT /api/spelling/vocabulary and /api/projects/{id}/spelling/vocabulary (independently
-  revisioned private words); POST /api/recordings/{id}/spelling/check|suggest derive the
-  effective language and return UTF-16 draft ranges; POST /api/recordings/{id}/spelling/
-  dictionary is the separate explicit retrieval and carries no transcript text (ADR 0185).
+  GET/PUT /api/spelling/vocabulary, /api/projects/{id}/spelling/vocabulary and
+  /api/recordings/{id}/spelling/vocabulary (independently revisioned private words; the
+  recording GET adds its inherited project words, ADR 0186); POST /api/recordings/{id}/spelling/
+  check|suggest derive the effective language and return UTF-16 draft ranges; GET/POST
+  /api/spelling/dictionary-tasks, POST .../{id}/retry and DELETE .../{id} manage Activity
+  dictionary downloads (ADR 0187); POST /api/recordings/{id}/spelling/dictionary remains the
+  earlier synchronous explicit retrieval. Retrieval carries no transcript text (ADR 0185).
 - I.providers: named provider configurations; bulk and per-recording selection; explicit
   multi-provider queue requests. Legacy /api/settings edits the default configuration.
 - I.results: per-recording saved transcripts, active result selection, independent edits,
@@ -349,17 +352,53 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   widened. Counts use Unicode code points and the exact Python str.split whitespace set;
   the browser preserves literal BOM and mirrors that calculation. Advisory Windows sharing
   contention follows V242 (ADR 0189).
+- V240: Text-draft uncertainty decoration is a separate pointer-free amber dotted layer,
+  controlled by Show uncertainty, independent of red spelling and valid word timing.
+  Map only unchanged saved-to-draft spans using Unicode code points; preserve native
+  textarea value, focus, selection, caret, undo, IME and scroll. Hint/toggle changes
+  repaint decoration without replacing the textarea; clear observers on close. No
+  duplicate saved-text panel, new timing or persistence (ADR0188/T157).
+- V239: Possible spelling issues are coloured in a layer behind the transparent Text textarea
+  (red wavy line below the amber dotted uncertainty position, so both can mark one word),
+  never in a fixed panel or visible status line; the layer never writes the textarea's value,
+  selection, focus or scroll. Double-click on a coloured word in the open editor (the
+  browser's own word selection and focus are kept) or Alt+Enter inside it opens a popover with
+  the suggestion, Add to recording/project vocabulary and Ignore once; the coloured word comes
+  from the textarea's selection without surrounding whitespace, and a double-click on any
+  other word, with a modifier or opening the editor from a read-only passage opens nothing.
+  Ctrl+click is not a trigger. Escape returns to the unchanged caret. A chosen suggestion
+  replaces exactly the flagged range (never a selected trailing space) through the browser's
+  editing command, so native Undo restores it, after all V234 checks. The editor toolbar's Spelling checkbox is the remembered library preference. Settings
+  → Spelling owns spelling settings and dictionaries; Local Processing does not (ADR 0187).
+- V238: Public dictionary downloads run as server-lifetime Activity tasks, one at a time
+  through the existing pinned install path and cache lock, with ready, failed/Retry and Dismiss
+  and no persistence; shutdown interrupts them without publishing partial files. Automatic
+  downloads need checking and automatic downloads on and cover languages chosen as project
+  defaults or recording overrides; triggers are a settings save, a project or recording
+  language save (single or bulk), project creation with a language and the editor's first use,
+  never startup. Turning either preference off stops unpublished automatic downloads; a failed
+  language waits for Retry or explicit consent. With automatic downloads off, only an explicit
+  Download or Retry downloads. Nothing runs in MVP (ADR 0187).
+- V237: A recording's spelling words inherit, and never remove, its project's words; checking
+  uses personal ∪ project ∪ recording words. Row 13 stays schema 1 until a recording has words,
+  then schema 2 with a non-empty recordings map, and returns to schema 1 when the last entry
+  goes. Recording scopes have their own CAS revision checked with the live recording in the same
+  writer transaction and in the check/suggest context. Recording and project Delete fence each
+  deleted recording's revision and remove its entry before the owner rows in the same writer
+  transaction; restore validates schema 2 against captured recordings (ADR 0186).
 - V236: The `spelling` release-profile feature is on in full and hidden in MVP. MVP refuses
-  spelling preference saves, Check, Suggest and public dictionary retrieval with 403
+  spelling preference saves, Check, Suggest and public dictionary retrieval (including Activity
+  dictionary tasks and their Retry) with 403
   feature_disabled before their handlers and hides every entry point (static data-feature
   markup, featureOn in spelling.js), so MVP pages make no spelling requests. Existing private
   data stays available: reads, dictionary removal, vocabulary saves that only remove words
   (additions refused in the revision-checked writer), project-Delete cleanup and backup/restore
   retention. catalogs/release.json is unchanged (user decision 19 November; ADR 0185).
-- V235: Private personal/project spelling vocabulary lives in settings row 13 and operational
-  preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions and live
-  project ownership; project Delete fences only that project's revision and removes its entry
-  in the same transaction. Vocabulary stays out of transcript exports and research reports.
+- V235: Private personal/project/recording spelling vocabulary lives in settings row 13 and
+  operational preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions
+  and live project or recording ownership; Delete fences only the deleted owners' revisions and
+  removes their entries in the same transaction. Vocabulary stays out of transcript exports and
+  research reports.
   Backups keep it; isolated restore retains only strictly validated data-only row 13 with live
   owners and never operational preferences. Malformed vocabulary refuses before promotion.
 - V234: Spelling suggestions change only the current open Text draft after exact recording/
@@ -369,8 +408,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   pinned public retrieval carries no text/credentials, preserves opt-out and needs consent when
   automatic retrieval is off. The bounded, credential-free engine child is killed/reaped on any
   deadline, including partial startup; one preferred suggestion is requested. Busy Check
-  retries only its exact current draft with bounded backoff; Suggest/install never retry
-  automatically. Dictionary removal preserves replaced/linked targets and refuses after
+  retries only its exact current draft with bounded backoff; Suggest never retries and only an
+  explicit Retry restarts a failed download. Dictionary removal preserves replaced/linked targets and refuses after
   shutdown. Vendor spellcheck stays disabled. Not a hostile-filesystem claim (ADR 0185).
 - V233: Proposed, not implemented. A native MIG owner asks about a full B200 only when two
   products reads agree the exact MIG is FULL and the full GPU AVAILABLE/BUSY, with verified
@@ -2092,6 +2131,8 @@ T151|~|History change list: bounded list metadata, word-level What changed, undo
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); shown in MVP v2 (20 November)|V226,V225,I.version-graph,ADR0182
 T153|~|Native batches: plain Activity status, Settings → UCloud upload/batch limits and per-file early uploads with sealed single-owner submission; synthetic mocked checks pass (claude/native-batch); live UCloud timing/throughput and the full-GPU choice remain|V229,V230,V231,V232,V22,V142,V187,I.native-batch,ADR0183
 T155|~|Local DA checking and en-GB checking/one preferred suggestion ported from the private preview into v2 (claude/spelling-hidden) with private vocabulary, bounded worker/cache and draft/timing guards; settings rows moved to 12/13; on in full, hidden/refused in MVP with reads and removals kept; scoped backend/browser/MVP checks pass; real-user, licence and platform acceptance remain|V234,V235,V236,I.spelling,ADR0185
+T156|~|Spelling redesign (claude/spelling-redesign, 20 November): recording vocabulary inheriting project words in File Settings; automatic dictionary downloads as Activity tasks; coloured words with a double-click/Alt+Enter suggestion popover replacing the fixed panel (claude/spelling-trigger: double-click keeps the native word selection, Ctrl+click removed); remembered toolbar toggle; Settings → Spelling tab; synthetic unit/Chromium browser/MVP checks pass; macOS/Firefox/Safari double-click selection and Undo, screen readers and real users unverified; still hidden in MVP|V237,V238,V239,V236,I.spelling,ADR0186,ADR0187
+T157|x|Dotted uncertainty in the actual Text editor (11f9b2f), independent from red spelling with native draft/caret/focus/undo/IME/Unicode/scroll retained; seven new browser cases and final 58-case editor/spelling browser gate pass; not loaded or published, real-user/platform acceptance separate|V240,V239,V41,ADR0188
 T154|.|Proposed only: per-batch full-GPU ask when no native 1g MIG is free; design ADR0184 with the user's 19 November decisions, no code, review or live evidence; read-only live reads permitted once implemented|V233,V76,V217,V220,ADR0184
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
@@ -2228,3 +2269,8 @@ B470|2026-11-20|Word timing for passages whose saved interval is far too short f
 B481|2026-11-20|Independent review of the Windows progress fix reproduced a second sharing violation: with progress.json and progress.pending both held by readers, the refused replace was handled but fallback unlink raised PermissionError and failed the worker|V242,T158; cleanup catches only PermissionError and retains the advisory pending file for a later write; real-held-reader red/green regression also proves mandatory write_json still raises under the same lock
 B486|2026-11-20|The synthetic process-tree cancellation worker published descendant.pid before its contents were complete; its parent could parse an empty PID and exit before started.json, mimicking a startup timeout before cancellation was tested|T158; publish the fixture PID through pending-file replacement without changing production code, five-second deadlines or process-tree assertions; an isolated widened-race probe captured the empty-PID ValueError and its atomic counterpart passed; not every earlier startup failure was causally attributed
 B487|2026-11-20|Independent timing review found the new browser admission mirror used JavaScript trim/whitespace semantics while the server used Python str.split: NEL could disable a valid 49-frame window and BOM could enable an impossible one|V241,T158; normalize the exact Unicode White_Space plus U+001C-U+001F set, preserve literal BOM and code-point counts, and check boundary UI/API parity without changing text or timing
+B488|2026-11-20|Spelling redesign (before commit): opening the suggestion popover with Alt+Enter dropped keyboard focus to the page body, because the popover re-rendered with every button disabled while its suggestion loaded and focus could not stay on a disabled button|V239,ADR0187; the popover is itself focusable, keyboard-opened popovers keep focus inside across re-rendering and move it to the suggestion when it arrives; browser regression asserts the suggestion is focused and Escape returns to the unchanged caret
+B491|2026-11-20|Spelling redesign (before commit): moving the spelling settings into a Settings tab panel and adding File Settings vocabulary buttons left those elements without their own data-feature mark, so MVP code that un-hid them made them display again (only their wrappers were hidden); the moved dictionary list also inherited the global right-floating 9 px field-note style|V236,ADR0187; every spelling entry point carries data-feature="spelling" itself and the MVP browser check un-hides each new one; the Spelling panel, popover and vocabulary dialog set readable non-floating notes
+B489|2026-11-20|Spelling redesign review: the user asked for word suggestions "by double clicking on a word", but the redesign used Ctrl+click (⌘+click on macOS) on the assumption that double-click had to stay plain word selection; the popover never needs to change that selection, so both fit|V239,ADR0187; double-click on a coloured word inside the open editor opens the popover beside the browser's own selection, other words and modifier double-clicks do nothing extra, the editor-opening double-click is untouched, Alt+Enter stays and Ctrl+click was removed; browser regressions cover each case. Lesson: keep the interaction the user named unless they choose another, and check whether the assumed conflict is real
+B490|2026-11-20|Spelling redesign review: Alt+Enter after double-clicking a coloured word in a Windows browser opened nothing, because the browser also selects the following space and the caret lookup required the whole selection inside the coloured word|V239,ADR0187; one selection lookup ignores surrounding whitespace for both routes, finds nothing for whitespace-only or multi-word selections and accepts a bare caret only for Alt+Enter; a chosen suggestion still replaces only the coloured word, so the space stays; browser regression covers the trimmed and refused selections
+B492|2026-11-20|The composed editor keyboard-replay test assumed Replay was immediately before the textarea in tab order; after the spelling redesign a real enabled Spelling checkbox occupies that position, but asynchronous preference readiness made the old assertion pass or fail by timing|V239,V210,T156; wait for the intended checkbox to be enabled, traverse it and Replay with native Shift+Tab, and retain Enter, draft, caret, focus and passage-boundary assertions; production focus behavior is unchanged

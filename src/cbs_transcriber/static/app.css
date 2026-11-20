@@ -1639,39 +1639,109 @@ select {
   gap: 9px;
   margin-left: auto;
 }
-/* Local spelling (ADR 0185): a panel below the open Text editor, never an overlay. */
+/* Local spelling (ADR 0185/0187): a remembered toggle in the editor toolbar, coloured
+   words in a layer behind the textarea and an on-demand suggestion popover. */
 .passage-spelling {
-  margin: 0.65rem 0;
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.passage-spelling .checkbox-label {
+.passage-editor-toolbar .passage-spelling-toggle {
   margin: 0;
+  cursor: pointer;
 }
-.spelling-issues,
-.spelling-dictionaries {
-  list-style: none;
-  padding: 0;
+.passage-spelling[data-spelling-state="issues"] .passage-spelling-toggle {
+  color: var(--cbs-chestnut);
 }
-.spelling-issues > li,
-.spelling-dictionaries > li {
-  border-bottom: 1px solid var(--line);
-  padding: 0.65rem 0;
+.passage-spelling [data-spelling-download] {
+  font-size: 11px;
+  min-height: 24px;
 }
-.spelling-issue-actions,
+.passage-spelling-overlay {
+  position: absolute;
+  inset: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 5px;
+}
+.passage-spelling-overlay-content {
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: 15px;
+  line-height: 1.8;
+  color: transparent;
+}
+/* Spelling is a red wavy line placed lower than the amber dotted uncertainty underline
+   (.uncertain-word, offset 3px), so both stay readable when one word has both. */
+.passage-spelling-overlay .spelling-flag {
+  color: transparent;
+  background: rgb(230 106 87 / 16%);
+  border-radius: 2px;
+  text-decoration: underline wavy var(--cbs-red);
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 6px;
+}
+.spelling-popover {
+  position: absolute;
+  z-index: 3;
+  max-width: min(360px, 100%);
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgb(36 46 112 / 18%);
+  font-size: 12px;
+}
+.spelling-popover-word {
+  margin: 0 0 6px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.spelling-popover .field-note {
+  margin: 4px 0;
+}
+.spelling-popover p:empty {
+  display: none;
+}
 .spelling-suggestions,
-.spelling-vocabulary-actions {
+.spelling-popover-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.35rem;
 }
-.spelling-dictionaries .field-note {
+.spelling-dictionaries {
+  list-style: none;
+  padding: 0;
+}
+.spelling-dictionaries > li {
+  border-bottom: 1px solid var(--line);
+  padding: 0.65rem 0;
+}
+#spelling-panel .field-note,
+#spelling-vocabulary-dialog .field-note,
+.spelling-popover .field-note {
+  float: none;
   display: block;
+  font-size: 11px;
+}
+.spelling-dictionaries .field-note {
+  margin: 2px 0;
+}
+.spelling-dictionary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
 }
 #spelling-vocabulary-dialog {
   width: min(540px, calc(100vw - 30px));
 }
-#spelling-vocabulary-text {
+#spelling-vocabulary-text,
+#spelling-vocabulary-project-words {
   width: 100%;
 }
 .passage-actions button {
@@ -1742,14 +1812,16 @@ select {
   background: transparent;
   isolation: isolate;
 }
-.passage-text-overlay {
+.passage-text-overlay,
+.passage-uncertainty-overlay {
   position: absolute;
   inset: 1px;
   overflow: hidden;
   pointer-events: none;
   border-radius: 5px;
 }
-.passage-text-overlay-content {
+.passage-text-overlay-content,
+.passage-uncertainty-overlay-content {
   padding: 12px;
   white-space: pre-wrap;
   overflow-wrap: break-word;

@@ -323,3 +323,21 @@ def test_close_cancels_and_drains_public_download(local_spelling, monkeypatch):
     thread.join(2)
     assert not thread.is_alive() and outcome == ["cancelled"] and worker.closed
     assert not list(service.cache.rglob("installed.json"))
+
+
+def test_missing_engine_reports_unavailable_without_worker_or_download(local_spelling, monkeypatch):
+    service, _, _, recording, worker, downloads = local_spelling
+    enable(service)
+    install(service, recording)
+    before = list(downloads)
+    find_spec = spelling.importlib.util.find_spec
+    monkeypatch.setattr(
+        spelling.importlib.util,
+        "find_spec",
+        lambda name, *args, **kwargs: (
+            None if name == "spylls" else find_spec(name, *args, **kwargs)
+        ),
+    )
+    assert service.check(recording["id"], "wrng", "missing-check")["status"] == "engine_missing"
+    assert service.suggest(recording["id"], "wrng", "missing-suggest")["status"] == "engine_missing"
+    assert not worker.calls and downloads == before

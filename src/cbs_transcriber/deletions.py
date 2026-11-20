@@ -238,12 +238,16 @@ class Deletions:
                     _conflict(
                         "This deletion has too much passage review metadata. Keep the recordings."
                     )
-        if kind == "project":
-            projects[identifier] = self._project_metadata(identifier)
-            # Only this project's private spelling vocabulary is fenced (ADR 0185).
-            from .spelling import project_vocabulary_revision
+        # Only the deleted owners' private spelling vocabulary is fenced: this project's
+        # (ADR 0185) and each deleted recording's own words (ADR 0186).
+        from .spelling import project_vocabulary_revision, recording_vocabulary_revisions
 
-            with self.store.connection() as db:
+        with self.store.connection() as db:
+            spelling = recording_vocabulary_revisions(db, recordings)
+            for row in rows:
+                row["spelling_vocabulary_revision"] = spelling[row["id"]]
+            if kind == "project":
+                projects[identifier] = self._project_metadata(identifier)
                 projects[identifier]["spelling_vocabulary_revision"] = project_vocabulary_revision(
                     db, identifier
                 )
@@ -827,13 +831,18 @@ class Deletions:
                             }
                         )
                         deletion_files.stage(self.store, plan)
+                        from .spelling import remove_owned_vocabulary
+
+                        # Same writer transaction as the logical Delete, before the owner
+                        # rows go: the vocabulary validator requires live owners.
+                        remove_owned_vocabulary(
+                            db,
+                            project_id=(operation.target if operation.kind == "project" else None),
+                            recording_ids=operation.recordings,
+                        )
                         for identifier in operation.recordings:
                             db.execute("DELETE FROM recordings WHERE id=?", (identifier,))
                         if operation.kind == "project":
-                            from .spelling import remove_project_vocabulary
-
-                            # Same writer transaction as the logical project Delete.
-                            remove_project_vocabulary(db, operation.target)
                             db.execute("DELETE FROM projects WHERE id=?", (operation.target,))
                     operation.complete = True
                     self._remember_files(

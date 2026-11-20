@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from admission_support import checked_connection
 from playwright.sync_api import expect
-from test_browser import create_project, provider_advanced
+from test_browser import create_project, provider_advanced, settings_tabs
 from test_browser import local_app as local_app
 from test_browser import page as page
 
@@ -468,7 +468,7 @@ def test_disabled_native_shaped_openai_rows_do_not_trap_settings(page, local_app
         expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
         expect(page.locator("#bulk-provider")).to_have_value(saved["id"])
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.locator("#base-url")).to_have_value("https://cloud.sdu.dk")
     expect(page.locator("#base-url")).to_have_attribute("placeholder", "https://cloud.sdu.dk")
     expect(page.locator(f'#settings-provider option[value="{archived_id}"]')).to_have_count(0)

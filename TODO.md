@@ -21,6 +21,14 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+20 November Codex editor checkpoint on `codex/weekend-spelling-20261120`: Claude's
+recording vocabulary/Activity downloads/double-click redesign was independently checked,
+and dotted model uncertainty now appears in the actual Text draft without changing its
+native editing state (T157/ADR0188). **165 distinct focused cases pass**, with the
+cached-engine harness limitation recorded in the [verification receipt](docs/verification-2026-11-20-editor-spelling.md).
+This separate branch is not integrated, loaded or released. Spelling stays hidden in MVP.
+Spelling bug IDs were reconciled to B488–B491; core export/timing keeps B467–B470.
+
 12 November handover: [the continuation plan](docs/work-plans/mvp-v2-continuation-2026-11-12.md)
 records tested components and the unstarted Runtime Stage 2, funding-observer (T146) and
 schema-19 Working (T147) designs. Editor/review workflow is the next user discussion;
@@ -665,10 +673,29 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Preserve recording language, private vocabulary, draft/timing guards and saved opt-out. The
   [original design](docs/proposals/offline-spelling-2026-11-05.md) retains the wider future plan.
   On 12 November the user proposed underlines directly in the Text editor with on-demand
-  alternatives instead of the separate spelling panel. Right-click/keyboard access is the
-  recommendation; the trigger remains undecided. Preserve double-click selection, caret,
-  native Undo, timing and local-only processing; no UI integration is authorized by this proposal
-  and the hidden v2 port keeps the reviewed panel.
+  alternatives instead of the separate spelling panel.
+  - [x] **Redesign of 20 November** (branch claude/spelling-redesign, T156, still hidden in
+    MVP). The user asked for recording vocabulary inheriting project words, automatic
+    dictionary downloads in Activity and on-demand suggestions without fixed boxes, then chose
+    Ctrl+click (⌘+click on macOS; Alt+Enter from the keyboard), no line under the text box with
+    coloured words and a remembered Spelling checkbox, popover actions recording/project/Ignore,
+    and a Settings → Spelling tab. Implemented with [ADR 0186](docs/decisions/0186-recording-spelling-vocabulary.md)
+    and [ADR 0187](docs/decisions/0187-spelling-activity-downloads-and-on-demand-suggestions.md);
+    synthetic unit, browser and MVP checks pass (B488, B491 fixed before commit).
+  - [x] **Double-click trigger** (branch claude/spelling-trigger, 20 November): the user asked
+    again for suggestions by double-clicking a word. Double-click on a coloured word in the open
+    editor now opens the popover beside the browser's own word selection; other words do
+    nothing extra, the editor-opening double-click is unchanged, Alt+Enter stays and Ctrl+click
+    was removed (ADR 0187 update, B489, B490). Independent review of the redesign found no
+    further defect to fix; Chromium browser tests pin the trigger and the distinct
+    wavy/dotted styles on one word.
+  - [ ] Not yet verified: macOS double-click and Option+Enter, Firefox/Safari double-click
+    word selection and Undo after a chosen suggestion, screen-reader announcements, a
+    real-library look, real dictionaries with researchers, and downgrading to an earlier v2
+    build once recording words exist (ADR 0186 records that limit). Post-v2 work (user,
+    20 November): spelling stays hidden in v2 and the v2 → main merge does not wait for this
+    branch. A later uncertainty underline in the Text editor should use its own layer that
+    leaves pointer events to the textarea; ADR 0187 keeps spelling's wavy line below it.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,

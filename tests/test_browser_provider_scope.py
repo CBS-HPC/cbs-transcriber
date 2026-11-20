@@ -7,7 +7,7 @@ from admission_support import checked_connection
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
-from test_browser import provider_advanced, skip_first_use
+from test_browser import provider_advanced, settings_tabs, skip_first_use
 from test_browser_huggingface_activity import inert_app as inert_app
 from test_native_model_profiles import native_settings, raw_profile
 
@@ -81,7 +81,7 @@ def test_deferred_families_stay_saved_but_leave_new_provider_choices(page, local
     expect(page.locator("#bulk-provider")).not_to_contain_text("research/model")
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.get_by_role("tab", name="OpenAI API", exact=True)).to_have_count(0)
     expect(page.get_by_role("tab", name="UCloud", exact=True)).to_have_attribute(
         "aria-selected", "true"

@@ -879,9 +879,15 @@ def create_app(
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
     from .spelling import SpellingService, default_cache_dir
+    from .spelling_tasks import DictionaryTasks
 
-    # Constructing the service creates no storage and starts no worker (ADR 0185).
+    # Constructing the service creates no storage and starts no worker (ADR 0185). Automatic
+    # dictionary downloads run only after a later save or editor use, never at startup, and
+    # never while the release profile hides spelling (ADR 0187).
     spelling_service = SpellingService(store, spelling_cache_dir or default_cache_dir())
+    spelling_downloads = DictionaryTasks(
+        spelling_service, enabled=release.enabled("spelling"), start_worker=start_worker
+    )
 
     def hf_cloud_plan():
         if not release.enabled("cbs_runtime"):
@@ -967,6 +973,12 @@ def create_app(
                     if cleanup_error is None:
                         cleanup_error = cleanup
                 try:
+                    # Stop and drain a running download before the service closes its cache.
+                    spelling_downloads.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
+                try:
                     spelling_service.close()
                 except BaseException as cleanup:
                     if cleanup_error is None:
@@ -994,8 +1006,9 @@ def create_app(
     passage_review_routes.install(app, store)
     passage_restore_routes.install(app, store)
     change_undo_routes.install(app, store)
-    spelling_routes.install(app, spelling_service, release)
+    spelling_routes.install(app, spelling_service, release, spelling_downloads)
     app.state.spelling = spelling_service
+    app.state.spelling_downloads = spelling_downloads
     app.state.deletions = deletion_requests
     app.state.export_tasks = export_manager
     app.state.huggingface_tasks = hf_manager
@@ -1166,27 +1179,35 @@ def create_app(
 
     @app.post("/api/projects", status_code=201)
     def create_project(body: ProjectCreate):
-        return store.create_project(
+        created = store.create_project(
             clean_name(body.name), body.classification, body.storage_parent, body.default_language
         )
+        if body.default_language is not None:
+            spelling_downloads.automatic()
+        return created
 
     @app.put("/api/projects/{identifier}/language")
     def project_language(identifier: str, body: LanguagePreference):
         try:
-            return language_preferences.save(
+            saved = language_preferences.save(
                 store, "project", identifier, body.language, body.revision
             )
         except language_preferences.Conflict as error:
             raise HTTPException(409, str(error)) from None
+        # A newly chosen language may need its public spelling dictionary (ADR 0187).
+        spelling_downloads.automatic()
+        return saved
 
     @app.put("/api/projects/{identifier}/recording-languages")
     def recording_languages(identifier: str, body: BulkRecordingLanguage):
         try:
-            return language_preferences.save_recordings(
+            saved = language_preferences.save_recordings(
                 store, identifier, body.language, [row.model_dump() for row in body.recordings]
             )
         except language_preferences.Conflict as error:
             raise HTTPException(409, str(error)) from None
+        spelling_downloads.automatic()
+        return saved
 
     @app.get("/api/storage")
     def storage():
@@ -1531,11 +1552,13 @@ def create_app(
     @app.put("/api/recordings/{identifier}/language")
     def recording_language(identifier: str, body: LanguagePreference):
         try:
-            return language_preferences.save(
+            saved = language_preferences.save(
                 store, "recording", identifier, body.language, body.revision
             )
         except language_preferences.Conflict as error:
             raise HTTPException(409, str(error)) from None
+        spelling_downloads.automatic()
+        return saved
 
     @app.patch("/api/recordings/{identifier}/notes")
     def recording_notes(identifier: str, body: NotesEdit):
@@ -3821,6 +3844,7 @@ def create_app(
             + deletion_requests.file_activity()
             + export_manager.activity()
             + hf_manager.activity()
+            + spelling_downloads.activity()
         )
 
     @app.post("/api/local-deletions/{identifier}/retry")

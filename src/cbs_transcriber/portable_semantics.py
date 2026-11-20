@@ -20,7 +20,7 @@ from . import portable_transport as transport
 
 PROTOCOL = "cbs-portable-semantics-v1"
 POLICY = "cbs-portable-research-consistency-v1"
-WORKER_SHA256 = "bbf54d6f3f94f606550b1e724c316bd928f3a2bfbedc34c672ee4ee8d35d685f"
+WORKER_SHA256 = "6233e844a77818ef053ca263fe5591780ef770fa2492d783e647940a29f65586"
 PAYLOAD_SHA256 = "7fc37c490bcf1fe0268299f383b9a4951cf1ae351631fd6c5b17ce4cd5465698"
 ARTIFACTS_SHA256 = "8bccd9ecb0b4b971af7d20c1b33b349c09ff1729e43f7d99ef7b98e40fe810eb"
 CAPTURE_SHA256 = "e383f827430b3af7d19d91561dc675c04b25a87c709573cb9281cd2b4e02d9fe"
