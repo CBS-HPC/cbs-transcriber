@@ -21,6 +21,15 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+20-21 November night continuation: local `codex/night-post-v2-20261120` is verified at product
+`f96362f` (ADR0190/0191, B513-B518, V254-V258): 448 backend passes/two skips and 108 selected
+browser passes on one immutable source, with exact hashes and independent review. See the
+[night composition receipt](docs/verification-2026-11-20-night-composition.md). Main, Claude's
+original branches, rc2 and the loaded preview are unchanged. Whole-suite and human/provider
+acceptance remain open. The user still needs to choose whether too-short timing repair may
+replace passage bounds; no widening or new timing-editor save workflow was implemented.
+
+
 20 November final follow-on tasks (local, separate from verified source): cursor-word timing
 prototype `f140a34` has 15 browser passes but no persistence and remains unmerged/OFF by default
 (T159). Project deletion in Activity is now implemented on `claude/deletion-activity`

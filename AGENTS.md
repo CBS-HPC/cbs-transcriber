@@ -395,6 +395,7 @@ Future public commits must descend only from the clean public main history.
   it overlaps COMMIT only through an outcome-bound decision guard, never a false early final
   response. Keep/shutdown wait without the manager lock. Existing backup capture reserves
   reciprocal admission before Stop/copy; never use that guard for the task's own staging.
+  Global shutdown immediately fences queued execution and commit before per-task flags drain.
   Recheck Keep at every control claim; accepted Stops stay stopped. Startup receipts are
   observational only, never permission to resume Delete. Recording deletes remain legacy.
 - `deletion_files.py` (ADR0102) journals exact local targets before exclusive same-volume

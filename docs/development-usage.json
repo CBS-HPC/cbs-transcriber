@@ -149,7 +149,7 @@
     "tokens": null,
     "actual_credits": null,
     "actual_cost": null,
-    "limits": "Not included in the frozen MVP baseline. The phase remains open; cumulative checkpoints are not separate increments and must not be added together. Billing remains unknown, not zero.",
+    "limits": "Not included in the frozen MVP baseline. The phase remains open; cumulative checkpoints are not separate increments and must not be added together. Billing remains unknown, not zero. Night work on20-21 November2026, including parallel Codex agents on codex/night-post-v2-20261120, remains unmeasured outside prior cutoffs. The stopped accounting audit was not resumed; no new token, credit or cost total is asserted.",
     "checkpoints": [
       {
         "id": "codex-post-mvp-20261110T162013Z",
