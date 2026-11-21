@@ -200,7 +200,7 @@ def test_stop_while_waiting_for_an_earlier_change_copies_nothing(client):
     store, _, _ = library(client)
     gate = client.app.state.portable_capture_gate
     gate.enter_mutation()  # An earlier, still running change that capture must wait for.
-    replies = {}
+    replies, writer = {}, None
     try:
         accepted = start(client).json()
         assert task(client, accepted["id"])["phase"] == "waiting"
@@ -221,10 +221,14 @@ def test_stop_while_waiting_for_an_earlier_change_copies_nothing(client):
         stopped = client.post(f"/api/library/backup-tasks/{accepted['id']}/stop")
         assert stopped.status_code in (200, 202), stopped.text
         done = settled(client, accepted["id"])
+        # The later change proceeds once the stopped backup leaves admission, while the
+        # earlier change is still running (B523).
+        writer.join(10)
+        assert not writer.is_alive() and replies["put"].status_code == 200
     finally:
         gate.leave_mutation()
-    writer.join(10)
-    assert replies["put"].status_code == 200
+        if writer is not None:
+            writer.join(10)
     assert done["state"] == "stopped" and "before anything was copied" in done["message"]
     assert done["kept_paths"] == [] and done["can_dismiss"]
     assert not (store.root / "backups").exists()
@@ -602,3 +606,27 @@ def test_backup_copying_refuses_deletion_and_releases_after_ready(client, hold_c
         hold_copy.release.set()
     assert settled(client, accepted["id"])["state"] == "ready"
     assert owner.captures == 0
+
+
+def test_cancelled_reservation_wakes_later_mutations_deterministically():
+    """B523: no other notification arrives here, so a missed wake-up would hang the writer."""
+    gate = portable_capture.CaptureGate()
+    reservation = gate.reserve()
+    entered = threading.Event()
+
+    def writer():
+        gate.enter_mutation()
+        entered.set()
+        gate.leave_mutation()
+
+    thread = threading.Thread(target=writer, daemon=True)
+    thread.start()
+    assert not entered.wait(0.2)  # Later changes wait behind the accepted reservation.
+    with pytest.raises(portable_capture.Cancelled):
+        with gate.capture(reservation, cancelled=lambda: True):
+            raise AssertionError("A stopped capture must never become active")
+    assert entered.wait(5)
+    thread.join(5)
+    assert gate.captures == 0 and not gate.active
+    reservation.release()  # Already consumed: releasing again changes nothing.
+    assert gate.captures == 0

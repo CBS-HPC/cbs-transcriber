@@ -162,9 +162,11 @@ def provider_advanced(page):
 
 
 def settings_tabs(page):
-    """The Settings tab names; Spelling (ADR 0187) only where the profile offers it."""
+    """The Settings tab names; Spelling (ADR 0187) only where the profile offers it.
+
+    Backup (ADR 0192) is offered in every profile: local backups are not hidden work."""
     spelling = ["Spelling"] if page.evaluate("featureOn('spelling')") else []
-    return ["UCloud", "Hugging Face", "Local Processing", *spelling]
+    return ["UCloud", "Hugging Face", "Local Processing", *spelling, "Backup"]
 
 
 def select_export_formats(page, *formats):

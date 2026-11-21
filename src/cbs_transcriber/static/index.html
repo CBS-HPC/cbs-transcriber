@@ -29,6 +29,7 @@
     <script src="/static/spelling.js" defer></script>
     <script src="/static/background_exports.js" defer></script>
     <script src="/static/project_deletions.js" defer></script>
+    <script src="/static/backup_tasks.js" defer></script>
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
     <script src="/static/change_steps.js" defer></script>
@@ -2706,6 +2707,17 @@
           >
             Spelling
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-backup"
+            data-provider-tab="backup"
+            aria-controls="backup-panel"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Backup
+          </button>
         </div>
         <fieldset
           id="hf-panel"
@@ -3001,6 +3013,86 @@
           <div class="dialog-actions">
             <button type="button" class="button" data-close="settings-dialog">
               Close
+            </button>
+          </div>
+        </fieldset>
+        <!-- Settings → Backup (ADR 0192): local backups run as server-owned Activity tasks. -->
+        <fieldset
+          id="backup-panel"
+          role="tabpanel"
+          aria-labelledby="tab-backup"
+          hidden
+          disabled
+        >
+          <p class="settings-note">
+            A complete backup copies every original recording, saved results,
+            history, notes and available processing evidence, including
+            Protected projects and Trash. Keys and tokens are excluded. Finish
+            or stop processing first.
+          </p>
+          <p class="settings-note">
+            The backup runs in Activity, so closing Settings does not stop it.
+            You can keep reading while it runs; edits and new work wait until
+            the files are copied. Stop in Activity ends it before it is saved.
+            Backups are made only when you choose Make backup; there are no
+            automatic schedules.
+          </p>
+          <p id="backup-settings-current" class="field-note"></p>
+          <p id="backup-settings-last" class="field-note" role="status"></p>
+          <label for="backup-settings-destination">Backup folder</label>
+          <input
+            id="backup-settings-destination"
+            placeholder="Use the default location"
+            maxlength="4000"
+            autocomplete="off"
+          />
+          <p id="backup-settings-default" class="settings-note">
+            Default: the backups folder inside this library.
+          </p>
+          <p class="settings-note">
+            A folder on the same device does not protect against device failure.
+            For an independent copy, choose a different physical device; the
+            folder choice alone cannot verify independence.
+          </p>
+          <p
+            id="backup-settings-running"
+            class="settings-note"
+            role="status"
+          ></p>
+          <p
+            id="backup-settings-status"
+            class="settings-note"
+            role="status"
+          ></p>
+          <p class="settings-note">
+            Saved receipts<span data-feature="restore_ui">, restoring</span
+            ><span data-feature="cloud_backup"> and UCloud backup</span> are in
+            Library → Backups.
+          </p>
+          <div class="dialog-actions">
+            <button type="button" id="backup-settings-library" class="button">
+              Library backups
+            </button>
+            <button type="button" id="backup-settings-choose" class="button">
+              Choose folder
+            </button>
+            <button
+              type="button"
+              id="backup-settings-activity"
+              class="button"
+              hidden
+            >
+              View Activity
+            </button>
+            <button type="button" class="button" data-close="settings-dialog">
+              Close
+            </button>
+            <button
+              type="button"
+              id="backup-settings-start"
+              class="button primary"
+            >
+              Make backup
             </button>
           </div>
         </fieldset>

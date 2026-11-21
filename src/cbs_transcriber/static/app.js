@@ -10160,6 +10160,8 @@ function switchProviderTab(tab) {
   if (tab === "processing") return showProcessingTab();
   // Settings → Spelling (ADR 0187) lives in spelling.js; a hidden feature never opens it.
   if (tab === "spelling" && featureOn("spelling")) return showSpellingTab();
+  // Settings → Backup (ADR 0192) lives in backup_tasks.js.
+  if (tab === "backup") return CBSBackupTasks.showTab();
   if (tab !== "ucloud") tab = "ucloud";
   showProviderTab(tab);
   const existing = state.providers.find(
@@ -12654,6 +12656,10 @@ function activityJobs(jobs) {
   });
 }
 function needsActivityAttention(job) {
+  if (job.kind === "backup")
+    return (
+      typeof CBSBackupTasks !== "undefined" && CBSBackupTasks.attention(job)
+    );
   if (job.kind === "project-delete")
     return (
       typeof CBSProjectDeletions !== "undefined" &&
@@ -12739,6 +12745,10 @@ function activityCard(job, expanded) {
     return typeof CBSProjectDeletions === "undefined"
       ? ""
       : CBSProjectDeletions.card(job);
+  if (job.kind === "backup")
+    return typeof CBSBackupTasks === "undefined"
+      ? ""
+      : CBSBackupTasks.card(job);
   if (job.kind === "export") return CBSBackgroundExports.card(job);
   if (job.kind === "spelling_dictionary")
     return typeof spellingDictionaryCard === "function"
@@ -12799,6 +12809,8 @@ async function pollJobs() {
   // Inactive projects follow their server-owned deletion (ADR 0190).
   if (typeof CBSProjectDeletions !== "undefined")
     CBSProjectDeletions.observe(latest);
+  // Settings → Backup follows its server-owned backup (ADR 0192).
+  if (typeof CBSBackupTasks !== "undefined") CBSBackupTasks.observe(latest);
   // An open editor waiting for its dictionary checks again once Activity says it is ready.
   if (typeof observeSpellingDictionaries === "function")
     observeSpellingDictionaries(latest);
@@ -12865,9 +12877,13 @@ function mergeActivityHidden(value) {
 function activityRemovable(job) {
   // Server-lifetime cards have their own Discard/Dismiss controls.
   if (
-    ["export", "hf_setup", "spelling_dictionary", "project-delete"].includes(
-      job.kind,
-    )
+    [
+      "export",
+      "hf_setup",
+      "spelling_dictionary",
+      "project-delete",
+      "backup",
+    ].includes(job.kind)
   )
     return false;
   if (job.runtime_preparation_id)
