@@ -337,9 +337,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   unchanged. **Confirmed the same afternoon with the user's OK** (one read-only lookup through
   the app's bounded file API, nothing created or changed): the `cbs-runtime` parent folder,
   this version's runtime folder (`whisperx-3.8.6-cu128-a8f866300a50`), `.prepare-lock`,
-  `.in-use` and `stamp.json` are all absent. Next: reconcile those
-  local records so nothing still expects the old folder or lock, then plan a fresh preparation
-  under the user's explicit consent rather than the isolated-generation workaround. The morning branch implements verified exact host/shell stamp
+  `.in-use` and `stamp.json` are all absent. The only library has no Runtime records, so nothing
+  needs reconciling: a clean slate. The controlled live-test plan is
+  [runtime-live-test-2026-11-21](docs/work-plans/runtime-live-test-2026-11-21.md); every
+  credit-using step needs the user's OK. **21 November, user direction:** once the Runtime is
+  stable (live test passed), extend it to also host the smaller LLM expected for AI-assisted
+  qualitative coding (see that roadmap item), reusing the Runtime's preparation, MIG allocation,
+  owned folders, Activity and cleanup rather than a separate hosting path. The morning branch implements verified exact host/shell stamp
   validation and PREPARE=1 legacy-reader/retained-lock refusal before new job submission
   (ADR 0172), plus the separately reviewed configured-model preparation plan (ADR 0173).
   These fixes do not reclaim the historical lock or establish live Runtime acceptance.
@@ -1013,7 +1017,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   workflow, inference provider and researcher review before implementation; preserve source
   transcripts and distinguish AI suggestions from approved coding. Summaries, aspect
   sentiment/stance and expanded NVivo exports remain separate planned parts of this roadmap.
-  [Roadmap](docs/ai-analysis-nvivo-roadmap.md).
+  [Roadmap](docs/ai-analysis-nvivo-roadmap.md). **21 November:** the user wants the smaller LLM
+  for this work hosted on the CBS Runtime once the Runtime is stable (see the CBS Runtime item);
+  the 20 November inference-tier context (1g MIG, full B200, UCloud AI platform tiers; a
+  model-independent coding engine behind an OpenAI-compatible SDK interface; access control and
+  safeguards) still awaits the rest of the user's text before a planning note is written.
 - [ ] **Automatic second-pass word alignment (T93a).** Explicitly deferred as later fine-tuning;
   do not add a default extra inference pass now.
 - [ ] **Hviske 5.3/6 engines (T89d).** Planned separate architecture support is explicitly held.
