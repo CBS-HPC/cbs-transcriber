@@ -33,6 +33,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import (
     audio_inputs,
+    backup_tasks,
     deletions,
     enhancement_api,
     enhancement_cloud,
@@ -930,6 +931,21 @@ def create_app(
         with project_tasks.capture_exclusive(), background_exclusive():
             yield
 
+    # Server-owned local backups in Activity (ADR 0192). The task enters this same guard
+    # at admission, before its 202 reply, and holds it until its capture exits.
+    backup_manager = backup_tasks.BackupTasks(
+        store, queue, backup_capture_guard, acquire_file_lease=not start_worker
+    )
+
+    @contextmanager
+    def direct_capture_guard():
+        # The earlier synchronous route stays for existing clients, but never runs beside
+        # a background backup; both still serialize through the capture gate.
+        if backup_manager.active():
+            raise HTTPException(409, backup_tasks.BUSY)
+        with backup_capture_guard():
+            yield
+
     processing_started = False
     profiles_initialized = False
     initialization_lock = threading.Lock()
@@ -968,6 +984,8 @@ def create_app(
                     deletion_requests.recover_files()
                     # After file journals: earlier receipts become notes, never a resumed Delete.
                     project_tasks.recover()
+                    # Earlier backup notes become outcomes; nothing is recaptured (ADR 0192).
+                    backup_manager.recover()
                     initialize_processing()
                 yield
             except BaseException as primary:
@@ -981,6 +999,13 @@ def create_app(
                     project_tasks.close()
                 except BaseException as cleanup:
                     cleanup_error = cleanup
+                try:
+                    # Stop a backup not yet being saved and drain it under the lease; it
+                    # releases its capture, deletion and export/HF admission on exit.
+                    backup_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
                 try:
                     hf_manager.close()
                 except BaseException as cleanup:
@@ -1030,6 +1055,7 @@ def create_app(
     app.state.spelling_downloads = spelling_downloads
     app.state.deletions = deletion_requests
     app.state.project_deletions = project_tasks
+    app.state.backup_tasks = backup_manager
     app.state.export_tasks = export_manager
     app.state.huggingface_tasks = hf_manager
     app.state.profile = release
@@ -1045,7 +1071,13 @@ def create_app(
         )
         # Keep project only signals its task, which owns rollback during staging (ADR 0190).
         keep = project_deletion_tasks.keep_path(request.url.path)
-        return not deletion_requests.file_recovery_blocked or retry or keep
+        # Stop backup only signals its own task (ADR 0192).
+        stop = backup_tasks.stop_path(request.url.path)
+        return not deletion_requests.file_recovery_blocked or retry or keep or stop
+
+    def capture_exempt(path):
+        # Exact signals and backup task controls touch no captured library state.
+        return project_deletion_tasks.keep_path(path) or backup_tasks.control_path(path)
 
     portable_routes.install(
         app,
@@ -1053,9 +1085,11 @@ def create_app(
         queue,
         credentials,
         mutation_allowed=local_mutation_allowed,
-        capture_guard=backup_capture_guard,
-        mutation_exempt=project_deletion_tasks.keep_path,
+        capture_guard=direct_capture_guard,
+        mutation_exempt=capture_exempt,
     )
+    backup_manager.attach(app.state.portable_capture_gate)
+    backup_tasks.install(app, backup_manager)
 
     @contextmanager
     def export_safe_staging():
@@ -3896,6 +3930,7 @@ def create_app(
             + retained
             + deletion_requests.file_activity()
             + project_tasks.activity()
+            + backup_manager.activity()
             + export_manager.activity()
             + hf_manager.activity()
             + spelling_downloads.activity()
