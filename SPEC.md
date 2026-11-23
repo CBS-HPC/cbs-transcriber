@@ -350,6 +350,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V273: Project recording lists use one request-owned read transaction for the project,
+  the ordered recording rows, export eligibility and source readiness. Use the bounded
+  cache/job decoder and restored-owner exclusion on that same snapshot. Preserve the
+  existing wire fields, invalid-evidence response and single-recording read path (B586).
 - V272: The passage editor shows Start/End boxes for the word at the Text cursor (ADR 0195):
   a caret strictly inside a word, or beside a one-grapheme word and no other word, or a
   selection within one word. Between words, on a space or across several words the boxes
@@ -359,6 +363,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   or losing proof of the token drops its draft times with a notice. Bind the draft to the
   recording, result, revision, passage and saved text so same-revision metadata replies
   preserve it and newer revisions refuse Save with the draft intact (B583–B584).
+  Reconcile typed times against settled IME composition text. Keep typed intervals
+  through intermediate text and refuse their combined Save until composition ends (B585).
   Save passage sends text and typed times once
   (edit-v4): the ADR 0166 text policy first, then each range names exactly one resulting
   word, all times set, then edit_timed_word's rules checked against the final times; one
@@ -2306,7 +2312,8 @@ T160|x|Project deletion in Activity implemented on claude/deletion-activity and 
 T161|~|Backup in Settings with Activity (local rc3 candidate): server-owned local backup task with reserved admission before 202, cancellable waiting, phases/counts, Stop until a durable publication latch, identity-bound staging cleanup, file notes across restart, Check again finish-only verification; Settings → Backup tab and Library Create hand-off; synthetic backend and Chromium checks pass; 12-original Windows local capture and separate restore checked in H21; large/removable/cloud-synced destinations, crash recovery, macOS and approved UCloud transfer remain open|V259,V260,V261,V262,V263,V264,V254,V3,V5,V8,ADR0096,ADR0158,ADR0192
 T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review, unmerged): derived automatic Needs review for missing/added timing with reasons, Activity outcomes for finished word timing, worker outcome message kept, Repair all count without in-flight passages; synthetic checks pass (239 focused backend and 77 browser cases; a broader 670-case backend run had one failure, the base branch's packaged mvp profile); real-library acceptance H15c pending|V243,V244,V186,V223,V103,I.passage-review,ADR0191
 T163|x|Derived Uncertain/Timing missing review dropdown on codex/night-review-dropdown-20261120 (9b56e20): separate Review suggested tag retired; current-content manual marks win, no derived writes, native controls and existing filters retained;58 focused browser passes with exact source hashes and explicitly qualified cached Spylls host/child imports; local integration only, final composition gates separate, no app reload|V257,V243,V223,V192,ADR0191
-T164|x|Word-timing editor (07d9bbd, local rc3 composition): Start/End boxes for the word at the Text cursor replace the word dropdown; typed times are part of the passage draft and save with the text through edit-v4 as one version that Undo restores; Cancel discards both; conservative caret/selection/one-grapheme rules; synthetic backend and Chromium browser checks pass; real IME, screen reader, Mac/Firefox and real-user acceptance pending|V272,V190,V59,V149,ADR0166,ADR0180,ADR0195
+T164|x|Word-timing editor (07d9bbd and B585, local rc3 composition): Start/End boxes for the word at the Text cursor replace the word dropdown; typed times are part of the passage draft and save with the text through edit-v4 as one version that Undo restores; Cancel discards both; conservative caret/selection/one-grapheme rules; synthetic backend and Chromium browser checks pass; real IME, screen reader, Mac/Firefox and real-user acceptance pending|V272,V190,V59,V149,ADR0166,ADR0180,ADR0195
+T165|x|Project recording-list readiness uses one read-only SQLite snapshot. Mixed-state wire parity and connection-count gate pass. On 1,204 synthetic recordings, HTTP API calls took 0.41–0.60 s versus 10.91–12.63 s with the same canonical response. Browser layout and large-library acceptance remain open|V273,V138,B586
 
 ## §B Bug memory
 
@@ -2464,3 +2471,5 @@ B581|2026-11-23|PREPARE=1 checked the general terminal set and could start setup
 B582|2026-11-23|A timing-only passage save could mark a stale legacy word map current through its manual timing flag|V272,ADR0195. Require a current map before assigning typed times. The stale edit-v4 test keeps the result unchanged.
 B583|2026-11-23|An edit beside repeated text could transfer typed times to the wrong occurrence|V272,ADR0195. Validate the native replacement range or retain times only when the fallback positions agree. Chromium insertion and deletion reproduce the issue.
 B584|2026-11-23|A recording Rename reply replaced segment objects at the same revision and could omit the editor's typed times on Save passage|V272,ADR0195. Use recording, result, passage, text and revision as the draft fence. Keep the draft on a newer revision and refuse Save until reopened.
+B585|2026-11-23|A transient word split during IME composition discarded typed times even when the original word returned|V272,ADR0195. Track the settled value and defer combined Save while typed intervals are composing. Reproduced and verified in Chromium.
+B586|2026-11-23|A project list opened a new SQLite connection for each recording's source-readiness lookup|V273. Borrow its read snapshot for the verified decoder and restored-owner check. Assert exact mixed readiness and one connection per request.

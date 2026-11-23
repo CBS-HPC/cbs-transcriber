@@ -48,7 +48,9 @@ Once startup works, you can create a Desktop shortcut with the same settings. Ru
 ## Try these tasks
 
 1. **Transcribe.** Connect UCloud in the setup dialog or Settings. Create a project and add a recording. Start transcription and follow the file in **Activity** through to its result.
-2. **Edit and review.** Double-click a word. Save or cancel a correction. Split between words, merge passages and undo a change. Play the recording and check word following. Mark passages and try **Show** and **Next to review**.
+2. **Edit and review.** Double-click a word. Save or cancel a correction. On a timed passage, place the cursor inside a word and check **Start (s)** and **End (s)**.
+   Try a small valid time change, save the passage and undo it. Split between words,
+   merge passages and undo a change. Play the recording and check word following. Mark passages and try **Show** and **Next to review**.
 3. **Export.** Export readable text or Word, plus a project ZIP. Close Export Settings while the ZIP prepares, then download it from **Activity**. Check that the ZIP contains the selected formats and includes original files only if you selected them.
 4. **Backup and deletion.** Make a local backup from **Settings → Backup** and follow it in **Activity**. On a disposable project, confirm Delete and follow the card. Try **Keep project** while it is offered. Deletion is permanent once the project has been removed from the library.
 

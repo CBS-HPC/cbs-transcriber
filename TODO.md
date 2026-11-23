@@ -494,9 +494,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   tests. Import its reference transcripts as results so scale costs no transcription; transcribe
   only a small subset. Cover upload, media preparation, lists, Activity, editor, search, export,
   backup/restore and deletion. A synthetic 1,204-recording test exercised lists, search,
-  Activity and ZIP export on Windows. The confirmed list bottleneck is repeated SQLite
-  connection setup for verified readiness. Track the isolated query change and wire parity
-  separately from browser rendering. Human check H15b is still open.
+  Activity and ZIP export on Windows. The recording-list fix is in the local rc3
+  composition. On 1,204 synthetic recordings the verified API projection took 0.41–0.60 s,
+  compared with 10.91–12.63 s before the change. Separate browser rendering and human
+  check H15b are still open.
   [Measurements](docs/verification-2026-11-23-rc3-scale.md).
 - [ ] **Local processing concurrency across task types.** Implemented on
   `claude/local-concurrency` (ADR 0146, T111): Settings → Local Processing → Parallel local
@@ -720,7 +721,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   space, **the boxes show nothing**. Still to settle while building: selections spanning words
   and one-character words (conservative defaults, shown to the user).
   **Implemented for local rc3 verification (source `07d9bbd`, ADR 0195, V272, T164,
-  B552–B557, B582–B584).** Start (s)/End (s)
+  B552–B557, B582–B585).** Start (s)/End (s)
   boxes just below the textarea replace the ordinal word dropdown and its saved-text preview.
   Settled defaults: a selection spanning several words shows nothing; a selection within one
   word shows it; a one-character word (one grapheme, such as "i" or an emoji) is selected by

@@ -39,6 +39,9 @@ native Undo are only read, never written.
   when repeated text makes the changed occurrence ambiguous. Otherwise retain an interval only
   when the fallback positions agree. Deleting, splitting or losing proof of the token removes
   its typed times with a notice (B583). Native Undo of the text does not bring them back.
+- During IME composition, keep previously typed intervals until the text settles.
+  Block the combined Save while composition is active and the draft has typed times.
+  This lets a transient split disappear without dropping a valid draft interval (B585).
 - Nothing is inferred: a time appears in the result only where the saved word had one, the
   text policy kept one, or the user typed one.
 
