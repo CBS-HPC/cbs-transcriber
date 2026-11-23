@@ -62,3 +62,25 @@ repeat runs on representative hardware and installed-build
 acceptance are still open. The [pilot guide](testing/colleague-test-guide-0.2.0rc3.md) was
 checked with the Windows PowerShell parser. Actual wheel installation, startup and shortcut
 acceptance are release checks.
+
+## Repeat typing and component measurements
+
+Two additional runs used the same 1,200-passage fixture and 39-character typing task. Each
+round measured the server baseline before and after its browser changes. Component snapshots
+changed only the JavaScript or CSS file from the separate browser branch.
+
+| Round | Variant | Short passage (s) | 400-word passage (s) |
+| --- | --- | ---: | ---: |
+| Repeat | Server baseline before | 4.245 | 7.018 |
+| Repeat | JavaScript and CSS | 2.089 | 3.080 |
+| Repeat | Server baseline after | 3.884 | 5.902 |
+| Component | Server baseline before | 3.933 | 5.457 |
+| Component | JavaScript only | 3.400 | 4.041 |
+| Component | CSS only | 2.081 | 4.230 |
+| Component | Server baseline after | 4.059 | 5.823 |
+
+The repeat showed a shorter 400-word typing time with the full browser patch. The earlier
+pair showed a longer time for that workload. Both isolated components were faster than their
+two adjacent baselines in this run. The tested core retains the server improvement. The
+recorded component measurements can guide the next browser test on the selected release
+source and representative hardware.
