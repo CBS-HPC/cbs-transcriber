@@ -1490,9 +1490,8 @@ def create_app(
 
     @app.get("/api/projects/{identifier}/recordings")
     def recordings(identifier: str):
-        store.one("SELECT id FROM projects WHERE id=?", (identifier,))
         # Canonical writer prefixes are cheap advisory candidates; export verifies full bytes.
-        rows = store.all(
+        query = (
             "SELECT id,project_id,name,filename,kind,status,duration,revision,created, "
             "notes,notes_revision,collection_id,language_override,language_revision, "
             "provider_id,active_transcript_id,(segments!='[]') AS has_transcript, "
@@ -1513,14 +1512,24 @@ def create_app(
             "AND t.id NOT IN (SELECT result_id FROM result_trash) "
             'AND v.payload LIKE \'{"format":"cbs-result-snapshot-v1","segments":[{%\') '
             "AS export_working FROM recordings "
-            "WHERE project_id=? ORDER BY created",
-            (identifier,),
+            "WHERE project_id=? ORDER BY created"
         )
-        for row in rows:
-            row["export_eligible"] = {
-                mode: bool(row.pop("export_" + mode)) for mode in ("working", "active", "all")
-            }
-            row["source_readiness"] = input_admission.source_readiness(store, row["id"])
+        with store.connection() as snapshot:
+            snapshot.execute("PRAGMA query_only=ON")
+            snapshot.execute("BEGIN")
+            if (
+                snapshot.execute("SELECT id FROM projects WHERE id=?", (identifier,)).fetchone()
+                is None
+            ):
+                raise KeyError(identifier)
+            rows = [dict(row) for row in snapshot.execute(query, (identifier,))]
+            for row in rows:
+                row["export_eligible"] = {
+                    mode: bool(row.pop("export_" + mode)) for mode in ("working", "active", "all")
+                }
+                row["source_readiness"] = input_admission.source_readiness(
+                    store, row["id"], connection=snapshot
+                )
         return rows
 
     @app.post("/api/recordings", status_code=201)
