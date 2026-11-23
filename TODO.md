@@ -493,8 +493,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   licence, pinned revision and hashes; download it outside the repository, never in routine
   tests. Import its reference transcripts as results so scale costs no transcription; transcribe
   only a small subset. Cover upload, media preparation, lists, Activity, editor, search, export,
-  backup/restore and deletion. Human check H15b in the
-  [release checklist](docs/testing/human-release-checklist.md).
+  backup/restore and deletion. A synthetic 1,204-recording test exercised lists, search,
+  Activity and ZIP export on Windows. The confirmed list bottleneck is repeated SQLite
+  connection setup for verified readiness. Track the isolated query change and wire parity
+  separately from browser rendering. Human check H15b is still open.
+  [Measurements](docs/verification-2026-11-23-rc3-scale.md).
 - [ ] **Local processing concurrency across task types.** Implemented on
   `claude/local-concurrency` (ADR 0146, T111): Settings → Local Processing → Parallel local
   tasks with automatic media = logical CPUs − 2 in 2..8, inspection = CPUs/2 in 2..4, API 6 and

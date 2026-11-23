@@ -187,7 +187,11 @@ the user's approval each time; checks marked **later** belong to features still 
   outside the repository and never in routine tests. Candidates to check: LibriSpeech (many
   short read clips), AMI meetings (long, several speakers), Earnings-22 (long calls),
   VoxPopuli or Common Voice (very many clips).
-- **Status:** Not run. Requested 20 November; not needed before the MVP v2 release.
+- **Status:** The 23 November synthetic subset exercised a 1,204-recording project and
+  1,800-passage transcript in Chromium. Listing recordings took 9.98–16.29 seconds at
+  the API. Project cards took 21–24 seconds from browser navigation. Public speech,
+  end-to-end ingestion and larger backup/restore/deletion acceptance are open.
+  [Measurements](../verification-2026-11-23-rc3-scale.md).
 
 ### H16 · Editing a long real transcript
 
@@ -227,7 +231,11 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Do:** Export a project with "include original recordings" totalling several GB.
 - **Pass when:** The browser download completes, the ZIP opens, and the app stays usable while it
   is prepared.
-- **Status:** Not run.
+- **Status:** A Windows synthetic 540 MB archive downloaded through Chromium. The test
+  verified all 1,204 original files, 1,203 transcripts and the expected skip. Export
+  preparation continued after closing the dialog, and explicit cancellation cleared
+  a separate run's staging. Multi-GB and real-device acceptance remain open.
+  [Measurements](../verification-2026-11-23-rc3-scale.md).
 
 ## Library, backup and restore
 
