@@ -960,7 +960,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   project creation stays accessible at narrow widths too; synthetic browser checks pass.
   Existing project-overview layout is unchanged; installed MVP remains unchanged.
 
-- [ ] **Deactivate direct OpenAI backend — decided 11 November.** Remove OpenAI-hosted
+- [x] **Deactivate direct OpenAI backend — decided 11 November.** **Active in MVP v2** (checked
+  23 November): the morning branch is merged into the v2 line and `require_service_available`
+  refuses new direct OpenAI requests in every profile; the "activation pending" text below is
+  historical. Real-user acceptance follows the human release checklist. Remove OpenAI-hosted
   service setup and models from ordinary user choices, and refuse new direct OpenAI
   transcription requests. Retain the shared OpenAI-compatible client/protocol code, endpoint
   configuration and relevant tests for a possible future UCloud transcription service using
@@ -972,7 +975,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   pending. Local raw/chunk finalization and accepted-request drain
   remain available, while missing-part requests refuse without new direct service calls.
 
-- [ ] **First-launch front-page connection setup — requested 11 November.** Let a first-time
+- [x] **First-launch front-page connection setup — requested 11 November.** **Active in MVP v2**
+  (checked 23 November; merged with the morning branch). Real first-time-user acceptance
+  remains (human checklist). Let a first-time
   user enter the UCloud API key and an optional Hugging Face access token directly on the
   front page. Reuse the existing Settings validation and secure credential-storage flow;
   keep credentials editable later in Settings. This is first-use onboarding, not a prompt
@@ -982,7 +987,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   isolated morning branch; complete backend coverage and 67 relevant browser cases pass,
   with no installed update. Activation and real-user acceptance remain open.
 
-- [ ] **HF access and configured-model preparation in Activity.** Explicit nonempty primary
+- [x] **HF access and configured-model preparation in Activity.** **Active in MVP v2** (checked
+  23 November): saving a token returns 202 and starts the check in Activity; the user's preview
+  showed "Token valid · terms accepted" on 20 November. Live model download/preparation
+  acceptance remains. Explicit nonempty primary
   HF Save should check access and model terms, then prepare configured local/UCloud assets
   with cache reuse, Stop, token/plan fences and truthful partial states. Use the existing
   durable remote owner and a versioned model plan beyond base readiness; do not claim all
@@ -1002,7 +1010,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
   investigation candidate, not a committed feature or MVP requirement.
 
-- [ ] **Post-MVP connected-provider selectors.** Offer providers in project/recording
+- [x] **Post-MVP connected-provider selectors.** **Active in MVP v2** (checked 23 November):
+  selectors offer only providers whose saved connection passed its check (`connection_ready`).
+  Real-provider acceptance remains. Offer providers in project/recording
   transcription selectors only after successful configuration and a connection check in
   Settings. Fresh presets or missing credentials alone must not appear ready to use. Bind
   readiness to the saved connection; recheck after relevant settings/credential changes.
