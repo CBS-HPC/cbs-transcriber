@@ -195,5 +195,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0189 — Passage timing windows too short for their text are not aligned](0189-windows-too-short-for-their-text.md)
 - [0190 — Project deletion in Activity](0190-project-deletion-in-activity.md) (post-v2; implemented on `claude/deletion-activity`; recordings keep the dialog flow)
 - [0191 — Word timing in review and Activity](0191-word-timing-in-review-and-activity.md) (post-v2; derived automatic Needs review, Activity outcomes)
+- [0192 — Backup in Settings with Activity](0192-backup-in-settings-with-activity.md) (post-v2; server-owned local backup task, Stop until saved; UCloud transfer unchanged)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

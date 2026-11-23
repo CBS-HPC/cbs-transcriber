@@ -225,6 +225,23 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Do:** Make a backup from Library, restore it into a new library, switch to it; repeat on a Mac.
 - **Pass when:** The restored library opens with every project, transcript, version and note.
 - **Status:** Not run on a real library.
+- **Also (backup in Activity, ADR 0192):** on a copy of a real library with several GB of
+  recordings, (1) open Settings → Backup and choose **Make backup**, close Settings and follow
+  Activity: Waiting, Copying the library database, Listing files, Copying files with counts,
+  Checking the copy, Saving the backup. Try an edit meanwhile (it should wait, not fail).
+  (2) Start another backup and press **Stop backup** while files are copied. (3) Start one to
+  a USB disk and unplug it mid-copy; start one to a OneDrive-synced folder. (4) Close the app
+  (Ctrl+C) during copying, start it again; then close it while "Saving the backup" if you can
+  catch it. (5) Save the receipt from a finished card and check it in Library → Backups.
+- **Pass when:** (1) ends "Backup saved and checked" with the folder named, the receipt
+  matches, and the edit is saved after the copy. (2) ends "Backup stopped" with no new
+  `portable-…` folder and no leftover `.portable-….partial`. (3) ends failed or stopped with
+  a plain reason and any leftover folder named on the card. (4) shows "Backup not finished"
+  with any incomplete copy named and removable; a backup closed while saving asks for
+  **Check again**, which confirms it or names its folders. Nothing restarts by itself.
+- **Status (Activity):** Not run. Implemented on `claude/backup-activity` (ADR 0192) with
+  synthetic backend and Chromium tests only; real large libraries, slow/removable and
+  cloud-synced folders, process crashes and macOS are unverified.
 
 ### H22 · Switching libraries and two browser tabs
 

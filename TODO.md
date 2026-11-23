@@ -595,14 +595,20 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   including separately hosted transfer endpoints, which remain blocked until explicitly trusted,
   plus real-library Windows and Mac restore. The user waived a new backup for this disposable test
   library; that does not waive preservation requirements for other libraries.
-- [ ] **Backup Settings and Activity.** Implement the proposed Settings → Backup entry and
-  durable, separately verified local/cloud status and progress using the existing Library flow;
-  retain explicit destination approval, restore isolation and manual retention confirmation.
-  The Restore flow checks earlier or external receipts against local or UCloud package bytes;
-  this is a transport check, not a restore test. Older database-only copies remain available
-  only as advanced recovery when present; creation is removed from the Library UI. Capture still has no Activity
-  entry, percentage progress or cancellation, and a lost response can leave a partial copy.
-  Automatic schedules are not implemented. See the [Settings design](docs/work-plans/weekend-2026-10-31.md#backup-controls-in-settings--design-review).
+- [ ] **Backup Settings and Activity.** Implemented on `claude/backup-activity` (post-v2,
+  unmerged; [ADR 0192](docs/decisions/0192-backup-in-settings-with-activity.md), T161): a
+  Settings → Backup tab and Library → Backups → Create backup hand a local backup to one
+  server-owned Activity task with stages, copy counts, Stop until it is being saved, and a
+  verified/stopped/failed outcome; its own incomplete copy is removed or named, and a restart
+  reports interrupted backups without resuming them. Synthetic backend and Chromium checks
+  pass. Remaining: real-device acceptance (H21: large libraries, removable and cloud-synced
+  folders, crashes, macOS); separately verified UCloud status in Settings (UCloud transfer
+  stays in Library → Backups, hidden in MVP, unchanged). Explicit destination approval,
+  restore isolation and manual retention confirmation are unchanged. The Restore flow checks
+  earlier or external receipts against local or UCloud package bytes; this is a transport
+  check, not a restore test. Older database-only copies remain available only as advanced
+  recovery when present. Automatic schedules are not implemented. See the
+  [Settings design](docs/work-plans/weekend-2026-10-31.md#backup-controls-in-settings--design-review).
 - [ ] **Institutional storage and privacy.** Agree UCloud data classification and transfer
   approval, account/drive access, TLS and token scope, storage encryption and key/receipt custody,
   audit logging, retention, holds and withdrawal with CBS IT/DPO. Real transfer is not verified

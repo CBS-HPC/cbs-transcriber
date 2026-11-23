@@ -87,6 +87,7 @@
 | Speaker assignment | Choosing a voice label for one passage, distinct from renaming that label throughout a result. |
 | Batch workflow | Selected project recordings transcribed immediately and optionally enhanced with one frozen processing setup; ordinary API requests, no OpenAI Batch API. |
 | Export Settings | Shared result/project download dialog; project ZIP reports exported and skipped results. |
+| Backup task | A server-owned Activity item making one complete local backup (ADR 0192); Stop works until it is being saved, and its outcome is verified, stopped, failed or needs checking. |
 | Prepared export | A temporary ZIP built independently of its dialog and downloaded through Activity; frozen selected content, not a backup or restart-durable processing job. |
 | Parallel local tasks | Per-step limit on how many files this computer prepares, inspects, admits or sends to a provider API at once; it gates new claims only and never stops running work (ADR 0146). |
 | Local inference runtime | App Python environment with standard WhisperX/CPU PyTorch dependencies; an alternate CUDA environment is an advanced option. Models are cached or downloaded explicitly. |

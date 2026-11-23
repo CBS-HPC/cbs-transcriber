@@ -106,6 +106,14 @@ def requests(page, path, method="GET"):
     )
 
 
+def finish_backup(page, saved, task_id="d" * 32):
+    """Create backup hands off to a server task (ADR 0192): accept it, then report it ready."""
+    reply(page, "/library/backup-tasks", {"id": task_id, "state": "running"}, method="POST")
+    path = f"/library/backup-tasks/{task_id}"
+    page.wait_for_function("path => pending.some(r => r.path === path)", arg=path)
+    reply(page, path, {"id": task_id, "state": "ready", "receipt": saved, "message": "Saved"})
+
+
 def reply(page, path, value, *, method="GET", index=-1, error=False, status=None):
     if path == "/library/portable-storage" and method == "PUT" and not error:
         value = {**value, "storage_revision": "e" * 64, "fingerprint": "1" * 64}
@@ -226,7 +234,7 @@ def test_late_simple_prepare_invalidates_cloud_restore_without_overwriting_new_d
         "legacy_gaps": 0,
     }
     panel.locator("#portable-create").click()
-    reply(panel, "/library/portable-backups", saved, method="POST")
+    finish_backup(panel, saved)
     expect(panel.locator("#portable-folder")).to_have_value(saved["folder"])
     panel.locator("#portable-restore-source").fill("/drive/old-backup")
     panel.locator("#portable-restore-reference").fill("c" * 64)
@@ -383,7 +391,7 @@ def test_simple_upload_admits_receipt_before_upload_and_clears_completed_referen
         "legacy_gaps": 0,
     }
     panel.locator("#portable-create").click()
-    reply(panel, "/library/portable-backups", saved, method="POST")
+    finish_backup(panel, saved)
     expect(panel.locator("#portable-folder")).to_have_value(saved["folder"])
     open_simple(panel)
     panel.locator("#portable-simple-upload").click()
@@ -444,7 +452,7 @@ def test_simple_stop_displays_and_targets_newly_approved_location(panel):
         "legacy_gaps": 0,
     }
     panel.locator("#portable-create").click()
-    reply(panel, "/library/portable-backups", saved, method="POST")
+    finish_backup(panel, saved)
     expect(panel.locator("#portable-folder")).to_have_value(saved["folder"])
     open_simple(panel)
     panel.locator("#portable-simple-location").select_option("/drive/B")
@@ -494,7 +502,7 @@ def test_simple_completed_receipt_appears_when_matching_creator_receipt_is_selec
     open_simple(panel, operations=[completed])
     expect(panel.locator("#portable-cloud-recovery")).to_be_hidden()
     panel.locator("#portable-create").click()
-    reply(panel, "/library/portable-backups", saved, method="POST")
+    finish_backup(panel, saved)
     panel.wait_for_function(
         "pending.filter(r => r.path === '/library/portable-operations').length === 2"
     )
@@ -534,16 +542,11 @@ def test_backup_destination_frozen_and_late_picker_does_not_overwrite_draft(pane
     reply(panel, "/storage/browse", {"path": "E:/old-choice"}, method="POST")
     expect(destination).to_have_value("D:/newer-choice")
     panel.locator("#portable-create").click()
-    assert requests(panel, "/library/portable-backups", "POST") == [
-        {"destination": "D:/newer-choice"}
-    ]
+    [body] = requests(panel, "/library/backup-tasks", "POST")
+    assert body["destination"] == "D:/newer-choice"
+    assert re.fullmatch(r"[0-9a-f]{32}", body["operation_id"])
     destination.fill("F:/next-backup")
-    reply(
-        panel,
-        "/library/portable-backups",
-        {"folder": "D:/newer-choice/portable-test", "commit_sha256": "f" * 64},
-        method="POST",
-    )
+    finish_backup(panel, {"folder": "D:/newer-choice/portable-test", "commit_sha256": "f" * 64})
     expect(panel.locator("#portable-status")).to_contain_text("Earlier backup saved at")
     expect(destination).to_have_value("F:/next-backup")
     expect(panel.locator("#portable-folder")).to_have_value("")

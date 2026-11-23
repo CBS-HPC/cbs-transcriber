@@ -22,6 +22,8 @@
   let applyingRetention = false;
   let captureListLoad = 0;
   let captureSelection = 0;
+  // Each closing of the Library dialog ends what an earlier view is following.
+  let libraryClosings = 0;
   let backupDraftRevision = 0;
   let destinationRevision = 0;
   let defaultDestinationLoad = 0;
@@ -262,6 +264,7 @@
     setTimeout(checkDestinationVolume, 0);
   });
   node("library-dialog").addEventListener("close", () => {
+    libraryClosings += 1;
     destinationRevision += 1;
     defaultDestinationLoad += 1;
     restoreDraftRevision += 1;
@@ -398,36 +401,63 @@
       `Backup files matched the saved receipt when read at ${saved.folder}. This checks stored bytes, not a test restore.${canReuseForUpload ? " Save the receipt outside your backup storage." : " Existing upload choices were kept."}`,
     );
   });
+  // One exact request: an uncertain reply is answered by repeating it, which returns the
+  // task the server already accepted, never a second backup (ADR 0192).
+  const startBackup = async (destination) => {
+    const body = {
+      operation_id: crypto.randomUUID().replaceAll("-", ""),
+      destination: destination || null,
+    };
+    try {
+      return await api("/library/backup-tasks", { method: "POST", body });
+    } catch (error) {
+      if (error.status && error.status !== 408 && error.status < 500)
+        throw error;
+      try {
+        return await api("/library/backup-tasks", { method: "POST", body });
+      } catch {
+        throw new Error(
+          "The backup request did not finish normally. Check Activity before trying again.",
+        );
+      }
+    }
+  };
+  // Making a backup hands off to a server-owned Activity task (ADR 0192); this dialog only
+  // follows it while open, then loads its receipt as before.
   bind("portable-create", async () => {
     const selection = ++captureSelection;
     const draft = backupDraftRevision;
+    const opened = libraryClosings;
     status(
-      "Copying originals and evidence, then checking the complete package. Changes wait until the backup finishes…",
+      "Copying originals and evidence, then checking the complete package. Follow it in Activity; changes wait until the backup finishes, and closing this window does not stop it…",
     );
     let saved;
     try {
-      saved = await api("/library/portable-backups", {
-        method: "POST",
-        body: {
-          destination: node("portable-destination").value.trim() || null,
-        },
-      });
-    } catch (error) {
-      if (!error.status || error.status === 408 || error.status >= 500) {
-        const message = featureOn("restore_ui")
-          ? "The backup request did not finish normally; its outcome is unknown. Once the app is available, open Restore a backup and check any saved receipt before retrying. Incomplete copies are kept."
-          : "The backup request did not finish normally; its outcome is unknown. Incomplete copies are kept. Ask the person who supports your installation to check the backup folder before retrying.";
-        if (!mayUseReceipt(selection, draft)) {
-          earlierStatus(`Earlier backup request: ${message}`);
+      const accepted = await startBackup(
+        node("portable-destination").value.trim() || null,
+      );
+      if (typeof pollJobs === "function") pollJobs().catch(() => {});
+      let done = accepted;
+      while (done.state === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (!node("library-dialog").open || opened !== libraryClosings) {
+          status("This backup continues in Activity.");
           return;
         }
-        throw new Error(message);
+        done = await api(`/library/backup-tasks/${accepted.id}`, {
+          background: true,
+        });
       }
+      if (done.state !== "ready" || !done.receipt)
+        throw new Error(done.message);
+      saved = done.receipt;
+    } catch (error) {
       if (!mayUseReceipt(selection, draft)) {
         earlierStatus(`Earlier backup request: ${error.message}`);
         return;
       }
-      throw error;
+      // A refusal is not a storage conflict: never reset UCloud choices for it.
+      throw new Error(error.message);
     }
     if (!mayUseReceipt(selection, draft)) {
       earlierStatus(

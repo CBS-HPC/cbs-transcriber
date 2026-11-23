@@ -301,6 +301,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   supplied claims; matched_supplied_database only, no sealed-package/history/restore authority.
 - I.portable-package: internal package_database_claims_only observation derives database
   references from an in-call frozen transport capture; no supplied capture or restore authority.
+- I.backup-tasks: POST /api/library/backup-tasks {operation_id, destination} → 202 task;
+  GET /api/library/backup-tasks[/{id}]; POST …/{id}/stop (signal), /dismiss,
+  /remove-partial, /check. Activity kind `backup`, id `backup:<task>`. Settings → Backup and
+  Library → Backups → Create backup both use it; the synchronous capture route remains.
 - I.portable-payload: pure supplied snapshot-v1 byte/hash and canonical-envelope observation
   with pre-JSON lexical budgets; no passage/history/database/owner/restore authority.
 - I.history: schema-6 immutable result/notes versions, recording-scoped paginated history,
@@ -344,6 +348,47 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V264: Settings has a Backup tab in every profile: what a complete backup includes, this
+  library, the latest saved receipt, the backup folder with the same default and same-device
+  warning, Make backup, View Activity and Library backups. Restore and UCloud wording follow
+  `restore_ui`/`cloud_backup`; UCloud transfer is unchanged and never run by tests. Library →
+  Backups → Create backup hands off to the same task and loads its receipt while that dialog
+  stays open. A 409 admission refusal never resets UCloud backup choices. No schedules
+  (B520, ADR0192).
+- V263: Backup notes in the library's `backup-tasks/` folder are observational. Startup
+  settles a running note from fresh observations only: before the boundary → interrupted,
+  naming its staging folder if present; after it → needs attention. Nothing is recaptured,
+  resumed, verified at startup or deleted because of a note; an exact replay after restart
+  returns the old task. Check again finishes only the task's own remaining moves without
+  replacing anything, then runs full receipt verification; a missing reference or mismatch
+  is failed with the kept folders named. Captures never copy these notes; unreadable notes
+  are inert dismissible cards; at most 32 notes (ADR0192).
+- V262: A backup is Ready (verified) only when capture returned and the intended final folder
+  matches its creator reference (marker/manifest digests, object names and sizes, no pending
+  folder), after the full transport/contained database checks on the sealed bytes. Progress
+  is unknown before inventory, counts every file read including deduplicated duplicates, is
+  shown only while copying and never reaches 100% before Ready. Activity carries counts and
+  the user's own folders, never recording names, transcript text, keys or tokens (ADR0192).
+- V261: Before publication a stopped, failed or interrupted backup removes only its own
+  staging folder, and only when its recorded identity matches, it is a real folder and it
+  holds only expected staging names; otherwise the card names it as incomplete, not a
+  backup, and offers Remove incomplete copy under the same checks. Originals and any other
+  folder are never touched. Dismiss is refused while an owned folder remains or publication
+  is unresolved; Clear finished keeps such cards (B522, ADR0192).
+- V260: Stop is an exact signal outside capture and local-recovery admission, with host,
+  origin and request-header checks intact; it also wakes a backup still waiting for earlier
+  changes. It wins until the publication latch, written to the note under the task lock
+  immediately before the creator reference; a failed latch write refuses publication. After
+  the latch Stop returns 409 backup_publishing. Exactly one of Stop and the latch wins.
+  Graceful shutdown stops an unpublished backup, cleans up and joins it under the lease
+  (B523, ADR0192).
+- V259: Making a local backup is a server-owned Activity task (one per library). Before its
+  202 it passes the existing capture refusals, freezes the destination and a host capture id,
+  enters the reciprocal deletion/HF/export guard and takes a nonblocking capture-gate
+  reservation, so later mutations wait while earlier ones drain; it then writes its note.
+  Exact replays return the same task; changed or retyped bodies are refused. A refusal
+  creates no note, folder or reservation. The synchronous route refuses while a task runs.
+  All admission is released exactly once when the capture exits (B521, B522, V254, ADR0192).
 - V258: Global project-task shutdown immediately prevents every not-yet-claimed Stop,
   queued task execution and Delete commit even before per-task closing flags are set. Waiting
   for one task's in-flight COMMIT cannot let the executor advance another queued deletion.
@@ -2235,7 +2280,7 @@ T90f|x|older-recording selected-source byte/epoch proof and absolute bounded tim
 T158|x|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, truthful errors/alignment stage and impossible-window admission/skip (ADR0189); 377 backend and final 22 browser cases pass with independent review and exact Unicode parity; isolated local rc2 wheel/constraints and 155 helper/profile cases verified (6ff03df); no installation/publication/reload, real H15a pending|V241,V242,V3,V5,V8,ADR0189
 T159|~|Separate cursor-word timing interaction prototype f140a34 from4574083: OFF by default, native Text retained, start/end drafts in memory only, no save/API/CAS changes; 15 browser cases and independent limited-scope Go; boundary/selection/one-character and production save UX remain undecided; unmerged|V239,V240,V201,I.transcript
 T160|x|Project deletion in Activity implemented on claude/deletion-activity and independently hardened on codex/night-deletion-fixes-20261120: reciprocal existing-backup admission, actual COMMIT-bound Keep, Keep-before-Stop and R5 lost-Trash-reply recovery; corrected staged backend inventory 376 passes/two skips and final22 relevant browser passes on fixed source with exact before/after hashes; whole-browser and realH24 notclaimed, recording deletes unchanged, no loaded-app/main claim|V250,V251,V252,V253,V254,V255,V256,V148,ADR0092,ADR0101,ADR0102,ADR0190
-T161|~|Backup preparation in Activity: reviewed backend proposal plus3 current-behavior characterization passes; exact control bypass, cancellable admission, publishing/recovery and reciprocal deletion admission fences proposed; durable storage/restore policy undecided, no production task implemented|V3,V5,V8,ADR0096,ADR0158
+T161|~|Backup in Settings with Activity (post-v2, claude/backup-activity, unmerged): server-owned local backup task with reserved admission before 202, cancellable waiting, phases/counts, Stop until a durable publication latch, identity-bound staging cleanup, file notes across restart, Check again finish-only verification; Settings → Backup tab and Library Create hand-off; synthetic backend and Chromium browser checks pass; real large/removable/cloud-synced destinations, crash recovery on real devices and H21 pending; UCloud transfer unchanged|V259,V260,V261,V262,V263,V264,V254,V3,V5,V8,ADR0096,ADR0158,ADR0192
 T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review, unmerged): derived automatic Needs review for missing/added timing with reasons, Activity outcomes for finished word timing, worker outcome message kept, Repair all count without in-flight passages; synthetic checks pass (239 focused backend and 77 browser cases; a broader 670-case backend run had one failure, the base branch's packaged mvp profile); real-library acceptance H15c pending|V243,V244,V186,V223,V103,I.passage-review,ADR0191
 T163|x|Derived Uncertain/Timing missing review dropdown on codex/night-review-dropdown-20261120 (9b56e20): separate Review suggested tag retired; current-content manual marks win, no derived writes, native controls and existing filters retained;58 focused browser passes with exact source hashes and explicitly qualified cached Spylls host/child imports; local integration only, final composition gates separate, no app reload|V257,V243,V223,V192,ADR0191
 
@@ -2378,3 +2423,8 @@ B515|2026-11-20|Keep won after stop_for_task checked its flag but before _cancel
 B516|2026-11-20|The expanded night regression used a deeper generated Windows basetemp than the earlier focused gate; ten successful portable-route scenarios hit the unchanged staging/destination path-budget guard or its secondary wait symptom|Harness-only correction: rerun the complete 30-case portable_routes module from a fresh short synthetic base with identical source, tests and assertions; all 30 pass. Reconcile exact case identities into the 378-case inventory (376 passes, two skips), retaining the original 366-pass/two-skip/ten-failure receipt. No new product invariant or guard relaxation is needed
 B517|2026-11-20|The night dropdown browser runner exposed cached Spylls only to the isolated worker; the unchanged host availability guard could not find the package, so the spelling/uncertainty overlay test failed on both candidate and untouched base|Harness-only correction: expose the actual existing Spylls0.1.7 cache to the test host as well as the isolated child, preserving find_spec and all isolation guards; the corrected58-case gate passes without changing source, assertions or installed environments. Normal installed-worker acceptance remains open
 B518|2026-11-20|Final adversarial review paused close() while it waited for the first task decision; the executor advanced and deleted a second queued project after global closed was already true, because its per-task closing flag had not yet been set|V258,V253,ADR0190; include global closed in the shared Keep/shutdown predicate and use it at both final decision/commit boundaries. Independent deterministic queued-project and two direct-boundary regressions; prior in-flight COMMIT outcome remains authoritative, with no new Stop for the queued project
+B520|2026-11-21|Implementing T161: Library → Backups used the shared action wrapper, which treats every 409 as a UCloud storage conflict and clears the saved destination approval in the dialog; the new backup admission answers refusals (queued jobs, a running backup, a deleting project) with 409, so Create backup would have silently reset UCloud choices|V264,ADR0192; Create backup rethrows a plain error for admission refusals, so only real storage replies reset UCloud state; the existing Library browser test still sees the refusal text
+B521|2026-11-21|Implementing T161: the early admission check called the local-deletion journal reader without the library lease in a no-worker app, raising instead of answering|V259,ADR0192; the check borrows the serving lease, or takes its own only in no-worker apps, as other handlers do; covered by every backend task test
+B522|2026-11-21|TODO and Codex's proposal: a complete backup ran inside one HTTP request, so a closed dialog or lost reply left a `.portable-<id>.partial` folder with no explanation and no Stop|V259,V261,ADR0192; the server-owned task survives dialogs, removes its own identity-bound staging on stop/failure or names it, and a restart reports it as interrupted with Remove incomplete copy
+B523|2026-11-21|Implementing T161: CaptureGate.capture left waiting mutations asleep when a capture ended its admission wait without becoming active, which a cancellable reservation can now do|V260,ADR0192; the capture admission always notifies on exit; a deterministic gate-level regression fails without that notification and passes with it (the HTTP stop-while-waiting test alone passed either way because Stop's own wake-up usually wins the race)
+B524|2026-11-23|Related browser gate for T161: five isolated portable.js harness tests replied only to the synchronous POST /library/portable-backups, and the Library dialog test expected the refused capture to log 400; the first loaded-module version of the hand-off also called a Settings-module helper the harness does not load|V264,ADR0192; Create backup uses only the shared api function (exact-replay start, then a 500 ms status follow while the dialog stays open), the harness answers the task POST and status GET, and the console expectation is 409 for the refused admission; assertions otherwise unchanged

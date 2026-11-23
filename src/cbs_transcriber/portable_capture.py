@@ -20,6 +20,61 @@ from . import portable_inventory as inventory
 from . import portable_transport as transport
 
 _mutation_slot = ContextVar("portable_mutation_slot", default=None)
+_HEX32 = frozenset("0123456789abcdef")
+
+
+class Cancelled(Exception):
+    """A server-owned capture was stopped before its publication boundary (ADR 0192)."""
+
+
+class Observer:
+    """Optional in-process hooks for a server-owned capture (ADR 0192).
+
+    Every method is a no-op here, so callers without an observer keep the earlier behavior.
+    Hooks receive counts and the task's own staging path only, never recording names or
+    transcript content. `publish` is the point of no return: raising refuses publication.
+    """
+
+    def phase(self, name):
+        pass
+
+    def staged(self, path):
+        pass
+
+    def totals(self, files, size):
+        pass
+
+    def copied(self, size):
+        pass
+
+    def copied_file(self):
+        pass
+
+    def publish(self):
+        pass
+
+
+class Reservation:
+    """A nonblocking capture admission taken before an accepted task's reply (ADR 0192).
+
+    Later mutations wait from the moment it is taken; earlier ones still drain before the
+    capture becomes active. It is consumed by `CaptureGate.capture` or released once.
+    """
+
+    def __init__(self, gate):
+        self.gate, self.held = gate, True
+
+    def _take(self):
+        # Called under the gate's condition.
+        held, self.held = self.held, False
+        return held
+
+    def release(self):
+        with self.gate.condition:
+            if self.held:
+                self.held = False
+                self.gate.captures -= 1
+                self.gate.condition.notify_all()
 
 
 def canonical(value):
@@ -94,17 +149,42 @@ class CaptureGate:
             self.mutations -= 1
             self.condition.notify_all()
 
-    @contextmanager
-    def capture(self):
+    def reserve(self):
+        """Exclude later mutations now, without waiting for earlier ones (ADR 0192)."""
         with self.condition:
             self.captures += 1
+        return Reservation(self)
+
+    def busy(self):
+        with self.condition:
+            return self.active or self.captures > 0
+
+    def wake(self):
+        """Let a cancellable capture waiting for admission observe its stop signal."""
+        with self.condition:
+            self.condition.notify_all()
+
+    @contextmanager
+    def capture(self, reservation=None, cancelled=None):
+        with self.condition:
+            if reservation is None:
+                self.captures += 1
+            elif not reservation._take():
+                raise Cancelled()
             try:
                 self.condition.wait_for(
-                    lambda: not self.active and self.promoting is None and self.mutations == 0
+                    lambda: (
+                        (cancelled is not None and cancelled())
+                        or (not self.active and self.promoting is None and self.mutations == 0)
+                    )
                 )
+                if cancelled is not None and cancelled():
+                    raise Cancelled()
                 self.active = True
             finally:
                 self.captures -= 1
+                # A capture stopped while waiting must not leave later mutations asleep.
+                self.condition.notify_all()
         try:
             yield
         finally:
@@ -204,7 +284,7 @@ def _walk(base, guard):
                 yield path, path.relative_to(base).as_posix()
 
 
-def _copy_object(source, base, objects, guard):
+def _copy_object(source, base, objects, guard, progress=None):
     transport._guard(guard)
     before = transport._node(source, base)
     if before.st_size > transport.LIMITS["object_bytes"]:
@@ -230,6 +310,8 @@ def _copy_object(source, base, objects, guard):
                     raise ValueError("A portable source changed while copying it.")
                 digest.update(chunk)
                 output.write(chunk)
+                if progress is not None:
+                    progress(len(chunk))
             output.flush()
             os.fsync(output.fileno())
             after = os.fstat(descriptor)
@@ -351,56 +433,99 @@ def _candidates(db, root, guard):
     return candidates
 
 
-def capture_library(store, queue, destination=None, *, gate, guard=None):
+LOCAL_RECOVERY = (
+    "Finish local file recovery or cleanup in Activity before making a complete backup."
+)
+ACTIVE_WORK = "Finish or stop active processing before making a complete backup."
+
+
+def _work_refusal(store, db):
+    from . import restored_owners, runtime_preparation
+
+    operational = restored_owners.sql_exclusion(db, "job", "jobs.id")
+    if any(v["state"] in {"queued", "running"} for v in runtime_preparation.obligations(store)):
+        return "Stop active UCloud runtime preparation before making a complete backup."
+    if db.execute(
+        "SELECT 1 FROM jobs WHERE state IN ('queued','running') AND " + operational + " LIMIT 1"
+    ).fetchone():
+        return "Finish or cancel queued and running jobs before making a complete backup."
+    return None
+
+
+def admission_refusal(store, queue):
+    """An early, advisory refusal for a background capture before its reply (ADR 0192).
+
+    capture_library repeats every check authoritatively under the queue/snapshot locks, so a
+    passing answer here never establishes quiescence by itself.
+    """
+    from . import deletion_files
+
+    if deletion_files.journal_status(store):
+        return LOCAL_RECOVERY
+    if any(worker.active_id or worker.active_batch_id for worker in queue.workers):
+        return ACTIVE_WORK
+    with store.connection() as db:
+        return _work_refusal(store, db)
+
+
+def pending_path(parent, identifier):
+    """The exact staging folder of one capture; only its creator ever owns it."""
+    return Path(parent) / (".portable-" + identifier + ".partial")
+
+
+def capture_library(
+    store,
+    queue,
+    destination=None,
+    *,
+    gate,
+    guard=None,
+    cancelled=None,
+    observer=None,
+    identifier=None,
+    reservation=None,
+):
     """Seal the whole idle library, including original/evidence bodies, into a new folder.
 
     The serving lease must remain held through this call. HTTP middleware uses this same
     gate for every mutation. Workers cannot exist at the snapshot boundary, and the exclusive
     request gate prevents new enqueue/control/import/edit operations while bytes are copied.
-    """
-    from . import deletion_files, portable_semantics, restored_owners
 
+    A server-owned task (ADR 0192) supplies its host-generated identifier, its admission
+    reservation, a `cancelled` predicate for the admission wait and an Observer. Without
+    them the behavior is unchanged.
+    """
+    from . import deletion_files, portable_semantics
+
+    observer = observer or Observer()
     if not store._lease_depth:
         raise RuntimeError("Portable capture requires the serving library lease.")
     parent = _parents(Path(destination).expanduser() if destination else store.root / "backups")
-    parent.mkdir(parents=True, exist_ok=True)
-    identifier = uuid.uuid4().hex
-    pending = parent / (".portable-" + identifier + ".partial")
+    if identifier is None:
+        identifier = uuid.uuid4().hex
+    elif type(identifier) is not str or len(identifier) != 32 or set(identifier) - _HEX32:
+        raise ValueError("Invalid portable capture identifier.")
+    pending = pending_path(parent, identifier)
     _windows_path(pending / "objects" / ("a" * 64))
     objects = pending / "objects"
     witnesses, mappings, sizes = [], [], {}
-    with gate.capture(), queue.pause_admission():
+    with gate.capture(reservation, cancelled), queue.pause_admission():
+        # The admission wait has ended; a stop observed from here is a guard failure.
+        parent.mkdir(parents=True, exist_ok=True)
+        transport._guard(guard)
+        observer.phase("snapshot")
         with queue.lock, store.snapshot_lock:
             if deletion_files.journal_status(store):
-                raise ValueError(
-                    "Finish local file recovery or cleanup in Activity "
-                    "before making a complete backup."
-                )
+                raise ValueError(LOCAL_RECOVERY)
             if any(worker.active_id or worker.active_batch_id for worker in queue.workers):
-                raise ValueError(
-                    "Finish or stop active processing before making a complete backup."
-                )
+                raise ValueError(ACTIVE_WORK)
             with store.connection() as db:
-                operational = restored_owners.sql_exclusion(db, "job", "jobs.id")
-                from . import runtime_preparation
-
-                if any(
-                    v["state"] in {"queued", "running"}
-                    for v in runtime_preparation.obligations(store)
-                ):
-                    raise ValueError(
-                        "Stop active UCloud runtime preparation before making a complete backup."
-                    )
-                if db.execute(
-                    "SELECT 1 FROM jobs WHERE state IN ('queued','running') AND "
-                    + operational
-                    + " LIMIT 1"
-                ).fetchone():
-                    raise ValueError(
-                        "Finish or cancel queued and running jobs before making a complete backup."
-                    )
+                refusal = _work_refusal(store, db)
+                if refusal:
+                    raise ValueError(refusal)
                 # Only an admitted capture reserves its partial folder; a refusal leaves none.
                 pending.mkdir()
+                observer.staged(pending)
                 objects.mkdir()
                 snapshot = pending / ".snapshot.sqlite3"
                 with closing(sqlite3.connect(snapshot)) as copied:
@@ -408,25 +533,44 @@ def capture_library(store, queue, destination=None, *, gate, guard=None):
             source_id = _identity(store.root)
         # The serving mutation gate remains exclusive, but neither the queue lock nor a live
         # DB transaction is held during media I/O. Ordinary reads may continue.
+        transport._guard(guard)
         with closing(sqlite3.connect(snapshot)) as db:
-            before = portable_semantics.database_claims(db)
+            before = portable_semantics.database_claims(db, guard=guard)
             compacted = pending / ".compacted.sqlite3"
-            db.execute("VACUUM INTO ?", (str(compacted),))
+            if cancelled is not None:
+                # Scoped to this private copy only; the serving database is never touched.
+                db.set_progress_handler(lambda: 1 if cancelled() else 0, 10000)
+            try:
+                db.execute("VACUUM INTO ?", (str(compacted),))
+            except sqlite3.OperationalError:
+                transport._guard(guard)
+                raise
+        observer.phase("inventory")
         with closing(sqlite3.connect(compacted)) as db:
-            claims = portable_semantics.database_claims(db)
+            claims = portable_semantics.database_claims(db, guard=guard)
             if before != claims:
                 raise ValueError("Portable compaction changed stored research values.")
             candidates = _candidates(db, store.root, guard)
             # Snapshot inventory authority and exact bytes are retained separately. A filename
             # is never accepted as proof of a producer receipt.
             gaps = inventory.capture_artifact_requirements(db, candidates, guard=guard)
+        # Logical work: every source is read and hashed, including exact duplicates.
+        observer.totals(
+            len(candidates) + 1,
+            sum(transport._node(path, base).st_size for path, base, _ in candidates)
+            + transport._node(compacted, pending).st_size,
+        )
+        observer.phase("copy")
         for path, base, item in candidates:
-            key, count, witness = _copy_object(path, base, objects, guard)
+            key, count, witness = _copy_object(path, base, objects, guard, observer.copied)
             witnesses.append(witness)
             sizes[key] = count
             mappings.append({**item, "object": key})
-        key, count, _ = _copy_object(compacted, pending, objects, guard)
+            observer.copied_file()
+        key, count, _ = _copy_object(compacted, pending, objects, guard, observer.copied)
         sizes[key] = count
+        observer.copied_file()
+        observer.phase("verify")
         for path, base, witness in witnesses:
             transport._same_path(witness, transport._node(path, base))
         with closing(sqlite3.connect(snapshot)) as db:
@@ -491,6 +635,10 @@ def capture_library(store, queue, destination=None, *, gate, guard=None):
             "unique_bytes": sum(sizes.values()),
             "legacy_gaps": len(gaps),
         }
+        # Point of no return for a server-owned task: from here a late stop cannot erase
+        # the creator reference or claim that the package was not made (ADR 0192).
+        transport._guard(guard)
+        observer.publish()
         receipts = _parents(store.root / "portable-captures")
         receipts.mkdir(exist_ok=True)
         # A lost HTTP/UI reply must not lose the independently stored local reference.
@@ -521,3 +669,34 @@ def captures(store):
         transport._hex(receipt.get("commit_sha256"), 64)
         found.append(receipt)
     return sorted(found, key=lambda item: (item["created_at"], item["backup_id"]), reverse=True)
+
+
+def verify_capture(store, backup_id, guard=None):
+    """Check the published package named by this library's own creator reference.
+
+    The reference is written before publication; its presence alone is not evidence that
+    the package was completely published or is still intact. Transport integrity only.
+    """
+    transport._hex(backup_id, 32)
+    receipt = next((item for item in captures(store) if item["backup_id"] == backup_id), None)
+    if receipt is None:
+        raise ValueError("No saved backup receipt exists for this library.")
+    folder = receipt.get("folder")
+    if (
+        not isinstance(folder, str)
+        or not Path(folder).is_absolute()
+        or Path(folder).name != "portable-" + backup_id
+    ):
+        raise ValueError("The saved backup receipt has an invalid folder.")
+    observation = transport.inspect_transport(
+        folder, expected_commit_sha256=receipt["commit_sha256"], guard=guard
+    )
+    if (
+        observation["backup_id"] != backup_id
+        or observation["manifest_sha256"] != receipt.get("manifest_sha256")
+        or observation["file_mapping_count"] != receipt.get("files")
+        or observation["legacy_gap_count"] != receipt.get("legacy_gaps")
+        or observation["unique_object_bytes"] != receipt.get("unique_bytes")
+    ):
+        raise ValueError("The backup does not match its saved receipt.")
+    return receipt
