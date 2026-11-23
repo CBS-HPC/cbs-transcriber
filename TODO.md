@@ -621,8 +621,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   A Windows test-library capture and local restore verified four projects, 12 original recordings,
   12 saved results and versions, and 16 note versions. The same UCloud upload resumed its existing
   operation but refused a transfer origin outside the approved list. The backup and exact operation
-  are preserved. Validate approved transfer, download, receipt, restore and retention, plus
-  larger Windows libraries and macOS.
+  are preserved. Zero verified objects does not establish an empty remote folder.
+  First identify the exact refused origin and transfer direction without changing approval.
+  Any later recovery must keep the owned destination and verify existing objects before
+  writing missing ones. Validate approved transfer, download, receipt, restore and retention,
+  plus larger Windows libraries and macOS.
   [Verification](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
 - [ ] **Backup Settings and Activity.** Integrated in the local rc3 candidate
   ([ADR 0192](docs/decisions/0192-backup-in-settings-with-activity.md), T161): the Settings → Backup tab and Library → Backups → Create backup hand a local backup to one
@@ -717,10 +720,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   words, only when every word aligns completely and in order, searched within the gap between
   the neighbouring passages (at most 60 s, never across a neighbour, never storing the search
   window as timing). The previous version stays in History and Undo restores it; partial or
-  ambiguous output changes nothing and keeps its evidence. Needs its own admitted,
-  versioned bounded-retiming policy, ADR, Apply/receipt generation and the six synthetic
-  oracles in the design note. A concrete Per og Kim example is still wanted for real-audio
-  acceptance.
+  ambiguous output leaves saved timing unchanged and keeps its evidence. The separate
+  pilot composition `3bdee7e` passed 191 synthetic backend and 19 Chromium cases across
+  retiming, Undo, legacy plans and word timing. A stale draft was refused after Apply.
+  Real-audio acceptance still needs a concrete Per og Kim passage and timestamp.
+  [Pilot verification](docs/verification-2026-11-23-rc3-retiming-pilot-composition.md).
 - [x] **Word-timing editor — decisions 21 November.** Build from Codex's prototype f140a34:
   the ordinary Text editor plus start/end boxes for the word at the cursor. Edited times are
   part of the passage draft: **Save passage saves text and times together**, Cancel discards
@@ -955,7 +959,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Full-GPU ask: [ADR 0184](docs/decisions/0184-native-full-gpu-ask.md) remains unintegrated.
   Supplied-data capacity/never-started helpers are implemented and reviewed synthetically;
   [verification and activation limits](docs/verification-2026-11-20-native-gpu-helpers.md).
-  (V233/T154; activation is not implemented or reviewed). User decisions 19 November: ask as soon as two
+  (V233/T154; activation remains separate). The unintegrated switching prototype still
+  needs a fail-closed MVP gate, terminal ownership and reviewed Continue authority.
+  Start with a standalone mocked read-only observer for products, wallets and application
+  eligibility, using the verified parsers. User decisions 19 November: ask as soon as two
   capacity reads agree the MIG is full and a full B200 is free (no queue-time threshold),
   preferably before the POST; a queued MIG is cancelled and proven never started first; Retry
   returns to the MIG; hidden in MVP v2. Read-only live evidence is permitted once implemented;
