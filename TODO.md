@@ -496,8 +496,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   backup/restore and deletion. A synthetic 1,204-recording test exercised lists, search,
   Activity and ZIP export on Windows. The recording-list fix is in the local rc3
   composition. On 1,204 synthetic recordings the verified API projection took 0.41–0.60 s,
-  compared with 10.91–12.63 s before the change. Separate browser rendering and human
-  check H15b are still open.
+  compared with 10.91–12.63 s before the change. Eight matched Chromium trials showed
+  median controls-ready time of 1.38 s versus 8.59 s, with all cards present. Human check
+  H15b at larger scale remains open.
   [Measurements](docs/verification-2026-11-23-rc3-scale.md).
 - [ ] **Local processing concurrency across task types.** Implemented on
   `claude/local-concurrency` (ADR 0146, T111): Settings → Local Processing → Parallel local

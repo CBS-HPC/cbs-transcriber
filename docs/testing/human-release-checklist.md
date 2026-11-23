@@ -189,8 +189,10 @@ the user's approval each time; checks marked **later** belong to features still 
   VoxPopuli or Common Voice (very many clips).
 - **Status:** The 23 November synthetic subset exercised a 1,204-recording project and
   1,800-passage transcript in Chromium. Listing recordings took 9.98–16.29 seconds at
-  the API. Project cards took 21–24 seconds from browser navigation. Public speech,
-  end-to-end ingestion and larger backup/restore/deletion acceptance are open.
+  the API in the first baseline trials. Later matched Chromium trials showed controls
+  ready with every card at a median of 1.38 seconds after the fix, compared with 8.59
+  seconds on the immediate baseline. Public speech, end-to-end ingestion and larger
+  backup/restore/deletion acceptance are open.
   [Measurements](../verification-2026-11-23-rc3-scale.md).
 
 ### H16 · Editing a long real transcript

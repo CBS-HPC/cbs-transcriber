@@ -37,5 +37,29 @@ fixture verified ready, failed, pending, running, uninspected, corrupt cache, co
 job and restored-history reads. All 134 focused inspection, scheduling, API, collection
 and export-selection cases passed. The combined branch uses `fcd5ce7`.
 
-Browser layout measurements and larger or different-device acceptance stay separate.
-See the [synthetic scale check](verification-2026-11-23-rc3-scale.md).
+## Combined gate
+
+Frozen source `34e8bc6` passed 191 selected backend cases and 22 MVP Chromium cases.
+Each gate verified the same 642 source, test and script hashes before and after.
+The groups cover the combined app routes, word-timing editor, project export controls
+and verified readiness projection.
+
+## Matched browser check
+
+Four trials per variant compared `d89213d` and `fcd5ce7` in alternating runs on the
+same 1,204-recording fixture. Frontend bytes were identical. Medians and observed ranges
+follow. The first Activity render settled after two animation frames.
+
+| Stage | Before, median [range] | Fixed, median [range] |
+| --- | --- | --- |
+| List HTTP, response body included | 7.56 s [7.31–7.67] | 0.37 s [0.31–0.49] |
+| Enabled controls and all cards | 8.59 s [8.49–8.68] | 1.38 s [1.17–1.60] |
+| Initial Activity settled | 9.81 s [9.61–9.92] | 2.46 s [2.25–2.94] |
+| Search input to matching card | 64 ms [63–66] | 65 ms [56–80] |
+
+Each of the eight list responses had the same exact 719,998 bytes. There were no
+browser errors or failed local requests. Post-response rendering and search times
+had overlapping ranges. CPU busy across navigation varied between 74% and 98% on
+this Windows PC. The improved controls-ready time measures the combined result
+of the API and the existing page, on this fixture. Larger or different-device
+acceptance stays separate. See the [synthetic scale check](verification-2026-11-23-rc3-scale.md).
