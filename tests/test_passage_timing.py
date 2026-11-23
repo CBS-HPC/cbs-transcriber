@@ -347,7 +347,15 @@ def test_frozen_units_too_short_for_their_text_finish_without_a_worker(crammed, 
     assert seen == []
     finished = store.job(response.json()["id"])
     assert finished["message"].startswith("Word timing cannot be found in these passages")
-    assert not (finished["params"].get("realign_output") or {}).get("passages")
+    assert finished["params"]["realign_output"] == {"passages": {}}
+    listed = next(j for j in client.get("/api/jobs").json() if j["id"] == finished["id"])
+    assert not listed["realign_ready"]
+    assert listed["realign_outcome"]["output_count"] == 0
+    # A finished empty capture keeps its proof but does not reserve the target IDs.
+    with monkeypatch.context() as eligible:
+        eligible.setattr(enhancement, "alignable", lambda *a: True)
+        again = request(client, rid, result, ["1", "3"])
+    assert again.status_code == 202, again.text
 
 
 def test_unit_where_alignment_finds_nothing_leaves_passages_and_continues(untimed, monkeypatch):

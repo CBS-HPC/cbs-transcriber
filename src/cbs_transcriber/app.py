@@ -2348,7 +2348,10 @@ def create_app(
                 )
             ):
                 params = json.loads(row["params"])
-                ready = params.get("realign_output") and not params.get("realign_applied")
+                output = params.get("realign_output")
+                if isinstance(output, dict) and "passages" in output:
+                    output = output["passages"]
+                ready = output and not params.get("realign_applied")
                 partial = (
                     row["state"] in {"failed", "cancelled"}
                     and params.get("repair_cloud", {}).get("protocol") == repair_cloud.PROTOCOL
@@ -3643,7 +3646,10 @@ def create_app(
             "json_extract(j.params,'$.routing.reason') AS routing_reason, "
             "COALESCE(json_extract(j.params,'$.realign'),0) AS realign, "
             "(json_extract(j.params,'$.realign_output') IS NOT NULL AND "
-            "json_extract(j.params,'$.realign_applied') IS NULL) AS realign_ready, "
+            "json_extract(j.params,'$.realign_applied') IS NULL AND "
+            "(json_type(j.params,'$.realign_output.passages') IS NULL OR "
+            "EXISTS(SELECT 1 FROM json_each(j.params,'$.realign_output.passages') "
+            "WHERE json_type(j.params,'$.realign_output.passages')='object'))) AS realign_ready, "
             # ADR 0191: finished word timing keeps its outcome in Activity.
             "CASE WHEN json_extract(j.params,'$.realign')=1 THEN json_object("
             "'applied',json_extract(j.params,'$.realign_applied'),"

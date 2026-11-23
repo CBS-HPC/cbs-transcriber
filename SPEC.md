@@ -348,6 +348,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V271: A completed timing capture can retain an empty passage map as evidence. It is not
+  ready to add and it does not reserve the passages against a new request (B551, ADR 0191).
 - V264: Settings has a Backup tab in every profile: what a complete backup includes, this
   library, the latest saved receipt, the backup folder with the same default and same-device
   warning, Make backup, View Activity and Library backups. Restore and UCloud wording follow
@@ -2428,3 +2430,4 @@ B521|2026-11-21|Implementing T161: the early admission check called the local-de
 B522|2026-11-21|TODO and Codex's proposal: a complete backup ran inside one HTTP request, so a closed dialog or lost reply left a `.portable-<id>.partial` folder with no explanation and no Stop|V259,V261,ADR0192; the server-owned task survives dialogs, removes its own identity-bound staging on stop/failure or names it, and a restart reports it as interrupted with Remove incomplete copy
 B523|2026-11-21|Implementing T161: CaptureGate.capture left waiting mutations asleep when a capture ended its admission wait without becoming active, which a cancellable reservation can now do|V260,ADR0192; the capture admission always notifies on exit; a deterministic gate-level regression fails without that notification and passes with it (the HTTP stop-while-waiting test alone passed either way because Stop's own wake-up usually wins the race)
 B524|2026-11-23|Related browser gate for T161: five isolated portable.js harness tests replied only to the synchronous POST /library/portable-backups, and the Library dialog test expected the refused capture to log 400; the first loaded-module version of the hand-off also called a Settings-module helper the harness does not load|V264,ADR0192; Create backup uses only the shared api function (exact-replay start, then a 500 ms status follow while the dialog stays open), the harness answers the task POST and status GET, and the console expectation is 409 for the refused admission; assertions otherwise unchanged
+B551|2026-11-23|A sealed empty timing map was truthy, so Activity offered Apply and a new request stayed blocked after the worker found no complete timing|V271; keep the capture and derive readiness and requested-target reservation from the output map
