@@ -123,7 +123,7 @@ const CBSProjectDeletions = (() => {
       name = job.recording_name;
     const help = running
       ? task.can_keep
-        ? "Only this project is unavailable meanwhile. Keep project stops the deletion until the project is removed from the library; jobs already stopped stay stopped."
+        ? "Other projects stay available. Choose Keep project before this project is removed from the library. Jobs already stopped stay stopped."
         : task.committed
           ? "The project has been removed from the library and can no longer be kept."
           : ""

@@ -7141,7 +7141,7 @@ function passageEditorMarkup(segment) {
         <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
       </div>
       <p class="split-help" data-text-playback-note hidden></p>
-      <p class="split-help">Place the cursor between words to split. Save text changes first. If you know the split's audio position, pause playback there; unavailable timing is left unknown.</p>
+      <p class="split-help">Place the cursor between words to split. Save any text changes first. To use a known audio time, pause playback there. Unknown timing stays blank.</p>
       <label class="passage-realign" data-feature="editor_realign" ${featureOn("editor_realign") ? "" : "hidden"}><input type="checkbox" data-editor-realign ${featureOn("editor_realign") && (passageRealignChoice ?? $("#realign-edits").checked) ? "checked" : ""}>Realign this passage after saving on this computer</label>
       <p class="split-help" data-text-draft-note hidden>Save or reset the word changes before saving passage text.</p>
       <div class="edit-actions"><button class="button" data-action="split" disabled>Split at cursor</button><button class="button" data-action="cancel-edit">Cancel</button><button class="button primary" data-action="save-edit" disabled>Save passage</button></div>
@@ -10683,7 +10683,7 @@ function capabilityHelp() {
   providerSummary();
   if (state.settingsTab === "ucloud") {
     $("#capability-help").textContent =
-      "Imports word timing and speaker labels when supplied by the Batch application. Presets depend on the selected app version; unsupported models are rejected before upload.";
+      "Word timing and speaker labels are imported when UCloud returns them. A model the UCloud app does not support is refused before any upload.";
     return;
   }
   $("#capability-help").textContent = {
@@ -13268,7 +13268,7 @@ $("#jobs").addEventListener(
       (state.jobs.find((job) => job.id === retry.dataset.retry)?.kind ===
         "enhance" ||
         confirm(
-          "Retry using this job’s original provider settings? Completed chunks are kept and a separate result will be saved. Provider charges may apply.",
+          "Retry with this job’s original settings? Completed parts are kept and the result is saved separately. Provider charges may apply.",
         ))
     )
       await api(`/jobs/${retry.dataset.retry}/retry`, {
