@@ -1878,34 +1878,36 @@ select {
   gap: 10px;
   margin-top: 12px;
 }
-.passage-editor-toolbar label,
-.passage-word-fields label {
+/* ADR 0195: start/end of the word at the cursor, just below the Text editor. */
+.passage-word-times {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  margin: 8px 0 4px;
+}
+.passage-word-times label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--muted);
   font-size: 11px;
 }
-.editor-playback-preview {
-  margin: 10px 0;
+.passage-word-times input {
+  width: 6.5em;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 13px;
 }
-.editor-playback-preview .field-note {
-  margin: 4px 0;
+.passage-word-times input[aria-invalid="true"] {
+  border-color: var(--cbs-red);
+  outline-color: var(--cbs-red);
 }
-.editor-playback-scroll {
-  max-height: 7.5rem;
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-.editor-playback-text {
-  margin: 0;
-  white-space: pre-wrap;
+.word-times-status {
+  color: var(--muted);
+  font-size: 11px;
   overflow-wrap: anywhere;
-  line-height: 1.9;
-  font-size: 15px;
 }
 .export-choices {
   margin: 12px 0;
@@ -1978,36 +1980,6 @@ select {
   max-width: 260px;
   font-size: 10px;
   overflow-wrap: anywhere;
-}
-.passage-word-fields {
-  display: grid;
-  grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(120px, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-.timing-word-choice > .button {
-  margin-top: 6px;
-  min-height: 28px;
-  padding: 4px 8px;
-  font-size: 11px;
-}
-.timing-word-choice [data-word-correction] {
-  margin-top: 6px;
-}
-@media (max-width: 640px) {
-  .passage-word-fields {
-    grid-template-columns: 1fr;
-  }
-}
-.passage-word-fields label {
-  align-items: stretch;
-  flex-direction: column;
-}
-.passage-word-fields input,
-.passage-word-fields select {
-  width: 100%;
-  min-width: 0;
-  font-size: 13px;
 }
 .passage-realign {
   display: flex;

@@ -435,6 +435,7 @@ function acceptRecording(context, recording) {
 let nameResolver = null,
   wordContext = null,
   editorReplayId = null,
+  // Always false since the Edit word pane was replaced (ADR 0195); other modules read it.
   timedWordSaving = false,
   passageTextSaving = false,
   passageRealignChoice = null,
@@ -817,7 +818,7 @@ function manualTranscriptEdit(path, options) {
   const method = (options.method || "GET").toUpperCase();
   return (
     (method === "PATCH" &&
-      /^\/recordings\/[^/]+\/(?:segments\/[^/]+(?:\/(?:speaker|edit-v[123]))?|speakers)$/u.test(
+      /^\/recordings\/[^/]+\/(?:segments\/[^/]+(?:\/(?:speaker|edit-v[1-4]))?|speakers)$/u.test(
         path,
       )) ||
     (method === "POST" &&
@@ -827,17 +828,17 @@ function manualTranscriptEdit(path, options) {
   );
 }
 function manualEditTarget(path, method, body = {}) {
-  // A passage editor's explicit Working choice covers its text and word-timing
-  // tabs; both save to the same revision-fenced passage.
+  // A passage editor's explicit Working choice covers its text and word times
+  // (ADR 0195); every edit-vN route saves to the same revision-fenced passage.
   const mode =
     method === "PATCH" &&
-    /^\/recordings\/[^/]+\/segments\/[^/]+(?:\/edit-v[123])?$/u.test(path) &&
+    /^\/recordings\/[^/]+\/segments\/[^/]+(?:\/edit-v[1-4])?$/u.test(path) &&
     ["word", "mapped_word", "timed_word"].includes(body.mode)
       ? "free"
       : body.mode;
   return JSON.stringify([
     method,
-    path.replace(/(\/segments\/[^/]+)\/edit-v[123]$/u, "$1"),
+    path.replace(/(\/segments\/[^/]+)\/edit-v[1-4]$/u, "$1"),
     mode ?? null,
     body.speaker ?? null,
     body.direction ?? null,
@@ -1284,7 +1285,7 @@ let pendingBulkLanguage = false,
 function requireSettledLanguage(path, options) {
   const method = (options.method || "GET").toUpperCase();
   const recording = path.match(
-    /^\/recordings\/([^/]+)\/(?:passage-timing|retranscriptions|enhancements|segments\/[^/]+(?:\/edit-v[123])?)$/u,
+    /^\/recordings\/([^/]+)\/(?:passage-timing|retranscriptions|enhancements|segments\/[^/]+(?:\/edit-v[1-4])?)$/u,
   );
   let ids = null;
   if (recording && (method === "POST" || method === "PATCH"))
@@ -7110,28 +7111,8 @@ function passageEditorMarkup(segment) {
     : segment.start == null && replay
       ? "Plays the original source passage; this fragment has no word timestamps."
       : "Replay this passage.";
-  const canEditWords = editableTimedWords(segment);
-  const canEditTimes =
-    Number.isFinite(segment.start) &&
-    Number.isFinite(segment.end) &&
-    segment.end > segment.start;
-  const first = canEditWords ? segment.words[0] : null;
-  const value = (number) => (Number.isFinite(number) ? String(number) : "");
-  const wordEditor = canEditWords
-    ? `<div data-editor-pane="timing" hidden>
-         <p class="split-help">${canEditTimes ? "Edit one mapped word and its start and end in seconds. Missing times stay blank until entered." : "You can correct a word, but its times cannot be changed without passage bounds."}</p>
-         <div class="passage-word-fields">
-           <div class="timing-word-choice"><label>Word<select data-timing-word data-selected="0" aria-label="Word to edit"></select></label><button type="button" class="button" data-action="edit-timed-word" aria-expanded="false">Edit word</button><div data-word-correction hidden><label>Corrected word<input data-timing-text aria-label="Word text" maxlength="200" spellcheck="false" value="${h(first.word)}"></label></div></div>
-           <label>Start (seconds)<input data-timing-start aria-label="Word start in seconds" type="number" min="0" step="any" value="${h(value(first.start))}" ${canEditTimes ? "" : "disabled"}></label>
-           <label>End (seconds)<input data-timing-end aria-label="Word end in seconds" type="number" min="0" step="any" value="${h(value(first.end))}" ${canEditTimes ? "" : "disabled"}></label>
-         </div>
-         <p class="split-help" data-timing-draft-note hidden>Save or cancel the text draft before saving word timing.</p>
-         <div class="edit-actions"><button class="button" data-action="previous-timed-word" disabled>Previous word</button><button class="button" data-action="next-timed-word" ${segment.words.length < 2 ? "disabled" : ""}>Next word</button><button class="button" data-action="reset-timed-word">Reset word</button><button class="button" data-action="cancel-edit">Cancel</button><button class="button primary" data-action="save-timed-word">Save word</button></div>
-       </div>`
-    : '<p class="split-help">Word timing editing is unavailable for this passage. Add word timing or use text editing.</p>';
   return `<div class="passage-editor">
     <div class="passage-editor-toolbar">
-      <label>Edit <select data-editor-mode aria-label="Editing mode for this passage"><option value="text">Text</option><option value="timing" ${canEditWords ? "" : "disabled"}>Word and timing</option></select></label>
       <button type="button" class="button passage-editor-replay" data-action="editor-replay" data-replay-label="${h(label)}" title="${h(help)}" ${replay && state.recording.status === "ready" ? "" : "disabled"}>▷ ${h(label)}</button>
     </div>
     <div data-editor-pane="text">
@@ -7140,17 +7121,15 @@ function passageEditorMarkup(segment) {
         <div class="passage-uncertainty-overlay" aria-hidden="true" hidden><div class="passage-uncertainty-overlay-content"></div></div>
         <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
       </div>
+      <div class="passage-word-times" data-word-times title="The start and end of the word at the cursor, in seconds of the recording. Save passage saves them with the text; Cancel discards both. Between words, or with several words selected, the boxes stay empty. A new or changed word has no time until you type one; if it only replaces one earlier word, saving may keep that word's time.">
+        <label>Start (s)<input data-word-time="start" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Start of the word at the cursor, in seconds" disabled></label>
+        <label>End (s)<input data-word-time="end" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="End of the word at the cursor, in seconds" disabled></label>
+        <span class="word-times-status" data-word-times-status role="status"></span>
+      </div>
       <p class="split-help" data-text-playback-note hidden></p>
       <p class="split-help">Place the cursor between words to split. Save any text changes first. To use a known audio time, pause playback there. Unknown timing stays blank.</p>
       <label class="passage-realign" data-feature="editor_realign" ${featureOn("editor_realign") ? "" : "hidden"}><input type="checkbox" data-editor-realign ${featureOn("editor_realign") && (passageRealignChoice ?? $("#realign-edits").checked) ? "checked" : ""}>Realign this passage after saving on this computer</label>
-      <p class="split-help" data-text-draft-note hidden>Save or reset the word changes before saving passage text.</p>
       <div class="edit-actions"><button class="button" data-action="split" disabled>Split at cursor</button><button class="button" data-action="cancel-edit">Cancel</button><button class="button primary" data-action="save-edit" disabled>Save passage</button></div>
-    </div>
-    ${wordEditor}
-    <div class="editor-playback-preview" hidden>
-      <p class="field-note" data-editor-playback-label>Saved text for playback</p>
-      <div class="editor-playback-scroll" tabindex="0" role="region" aria-label="Saved text for passage playback"><p class="editor-playback-text"></p></div>
-      <p class="field-note" data-editor-playback-draft hidden>Playback follows saved text and timing. Unsaved edits are not used for word highlighting.</p>
     </div>
   </div>`;
 }
@@ -7158,15 +7137,7 @@ function renderEditorPlayback(segment, editor) {
   refreshTextEditorPlayback(segment, editor);
   textEditorSizeObserver.disconnect();
   textEditorSizeObserver.observe(editor.querySelector("textarea"));
-  renderPassageText(
-    editor.querySelector(".editor-playback-text"),
-    segment,
-    false,
-  );
-  editor.querySelector("[data-editor-playback-label]").textContent =
-    playbackWords(segment).size
-      ? "Saved text for playback"
-      : "Saved text for playback · word highlighting unavailable";
+  if (typeof refreshWordTimes === "function") refreshWordTimes(segment, editor);
 }
 let activeTextPlaybackWord = null;
 const textEditorSizeObserver = new ResizeObserver((entries) => {
@@ -7437,139 +7408,21 @@ function followEditorPlaybackWord(word) {
     else if (target.bottom > box.bottom - 4)
       input.scrollTop += target.bottom - box.bottom + 4;
     syncTextEditorScroll(surface.closest(".passage-editor"));
-    return;
   }
-  const scroll = word?.closest(".editor-playback-scroll");
-  if (
-    !scroll ||
-    scroll.closest(".editor-playback-preview")?.hidden ||
-    !$("#follow-playback").checked
-  )
-    return;
-  const box = scroll.getBoundingClientRect(),
-    target = word.getBoundingClientRect();
-  if (target.top < box.top + 4) scroll.scrollTop += target.top - box.top - 4;
-  else if (target.bottom > box.bottom - 4)
-    scroll.scrollTop += target.bottom - box.bottom + 4;
-}
-function timedWordDraftChanged(segment, editor) {
-  const select = editor.querySelector("[data-timing-word]");
-  if (!select) return false;
-  const word = segment.words[Number(select.dataset.selected)];
-  if (!word) return false;
-  const value = (number) => (Number.isFinite(number) ? String(number) : "");
-  return (
-    editor.querySelector("[data-timing-text]").value !== word.word ||
-    editor.querySelector("[data-timing-start]").value !== value(word.start) ||
-    editor.querySelector("[data-timing-end]").value !== value(word.end)
-  );
-}
-function populateTimedWordChoices(segment, editor) {
-  const select = editor.querySelector("[data-timing-word]");
-  if (!select || select.options.length === segment.words.length) return;
-  select.replaceChildren(
-    ...segment.words.map(
-      (word, index) =>
-        new Option(`${index + 1} – ${word.word}`, String(index + 1)),
-    ),
-  );
-  select.value = String(Number(select.dataset.selected) + 1);
-}
-function showWordCorrection(editor, visible) {
-  editor.querySelector("[data-word-correction]").hidden = !visible;
-  const button = editor.querySelector('[data-action="edit-timed-word"]');
-  button.textContent = visible ? "Hide word edit" : "Edit word";
-  button.setAttribute("aria-expanded", String(visible));
-}
-function resetTimedWord(segment, editor, index) {
-  const word = segment.words[index];
-  if (!word) return;
-  const select = editor.querySelector("[data-timing-word]");
-  select.dataset.selected = String(index);
-  select.value = String(index + 1);
-  editor.querySelector("[data-timing-text]").value = word.word;
-  editor.querySelector("[data-timing-start]").value = Number.isFinite(
-    word.start,
-  )
-    ? String(word.start)
-    : "";
-  editor.querySelector("[data-timing-end]").value = Number.isFinite(word.end)
-    ? String(word.end)
-    : "";
-  editor.querySelector('[data-action="previous-timed-word"]').disabled =
-    index === 0;
-  editor.querySelector('[data-action="next-timed-word"]').disabled =
-    index === segment.words.length - 1;
-}
-function changeTimedWord(segment, editor, index) {
-  const input = editor.querySelector("[data-timing-word]");
-  const previous = Number(input.dataset.selected);
-  if (!Number.isInteger(index) || index < 0 || index >= segment.words.length) {
-    input.value = String(previous + 1);
-    toast("Choose a valid word number.", true);
-    return;
-  }
-  if (
-    index !== previous &&
-    timedWordDraftChanged(segment, editor) &&
-    !confirm("Discard the unsaved changes to this word?")
-  ) {
-    input.value = String(previous + 1);
-    return;
-  }
-  resetTimedWord(segment, editor, index);
-  refreshPassageDraft(segment, editor);
-}
-function showTimedWordEditor(
-  segment,
-  editor,
-  index,
-  focus = false,
-  selection = null,
-) {
-  const mode = editor?.querySelector("[data-editor-mode]");
-  const timing = editor?.querySelector('[data-editor-pane="timing"]');
-  if (!mode || !timing || !segment.words[index]) return false;
-  mode.value = "timing";
-  editor.querySelector('[data-editor-pane="text"]').hidden = true;
-  timing.hidden = false;
-  editor.querySelector(".editor-playback-preview").hidden = false;
-  populateTimedWordChoices(segment, editor);
-  resetTimedWord(segment, editor, index);
-  if (focus) {
-    showWordCorrection(editor, true);
-    const input = editor.querySelector("[data-timing-text]");
-    input.focus();
-    if (selection)
-      input.setSelectionRange(
-        Math.min(selection[0], input.value.length),
-        Math.min(selection[1], input.value.length),
-      );
-    else input.select();
-  }
-  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
-  return true;
 }
 function refreshPassageDraft(segment, editor) {
   const textarea = editor.querySelector("textarea");
   const textDirty = passageEditText(segment, textarea) !== segment.text;
-  const wordDirty = timedWordDraftChanged(segment, editor);
   refreshTextEditorPlayback(segment, editor);
-  state.dirty = textDirty || wordDirty;
+  // Typed word times belong to the same draft (ADR 0195).
+  const timesDirty =
+    typeof refreshWordTimes === "function" && refreshWordTimes(segment, editor);
+  state.dirty = textDirty || timesDirty;
   editVersion++;
   saved(state.dirty ? "Unsaved changes" : undefined);
   refreshPassageSplit(editor);
   editor.querySelector('[data-action="save-edit"]').disabled =
-    !textDirty || wordDirty || passageTextSaving;
-  const textNote = editor.querySelector("[data-text-draft-note]");
-  if (textNote) textNote.hidden = !wordDirty;
-  const wordSave = editor.querySelector('[data-action="save-timed-word"]');
-  if (wordSave) wordSave.disabled = textDirty;
-  const wordNote = editor.querySelector("[data-timing-draft-note]");
-  if (wordNote) wordNote.hidden = !textDirty;
-  editor.querySelector("[data-editor-playback-draft]").hidden = !(
-    textDirty || wordDirty
-  );
+    !state.dirty || passageTextSaving;
 }
 function passageWordBoundary(text, cursor) {
   return (
@@ -7626,8 +7479,6 @@ function openPassageEditorInPlace(segment) {
   const input = passage.querySelector("textarea");
   input.value = segment.text;
   renderEditorPlayback(segment, passage.querySelector(".passage-editor"));
-  if (passage.querySelector("[data-timing-word]"))
-    resetTimedWord(segment, passage, 0);
   input.focus();
   updatePlaybackButtons();
   loadHints().catch(() => {});
@@ -7690,8 +7541,6 @@ function renderTranscript() {
     if (input) {
       input.value = segment.text;
       renderEditorPlayback(segment, passage.querySelector(".passage-editor"));
-      if (passage.querySelector("[data-timing-word]"))
-        resetTimedWord(segment, passage, 0);
     } else
       renderPassageText(
         passage.querySelector(".passage-text"),
@@ -7754,12 +7603,8 @@ $("#edit-mode").addEventListener("change", (event) => {
 });
 $("#transcript").addEventListener("input", (event) => {
   if (timedWordSaving || passageTextSaving) return;
-  if (
-    !event.target.matches(
-      "textarea, [data-timing-text], [data-timing-start], [data-timing-end]",
-    )
-  )
-    return;
+  // Word-time boxes refresh the draft from their own handler (word_times.js).
+  if (!event.target.matches("textarea")) return;
   const segment = segmentFromNode(event.target);
   const editor = event.target.closest(".passage-editor");
   if (event.target.matches(".passage-text-surface textarea"))
@@ -7793,44 +7638,17 @@ $("#transcript").addEventListener(
     if (!editor) return;
     const segment = segmentFromNode(target);
     if (!segment) return;
-    if (target.matches("[data-editor-realign]")) {
+    if (target.matches("[data-editor-realign]"))
       passageRealignChoice = target.checked;
-    } else if (target.matches("[data-editor-mode]")) {
-      editor.querySelector('[data-editor-pane="text"]').hidden =
-        target.value !== "text";
-      const timing = editor.querySelector('[data-editor-pane="timing"]');
-      editor.querySelector(".editor-playback-preview").hidden =
-        !timing || target.value !== "timing";
-      if (timing) {
-        timing.hidden = target.value !== "timing";
-        if (target.value === "timing")
-          populateTimedWordChoices(segment, editor);
-      }
-      if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
-    } else if (target.matches("[data-timing-word]")) {
-      changeTimedWord(
-        segment,
-        editor,
-        target.value === "" ? NaN : Number(target.value) - 1,
-      );
-    }
   }),
 );
-$("#transcript").addEventListener("focusin", (event) => {
-  if (!event.target.matches("[data-timing-word]")) return;
-  const segment = segmentFromNode(event.target);
-  if (segment)
-    populateTimedWordChoices(segment, event.target.closest(".passage-editor"));
-});
 function segmentFromNode(node) {
   return state.recording.segments.find(
     (s) => s.id === node.closest("[data-segment]")?.dataset.segment,
   );
 }
 $("#transcript").addEventListener("mousedown", (event) => {
-  const replay = event.target.closest(
-    '[data-action="editor-replay"], .editor-playback-preview [data-word]',
-  );
+  const replay = event.target.closest('[data-action="editor-replay"]');
   const editor = replay?.closest(".passage-editor");
   // Keep a text selection when replay is clicked with a pointer; keyboard
   // activation keeps focus on the button as usual.
@@ -7840,27 +7658,25 @@ $("#transcript").addEventListener("mousedown", (event) => {
   )
     event.preventDefault();
 });
-async function patchPassage(
-  segment,
-  values,
-  context = recordingContext(),
-  options = {},
-) {
+async function patchPassage(segment, values, context = recordingContext()) {
   if (!sameRecordingView(context)) return false;
   const input = $(`#passage-${segment.id} textarea`);
   if (input) input.disabled = true;
   saved("Saving…");
+  // Typed word times save with the text as one version (ADR 0195); never realigned.
   const editVersionPath =
     values.mode === "free"
-      ? values.realign === true
-        ? "/edit-v1"
-        : "/edit-v3"
+      ? values.word_times?.length
+        ? "/edit-v4"
+        : values.realign === true
+          ? "/edit-v1"
+          : "/edit-v3"
       : "";
   const body = {
     revision: context.revision ?? state.recording.revision,
     ...values,
   };
-  if (editVersionPath === "/edit-v3") delete body.realign;
+  if (editVersionPath !== "/edit-v1") delete body.realign;
   try {
     const recording = await api(
       `/recordings/${context.id}/segments/${segment.id}${editVersionPath}`,
@@ -7870,46 +7686,9 @@ async function patchPassage(
       },
     );
     if (!acceptRecording(context, recording)) return false;
-    const originalEditor = options.editor;
-    const keepFocus =
-      originalEditor &&
-      (document.activeElement === document.body ||
-        originalEditor.contains(document.activeElement));
-    const resumed =
-      originalEditor &&
-      state.editing === segment.id &&
-      recording.segments.find((item) => item.id === segment.id);
-    const realignChoice = originalEditor?.querySelector(
-      "[data-editor-realign]",
-    )?.checked;
-    const correctionVisible =
-      originalEditor?.querySelector("[data-word-correction]")?.hidden === false;
     clearEdit();
     renderEditorDetails();
-    if (resumed && editableTimedWords(resumed)) {
-      state.editing = resumed.id;
-      passageRealignChoice = realignChoice ?? null;
-    }
     renderTranscript();
-    if (state.editing === segment.id) {
-      const editor = document
-        .getElementById(`passage-${segment.id}`)
-        ?.querySelector(".passage-editor");
-      if (editor && realignChoice !== undefined)
-        editor.querySelector("[data-editor-realign]").checked = realignChoice;
-      showTimedWordEditor(
-        resumed,
-        editor,
-        options.wordIndex,
-        keepFocus && correctionVisible,
-        options.selection,
-      );
-      if (editor) {
-        showWordCorrection(editor, correctionVisible);
-        if (keepFocus && !correctionVisible)
-          editor.querySelector("[data-timing-word]").focus();
-      }
-    }
     const warning =
       recording.timing_retention_warning || recording.realign_warning;
     if (typeof warning === "string" && warning) {
@@ -8011,106 +7790,6 @@ $("#transcript").addEventListener(
       }
       updatePlaybackButtons();
     }
-    if (action === "reset-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const select = editor.querySelector("[data-timing-word]");
-      resetTimedWord(segment, editor, Number(select.dataset.selected));
-      refreshPassageDraft(segment, editor);
-    }
-    if (action === "edit-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const visible = editor.querySelector("[data-word-correction]").hidden;
-      showWordCorrection(editor, visible);
-      if (visible) {
-        const input = editor.querySelector("[data-timing-text]");
-        input.focus();
-        input.select();
-      }
-    }
-    if (action === "previous-timed-word" || action === "next-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const current = Number(
-        editor.querySelector("[data-timing-word]").dataset.selected,
-      );
-      changeTimedWord(
-        segment,
-        editor,
-        current + (action === "next-timed-word" ? 1 : -1),
-      );
-    }
-    if (action === "save-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const textarea = editor.querySelector("textarea");
-      if (passageEditText(segment, textarea) !== segment.text) {
-        toast("Save or cancel the passage text draft first.", true);
-        return;
-      }
-      const select = editor.querySelector("[data-timing-word]");
-      const text = editor.querySelector("[data-timing-text]");
-      const start = editor.querySelector("[data-timing-start]");
-      const end = editor.querySelector("[data-timing-end]");
-      const index = Number(select.dataset.selected),
-        original = segment.words[index];
-      if (!original || !text.value.trim()) {
-        toast("Enter a word before saving.", true);
-        return;
-      }
-      const startValue = start.value === "" ? null : Number(start.value),
-        endValue = end.value === "" ? null : Number(end.value),
-        oldStart = Number.isFinite(original.start) ? original.start : null,
-        oldEnd = Number.isFinite(original.end) ? original.end : null,
-        timingChanged = startValue !== oldStart || endValue !== oldEnd;
-      if (!timingChanged && text.value === original.word) {
-        toast("There are no word changes to save.");
-        return;
-      }
-      let values;
-      if (!timingChanged) {
-        values = {
-          mode: segment.word_timing ? "word" : "mapped_word",
-          word_index: index,
-          text: text.value,
-        };
-      } else {
-        if (!Number.isFinite(startValue) || !Number.isFinite(endValue)) {
-          toast("Enter valid start and end times before saving.", true);
-          return;
-        }
-        values = {
-          mode: "timed_word",
-          word_index: index,
-          text: text.value,
-          start: startValue,
-          end: endValue,
-        };
-      }
-      const context = {
-        ...recordingContext(),
-        revision: state.recording.revision,
-      };
-      const controls = [
-        ...editor.querySelectorAll("textarea, input, select, button"),
-      ].filter((control) => !control.matches('[data-action="editor-replay"]'));
-      const disabled = controls.map((control) => control.disabled);
-      timedWordSaving = true;
-      controls.forEach((control) => (control.disabled = true));
-      try {
-        await patchPassage(segment, values, context, {
-          editor,
-          wordIndex: index,
-          selection: [text.selectionStart, text.selectionEnd],
-        });
-      } finally {
-        timedWordSaving = false;
-        if (typeof refreshSpellingEditor === "function")
-          refreshSpellingEditor(true);
-        controls.forEach((control, index) => {
-          if (control.isConnected) control.disabled = disabled[index];
-        });
-        if (typeof refreshManualReviewControls === "function")
-          refreshManualReviewControls();
-      }
-    }
     if (action === "edit") {
       if (!canDiscardPassage()) return;
       const target = manualEditTarget(
@@ -8154,15 +7833,15 @@ $("#transcript").addEventListener(
     if (action === "save-edit") {
       const button = event.target;
       const editor = button.closest(".passage-editor");
-      if (
-        passageEditText(segment, editor.querySelector("textarea")) ===
-        segment.text
-      )
-        return;
-      if (timedWordDraftChanged(segment, editor)) {
-        toast("Save or reset the word changes first.", true);
-        return;
-      }
+      const text = passageEditText(segment, editor.querySelector("textarea"));
+      // Typed word times save with the text in one request; invalid times are
+      // refused here with the word named, before anything is sent (ADR 0195).
+      const wordTimes =
+        typeof wordTimesPayload === "function"
+          ? wordTimesPayload(segment, editor, text)
+          : [];
+      if (text === segment.text && !wordTimes.length) return;
+      const realign = editor.querySelector("[data-editor-realign]").checked;
       const controls = [
         ...editor.querySelectorAll("textarea, input, select, button"),
       ].filter((control) => !control.matches('[data-action="editor-replay"]'));
@@ -8170,11 +7849,18 @@ $("#transcript").addEventListener(
       passageTextSaving = true;
       controls.forEach((control) => (control.disabled = true));
       try {
-        await patchPassage(segment, {
-          mode: "free",
-          text: passageEditText(segment, $(`#passage-${segment.id} textarea`)),
-          realign: editor.querySelector("[data-editor-realign]").checked,
-        });
+        const values = wordTimes.length
+          ? { mode: "free", text, word_times: wordTimes }
+          : { mode: "free", text, realign };
+        if (
+          (await patchPassage(segment, values)) &&
+          wordTimes.length &&
+          realign &&
+          featureOn("editor_realign")
+        )
+          toast(
+            "Passage saved. It was not realigned, because you typed word times.",
+          );
       } finally {
         passageTextSaving = false;
         if (typeof refreshSpellingEditor === "function")
@@ -8198,7 +7884,6 @@ $("#transcript").addEventListener(
       state.dirty
     )
       return;
-    if (event.target.closest(".editor-playback-preview")) return;
     const word = event.target.closest("[data-word]");
     if (!word) return;
     const segment = segmentFromNode(word);
@@ -8216,7 +7901,6 @@ $("#transcript").addEventListener(
     const editor = document
       .getElementById(`passage-${segment.id}`)
       .querySelector(".passage-editor");
-    editor.querySelector("[data-editor-mode]").value = "text";
     const input = editor.querySelector("textarea");
     input.focus();
     const clicked = segment.words?.[Number(word.dataset.word)];

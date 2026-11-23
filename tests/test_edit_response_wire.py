@@ -17,6 +17,7 @@ OPERATIONS = (
     "free",
     "free-v1",
     "free-v2",
+    "free-v4",
     "rename",
     "assign",
     "merge",
@@ -76,7 +77,7 @@ def request_for(operation, rid, current):
     if operation == "assign":
         return "PATCH", prefix + "/segments/0/speaker", {**body, "speaker_id": "B"}
     suffix = ""
-    if operation in {"free-v1", "free-v2"}:
+    if operation in {"free-v1", "free-v2", "free-v4"}:
         suffix = "/edit-v" + operation[-1]
     mode = "free" if operation.startswith("free") else operation
     body["mode"] = mode
@@ -84,6 +85,10 @@ def request_for(operation, rid, current):
         body["text"] = current["segments"][0]["text"]
         if operation == "free-v1":
             body["realign"] = False
+        if operation == "free-v4":  # ADR 0195: text and typed word times in one save
+            body["word_times"] = [
+                {"char_start": 0, "char_end": 3, "word": "Hej", "start": 0.05, "end": 0.4}
+            ]
     elif mode != "restore":
         body.update(word_index=0, text="Goddag")
         if mode == "timed_word":

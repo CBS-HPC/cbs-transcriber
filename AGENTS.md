@@ -116,6 +116,11 @@ Future public commits must descend only from the clean public main history.
   remote preparation task owns only its frozen public files/models; it cannot fetch with a
   replacement HF token. Optional Runtime model plans and bounded journal/cache observations
   preserve absent-plan legacy behavior. First-use setup must retain existing provider policy.
+- `word_times.js`/`word_times.py` (ADR 0195) show Start/End boxes for the word at the Text
+  cursor; typed times are part of the passage draft and Save passage sends them with the text
+  to edit-v4 (one version; ADR 0166 text policy first, then edit_timed_word rules on the final
+  times). Only read the textarea; never infer times; keep edit-v1/v2/v3 and timed_word/
+  mapped_word unchanged. Keep this logic out of the portable-pinned transcripts.py.
 - Manual edit hot paths (ADR 0159) may reuse canonical-format validation only with a fresh
   hash and fresh parsed objects; live ownership/context/CAS and inverse checks stay current.
   Targeted merge/split Apply can stop after its exact proof; advisory and Delete restoration
