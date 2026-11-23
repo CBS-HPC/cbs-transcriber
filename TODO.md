@@ -676,6 +676,22 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   disabled derived options, no implicit writes and native keyboard focus. Cached Spylls host/
   child imports are a test qualification (B517), not an installed-worker claim. Composed locally
   with deletion at `5482338`; final composition gates remain separate and nothing was loaded.
+- [ ] **Too-short passage bounds: retiming pilot — decided 21 November.** The user answered
+  "Yes, small pilot" to Codex's option 2 (`_handover\codex-2026-11-21\cbs-night-short-window-design-20261120.md`):
+  "Add word timing" may correct a too-short passage's saved start/end from its own aligned
+  words, only when every word aligns completely and in order, searched within the gap between
+  the neighbouring passages (at most 60 s, never across a neighbour, never storing the search
+  window as timing). The previous version stays in History and Undo restores it; partial or
+  ambiguous output changes nothing and keeps its evidence. Needs its own admitted,
+  versioned bounded-retiming policy, ADR, Apply/receipt generation and the six synthetic
+  oracles in the design note. A concrete Per og Kim example is still wanted for real-audio
+  acceptance.
+- [ ] **Word-timing editor — decisions 21 November.** Build from Codex's prototype f140a34:
+  the ordinary Text editor plus start/end boxes for the word at the cursor. Edited times are
+  part of the passage draft: **Save passage saves text and times together**, Cancel discards
+  both, one History version, Undo restores it. When the cursor is between two words or on a
+  space, **the boxes show nothing**. Still to settle while building: selections spanning words
+  and one-character words (conservative defaults, shown to the user).
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
