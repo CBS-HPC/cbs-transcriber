@@ -35,7 +35,9 @@ this directory-size change. Regular files keep the size and SHA-256 checks.
   Each of the 36 files (12 originals, 12 processing inputs, 12 provider responses) matched its
   manifest SHA-256. Historical jobs and native batches were archived, providers were disconnected,
   and registration occurred only in the isolated test profile.
-- Interactive switching, removable/synced storage, abrupt shutdown and macOS remain open.
+- An isolated app instance with workers disabled opened the restored copy and served its
+  four projects and all 12 recordings. The browser's switch-library workflow, removable
+  and synced storage, abrupt shutdown and macOS remain open.
 
 ## UCloud backup
 
