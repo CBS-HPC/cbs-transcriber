@@ -17,6 +17,10 @@ tools. The rehearsal assets are separate from the planned pilot distribution.
   returned **MVP v2 rc3** through its HTTP test client. The served JavaScript and CSS
   matched exactly, and the rendered page matched after its normal profile and
   instance attributes were inserted. A synthetic project and recording-list read passed.
+- Launched the packaged module on Windows with the same existing dependencies and a
+  new test home, library and loopback port. The app served the expected profile and
+  JavaScript/CSS bytes and saved a synthetic project. Ctrl+C exited cleanly and
+  released the port. A second launch reopened the same project and shut down cleanly.
 - Wheel SHA-256
   `4a84aea6d037b05e5acdd6586462b7c3893f93dcaf69955bf736e8a41d1d136c`.
   Constraints SHA-256
@@ -30,6 +34,6 @@ create a fresh App virtual environment. uv resolved 136 locked packages and fail
 when it needed the exact CPU Torch 2.8.0 wheel, whose Windows CPython 3.13 archive
 was missing from the cache. The lock and hashes were retained.
 
-Clean installation, actual launcher and shortcut use, and managed Windows or macOS
-acceptance are separate. The pilot commands keep App, Library and Projects together
+A fresh install with every dependency, native shortcut activation, and managed
+Windows or macOS acceptance are separate checks. The pilot commands keep App, Library and Projects together
 under a separate test root.

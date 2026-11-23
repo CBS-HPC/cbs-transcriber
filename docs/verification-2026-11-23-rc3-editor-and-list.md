@@ -44,6 +44,12 @@ Each gate verified the same 642 source, test and script hashes before and after.
 The groups cover the combined app routes, word-timing editor, project export controls
 and verified readiness projection.
 
+A separate pre-cutoff browser gate on `e7d245e` passed all 23 selected cases,
+with the same 642 source, test and script hashes before and after. These cover
+the MVP profile walkthrough, local backup in Activity, project deletion, background
+exports, change history and timing Working warnings. The full-profile test runner
+used explicit MVP fixtures for the release-profile cases.
+
 ## Matched browser check
 
 Four trials per variant compared `d89213d` and `fcd5ce7` in alternating runs on the
