@@ -16,8 +16,8 @@ from ucloud_workflow import UCloudAPIError, UCloudClient
 from ucloud_workflow.jobs import build_job_specification, extract_job_id
 from ucloud_workflow.resources import ManagementError
 from ucloud_workflow.setup import prepare_storage_directory
-from websockets.exceptions import WebSocketException
-from websockets.sync.client import connect
+from websockets.exceptions import InvalidStatus, WebSocketException
+from websockets.sync.client import ClientConnection, connect
 
 from .catalog import provider_catalog, whisperx_model
 from .media import Cancelled
@@ -750,6 +750,22 @@ def verify_upload(client, target, size):
         raise ValueError("UCloud uploaded file size could not be verified. No job was started.")
 
 
+class _DirectUploadConnection(ClientConnection):
+    """Keep a file transfer on the endpoint approved before opening its socket."""
+
+    def handshake(self, *args, **kwargs):
+        try:
+            super().handshake(*args, **kwargs)
+        except InvalidStatus as exc:
+            response = exc.response
+            # Refuse before the connector can interpret Location or open another socket.
+            if 300 <= response.status_code < 400 and "Location" in response.headers:
+                raise ValueError(
+                    "UCloud upload was redirected. No job was started; retry explicitly."
+                ) from None
+            raise
+
+
 def websocket_upload(server, session, path, guard, update):
     # V2 authenticates through the issued session URL. Empty relative path denotes its file root.
     endpoint = session["endpoint"]
@@ -769,6 +785,7 @@ def websocket_upload(server, session, path, guard, update):
                 max_size=16384,
                 ping_interval=20,
                 ping_timeout=20,
+                create_connection=_DirectUploadConnection,
             ) as socket,
         ):
             guard()
