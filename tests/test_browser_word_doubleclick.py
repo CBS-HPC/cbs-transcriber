@@ -73,23 +73,19 @@ def test_word_click_seeks_and_double_click_opens_text_with_explicit_timing_avail
     expect(passage.locator(".passage-editor")).to_have_count(0)
     word.dblclick()
     editor = passage.locator(".passage-editor")
-    expect(editor.locator("[data-editor-mode]")).to_have_value("text")
     expect(editor.locator('[data-editor-pane="text"]')).to_be_visible()
-    expect(editor.locator('[data-editor-pane="timing"]')).to_be_hidden()
+    expect(editor.locator('[data-editor-pane="timing"]')).to_have_count(0)
     expect(editor.locator("textarea")).to_be_focused()
     expect(editor.locator("textarea")).to_have_value("First words")
     assert editor.locator("textarea").evaluate(
         "e => [e.selectionStart, e.selectionEnd, e.value.slice(e.selectionStart, e.selectionEnd)]"
     ) == [6, 11, "words"]
     expect(page.locator("#word-dialog")).to_be_hidden()
-    expect(editor.locator("[data-timing-word] option")).to_have_count(0)
-    editor.locator("[data-editor-mode]").select_option("timing")
-    editor.locator("[data-timing-word]").select_option("2")
-    expect(editor.locator("[data-timing-start]")).to_have_value("1")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    expect(editor.locator("[data-timing-text]")).to_be_focused()
-    expect(editor.locator("[data-timing-text]")).to_have_value("words")
-    editor.locator('[data-editor-pane="timing"] [data-action="cancel-edit"]').click()
+    # The selected word's times show in the word-time boxes (ADR 0195).
+    expect(editor.locator('[data-word-time="start"]')).to_have_value("1")
+    expect(editor.locator('[data-word-time="end"]')).to_have_value("1.8")
+    expect(editor.locator("[data-word-times-status]")).to_have_text("“words”")
+    editor.locator('[data-action="cancel-edit"]').click()
     after = store.recording(rid)
     assert after["segments"] == before["segments"]
     assert after["revision"] == before["revision"]
@@ -136,21 +132,27 @@ def test_double_click_selects_exact_repeated_word_after_astral_prefix_and_crlf(p
     assert draft.evaluate(
         "e => [e.selectionStart, e.selectionEnd, e.value.slice(e.selectionStart, e.selectionEnd)]"
     ) == [19, 25, "repeat"]
+    shown = clicked["start"]
+    expect(page.locator('#passage-0 [data-word-time="start"]')).to_have_value(
+        str(int(shown)) if shown == int(shown) else repr(shown)
+    )
     assert not writes
     assert store.recording(rid) == before
     assert len(store.result_versions(rid, result_id)) == versions
     assert store.all("SELECT id FROM jobs") == []
 
 
-def test_word_double_click_ignores_previous_clean_timing_mode(page, local_app):
+def test_word_double_click_replaces_a_clean_editor_and_shows_its_times(page, local_app):
     _, _ = open_timed_recording(page, local_app)
     page.locator('#passage-0 [data-action="edit"]').click()
-    page.locator("#passage-0 [data-editor-mode]").select_option("timing")
+    page.locator("#passage-0 textarea").evaluate("e => e.setSelectionRange(2, 2)")
+    expect(page.locator('#passage-0 [data-word-time="start"]')).to_have_value("0")
     page.locator('#passage-1 .passage-text [data-word="0"]').dblclick()
     expect(page.locator("#passage-0 .passage-editor")).to_have_count(0)
-    expect(page.locator("#passage-1 [data-editor-mode]")).to_have_value("text")
     expect(page.locator("#passage-1 textarea")).to_be_focused()
     expect(page.locator("#passage-1 textarea")).to_have_value("Second passage")
+    expect(page.locator('#passage-1 [data-word-time="start"]')).to_have_value("2")
+    expect(page.locator('#passage-1 [data-word-time="end"]')).to_have_value("2.8")
 
 
 def test_unbounded_playback_word_opens_text_without_enabling_timing_edits(page, local_app):
@@ -165,35 +167,33 @@ def test_unbounded_playback_word_opens_text_without_enabling_timing_edits(page, 
     }""")
     page.locator('#passage-0 .passage-text [data-word="0"]').dblclick()
     editor = page.locator("#passage-0 .passage-editor")
-    expect(editor.locator("[data-editor-mode]")).to_have_value("text", timeout=2000)
-    expect(editor.locator("textarea")).to_have_value("First words")
-    expect(editor.locator("[data-editor-mode] option[value='timing']")).to_have_attribute(
-        "disabled", ""
+    expect(editor.locator("textarea")).to_have_value("First words", timeout=2000)
+    expect(editor.locator('[data-word-time="start"]')).to_be_disabled()
+    expect(editor.locator('[data-word-time="start"]')).to_have_value("")
+    expect(editor.locator("[data-word-times-status]")).to_have_text(
+        "No word times: this passage has no start and end time."
     )
 
 
-@pytest.mark.parametrize("pane", ["text", "timing"])
-def test_preview_or_other_word_double_click_never_replaces_a_dirty_draft(page, local_app, pane):
+@pytest.mark.parametrize("pane", ["text", "times"])
+def test_replay_or_other_word_double_click_never_replaces_a_dirty_draft(page, local_app, pane):
     store, rid = open_timed_recording(page, local_app)
     before = store.recording(rid)
     page.locator('#passage-0 [data-action="edit"]').click()
     editor = page.locator("#passage-0 .passage-editor")
-    if pane == "timing":
-        editor.locator("[data-editor-mode]").select_option("timing")
-        editor.locator('[data-action="edit-timed-word"]').click()
-        draft = editor.locator("[data-timing-text]")
+    if pane == "times":
+        editor.locator("textarea").evaluate("e => e.setSelectionRange(2, 2)")
+        draft, value = editor.locator('[data-word-time="start"]'), "0.25"
+        expect(draft).to_be_enabled()
     else:
-        draft = editor.locator("textarea")
-    draft.fill("A retained draft")
-    draft.evaluate("e => e.setSelectionRange(2, 6)")
+        draft, value = editor.locator("textarea"), "A retained draft"
+    draft.fill(value)
+    draft.evaluate("e => e.setSelectionRange(1, 3)")
     editor.evaluate("e => window.originalDraftEditor = e")
-    if pane == "timing":
-        editor.locator('.editor-playback-preview [data-word="1"]').dblclick()
-    else:
-        expect(editor.locator(".editor-playback-preview")).to_be_hidden()
-        editor.locator('[data-action="editor-replay"]').click()
+    expect(editor.locator(".editor-playback-preview")).to_have_count(0)
+    editor.locator('[data-action="editor-replay"]').click()
     expect(draft).to_be_focused()
-    assert draft.evaluate("e => [e.selectionStart, e.selectionEnd]") == [2, 6]
+    assert draft.evaluate("e => [e.selectionStart, e.selectionEnd]") == [1, 3]
     dialogs = []
 
     def unexpected_dialog(dialog):
@@ -204,8 +204,7 @@ def test_preview_or_other_word_double_click_never_replaces_a_dirty_draft(page, l
     page.locator('#passage-1 .passage-text [data-word="0"]').dblclick()
     assert not dialogs
     assert editor.evaluate("e => e === window.originalDraftEditor")
-    expect(editor.locator("[data-editor-mode]")).to_have_value(pane)
-    expect(draft).to_have_value("A retained draft")
+    expect(draft).to_have_value(value)
     expect(page.locator("#passage-1 .passage-editor")).to_have_count(0)
     assert store.recording(rid)["segments"] == before["segments"]
     assert store.recording(rid)["revision"] == before["revision"]

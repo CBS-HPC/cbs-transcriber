@@ -308,7 +308,8 @@ def test_first_use_downloads_in_activity_and_suggestion_is_undoable_input(page, 
     ready(page, "draftt")
     assert checks[-1]["text"] == "hello draftt"
     assert all(set(body) == {"text", "request_id"} for body in checks)
-    page.locator("[data-editor-mode]").select_option("timing")
+    # Closing the editor removes the spelling surface and stops further checks.
+    page.locator('[data-action="cancel-edit"]').click()
     expect(page.locator("[data-spelling-panel]")).to_have_count(0)
     expect(page.locator(".passage-spelling-overlay")).to_have_count(0)
     count = len(checks)

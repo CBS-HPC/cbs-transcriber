@@ -59,7 +59,7 @@ def test_inline_replay_keeps_draft_caret_and_passage_boundary(page, local_app):
     expect(draft).to_have_value("Synthetic edited passage")
 
 
-def test_word_save_while_listening_keeps_playback_and_working_role(page, local_app):
+def test_word_time_save_while_listening_keeps_playback_and_working_role(page, local_app):
     store = local_app.server.config.app.state.store
     _, recording_id, result, _ = seed_review(store)
     page.goto(local_app.url + f"/#/recordings/{recording_id}")
@@ -72,22 +72,20 @@ def test_word_save_while_listening_keeps_playback_and_working_role(page, local_a
     editor = passage.locator(".passage-editor")
     editor.locator('[data-action="editor-replay"]').click()
     page.wait_for_function("() => !document.querySelector('#audio').paused")
-    editor.locator("[data-editor-mode]").select_option("timing")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("corrected")
-    editor.locator('[data-action="save-timed-word"]').click()
+    editor.locator("textarea").evaluate("e => { e.focus(); e.setSelectionRange(2, 2); }")
+    start = editor.locator('[data-word-time="start"]')
+    expect(start).to_have_value("0")
+    start.fill("0.1")
+    editor.locator('[data-action="save-edit"]').click()
     expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(editor.locator("[data-timing-text]")).to_have_value("corrected")
     assert page.locator("#audio").evaluate("e => !e.paused")
     recording = store.recording(recording_id)
-    assert (
-        store.result(recording_id, result["id"])["segments"][0]["words"][0]["word"] == "corrected"
-    )
+    word = store.result(recording_id, result["id"])["segments"][0]["words"][0]
+    assert (word["word"], word["start"], word["manual_timing"]) == ("word0", 0.1, True)
     assert recording["result_roles"]["working"]["version_id"] == recording["active_version"]["id"]
     page.locator("#audio").evaluate("e => { e.currentTime = 99.8; e.playbackRate = 4; }")
     page.wait_for_function("() => document.querySelector('#audio').paused", timeout=10000)
     assert page.locator("#audio").evaluate("e => e.currentTime") < 101
-    expect(editor.locator("[data-timing-text]")).to_have_value("corrected")
 
 
 def test_untimed_editor_replay_names_the_full_recording(page, local_app):
@@ -113,7 +111,7 @@ def test_untimed_editor_replay_names_the_full_recording(page, local_app):
     )
 
 
-def test_long_passage_opens_without_a_word_per_option(page, local_app):
+def test_long_passage_shows_times_for_the_word_at_the_cursor(page, local_app):
     store = local_app.server.config.app.state.store
     _, recording_id, _, _ = seed_review(store)
     page.goto(local_app.url + f"/#/recordings/{recording_id}")
@@ -123,15 +121,15 @@ def test_long_passage_opens_without_a_word_per_option(page, local_app):
         "button", name="Leave unassigned"
     ).click()
     editor = passage.locator(".passage-editor")
-    expect(editor.locator("[data-timing-word]")).to_have_count(1)
-    expect(editor.locator("[data-timing-word] option")).to_have_count(0)
-    editor.locator("[data-editor-mode]").select_option("timing")
-    words = editor.locator("[data-timing-word]")
-    expect(words.locator("option")).to_have_count(200)
-    words.select_option("19")
-    expect(words).to_have_value("19")
-    expect(words.locator('option[value="19"]')).to_have_text("19 – word18")
-    expect(editor.locator("[data-timing-start]")).to_have_value("9")
+    # ADR 0195: no word list to build; the boxes follow the caret instead.
+    expect(editor.locator("select")).to_have_count(0)
+    editor.locator("textarea").evaluate(
+        "e => { const at = e.value.indexOf('word18 ') + 2;"
+        " e.focus(); e.setSelectionRange(at, at); }"
+    )
+    expect(editor.locator('[data-word-time="start"]')).to_have_value("9")
+    expect(editor.locator('[data-word-time="end"]')).to_have_value("9.5")
+    expect(editor.locator("[data-word-times-status]")).to_have_text("“word18”")
 
 
 def test_realign_choice_is_frozen_for_this_save(page, local_app):

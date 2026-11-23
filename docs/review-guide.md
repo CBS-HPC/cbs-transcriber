@@ -58,10 +58,14 @@ retain their intervals; a uniquely matched replacement can retain the replaced i
 Added or uncertain words stay untimed, with a nonblocking explanation. Saving does not
 automatically align new text to audio. Earlier wording remains in History.
 
-**Word and timing** lets you select a word by number/text, correct it with **Edit word** or
-change its start/end times. Its saved-text playback preview follows reliable word timing
-without moving your typing cursor. Playback never assigns guessed times to an unsaved draft.
-Changing edit modes does not realign text.
+**Word times:** the **Start (s)** and **End (s)** boxes below the text show the word at the
+cursor. Put the cursor inside a word, or select that one word (double-click); a one-letter word
+or emoji also counts with the cursor right beside it. Between words, on a space or with several
+words selected the boxes are empty. Type new times (a decimal comma is fine) and **Save
+passage** saves them together with any text changes as one change that **Undo last change**
+reverses; **Cancel** discards both. A new or changed word has no time until you type one.
+Times must lie within the passage, start before they end and keep the words in order; invalid
+times are refused before anything is saved. Typing times never realigns the passage.
 
 - **Split at cursor:** save text first, then place a single cursor between words with text on
   both sides. Splitting inside a word, at an end or across a selection is disabled. Valid

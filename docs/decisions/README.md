@@ -198,5 +198,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0192 — Backup in Settings with Activity](0192-backup-in-settings-with-activity.md) (post-v2; server-owned local backup task, Stop until saved; UCloud transfer unchanged)
 
 - [0193 — Exact editing performance on long transcripts](0193-exact-editing-performance.md) (rc3 candidate)
+- [0195 — Word times in the passage draft](0195-word-times-in-the-passage-draft.md) (rc3; Start/End boxes for the word at the Text cursor, saved with the text as one version; replaces the word dropdown)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

@@ -55,31 +55,32 @@ def open_correction(page, kind, passage, value):
     return dialog, field, controls
 
 
-def test_pending_inline_word_save_blocks_opening_another_passage(page, local_app, dialog_recording):
+def test_pending_word_time_save_blocks_opening_another_passage(page, local_app, dialog_recording):
     store, rid = dialog_recording
     page.goto(local_app.url + f"/#/recordings/{rid}")
     page.locator('#passage-0 [data-word="0"]').dblclick()
     editor = page.locator("#passage-0 .passage-editor")
-    expect(editor.locator("[data-editor-mode]")).to_have_value("text")
-    editor.locator("[data-editor-mode]").select_option("timing")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("Corrected")
+    start = editor.locator('[data-word-time="start"]')
+    expect(start).to_have_value("0")  # The double-clicked word is selected.
+    start.fill("0.2")
     held = []
 
     def hold(route):
         held.append((route, route.fetch()))
         page.evaluate("window.wordReplyHeld = true")
 
-    page.route(f"**/api/recordings/{rid}/segments/0", hold)
-    editor.locator('[data-action="save-timed-word"]').click()
+    page.route(f"**/api/recordings/{rid}/segments/0/edit-v4", hold)
+    editor.locator('[data-action="save-edit"]').click()
     page.wait_for_function("() => window.wordReplyHeld === true")
+    expect(start).to_be_disabled()
     page.locator('#passage-1 [data-action="edit"]').click()
     expect(page.locator("#passage-1 .passage-editor")).to_have_count(0)
-    expect(editor.locator("[data-timing-text]")).to_have_value("Corrected")
+    expect(start).to_have_value("0.2")
     route, response = held.pop()
     route.fulfill(response=response)
     expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(editor.locator("[data-timing-text]")).to_have_value("Corrected")
+    expect(page.locator("#passage-0 .passage-editor")).to_have_count(0)
+    assert store.recording(rid)["segments"][0]["words"][0]["start"] == 0.2
     assert store.recording(rid)["segments"][1]["text"] == "Second word."
 
 

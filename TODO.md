@@ -710,19 +710,32 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   versioned bounded-retiming policy, ADR, Apply/receipt generation and the six synthetic
   oracles in the design note. A concrete Per og Kim example is still wanted for real-audio
   acceptance.
-- [ ] **Word-timing editor — decisions 21 November.** Build from Codex's prototype f140a34:
+- [x] **Word-timing editor — decisions 21 November.** Build from Codex's prototype f140a34:
   the ordinary Text editor plus start/end boxes for the word at the cursor. Edited times are
   part of the passage draft: **Save passage saves text and times together**, Cancel discards
   both, one History version, Undo restores it. When the cursor is between two words or on a
   space, **the boxes show nothing**. Still to settle while building: selections spanning words
   and one-character words (conservative defaults, shown to the user).
+  **Implemented for local rc3 verification (source `07d9bbd`, ADR 0195, V272, T164,
+  B552–B557, B582–B584).** Start (s)/End (s)
+  boxes just below the textarea replace the ordinal word dropdown and its saved-text preview.
+  Settled defaults: a selection spanning several words shows nothing; a selection within one
+  word shows it; a one-character word (one grapheme, such as "i" or an emoji) is selected by
+  the caret on either side of it, since it has no inside; a longer word needs the caret inside
+  it. New or changed draft words start empty (the tooltip explains that saving may still keep a
+  replaced word's time, ADR 0166). Typed times follow their word through spelling fixes and are
+  dropped with a notice when it is deleted or split. Save passage uses a new edit-v4 route only
+  when times were typed; older routes are unchanged. Shown in MVP. Synthetic backend and
+  Chromium/Windows browser checks pass; real IME, screen reader, Mac/Firefox and real-user
+  acceptance remain open.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
   partial or missing timing, and how edits interact with explicit alignment jobs; preserve the
   user's deferral of automatic second-pass alignment.
-  The saved-text playback preview and compact ordinal/word timing dropdown with Edit word are
-  implemented and verified; this does not complete the broader editor redesign.
+  The saved-text playback preview and compact ordinal/word timing dropdown with Edit word were
+  implemented and verified, and are now replaced by the cursor word-time boxes (ADR 0195); this
+  does not complete the broader editor redesign.
   The user rejected the duplicated preview in Text mode. Its removal, Text Replay and
   double-click opening Text are implemented, browser-verified and loaded in rc3.
   **Post-MVP replay in the Text editor:** follow/highlight spoken words directly within the

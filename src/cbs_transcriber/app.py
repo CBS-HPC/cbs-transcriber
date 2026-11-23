@@ -147,6 +147,7 @@ from .transcripts import (
     split_passage,
     split_passage_manual,
 )
+from .word_times import edit_text_and_word_times
 
 
 class Name(BaseModel):
@@ -480,6 +481,23 @@ class FreeEditV2(BaseModel):
     text: str = Field(strict=True, max_length=200_000)
     reason: str | None = Field(default=None, strict=True, max_length=2000)
     working_choice: WorkingChoice | None = None
+
+
+class TypedWordTime(BaseModel):
+    """One word time typed in the passage editor, named by its exact range (ADR 0195)."""
+
+    model_config = ConfigDict(extra="forbid")
+    char_start: int = Field(strict=True, ge=0, le=200_000)
+    char_end: int = Field(strict=True, ge=1, le=200_000)
+    word: str = Field(strict=True, min_length=1, max_length=200_000)
+    start: float = Field(strict=True, ge=0, allow_inf_nan=False)
+    end: float = Field(strict=True, ge=0, allow_inf_nan=False)
+
+
+class FreeEditV4(FreeEditV2):
+    """Save passage with its text and typed word times as one version (ADR 0195)."""
+
+    word_times: list[TypedWordTime] = Field(min_length=1, max_length=1000)
 
 
 class SpeakerEdit(BaseModel):
@@ -2080,8 +2098,20 @@ def create_app(
             identifier, segment_id, body, text_policy=MANUAL_TEXT_TIMING_POLICY
         )
 
+    @app.patch("/api/recordings/{identifier}/segments/{segment_id}/edit-v4")
+    def update_segment_v4(identifier: str, segment_id: str, body: FreeEditV4):
+        return save_segment_edit(
+            identifier, segment_id, body, text_policy=MANUAL_TEXT_TIMING_POLICY, word_times=True
+        )
+
     def save_segment_edit(
-        identifier: str, segment_id: str, body: Edit | FreeEditV2, *, realign=None, text_policy=None
+        identifier: str,
+        segment_id: str,
+        body: Edit | FreeEditV2,
+        *,
+        realign=None,
+        text_policy=None,
+        word_times=False,
     ):
         current = store.recording(identifier)
         if (text_policy or body.mode in {"timed_word", "mapped_word"}) and sum(
@@ -2092,7 +2122,20 @@ def create_app(
         for index, segment in enumerate(current["segments"]):
             if segment["id"] == segment_id:
                 timing_warning = None
-                if text_policy:
+                action, context = None, None
+                if word_times:
+                    updated, timing_warning, text_changed, timed = edit_text_and_word_times(
+                        segment, body.text, [item.model_dump() for item in body.word_times]
+                    )
+                    if not text_changed and not timed:
+                        raise ValueError("There are no changes to save.")
+                    if not text_changed:
+                        # Times only: recorded exactly as a single-word timing edit is.
+                        action = "word_timing_edit"
+                        context = {"segment_id": segment_id, "mode": "timed_word"}
+                        if len(timed) == 1:
+                            context["word_index"] = timed[0]
+                elif text_policy:
                     edit = (
                         edit_manual_text_retaining_timing
                         if text_policy == MANUAL_TEXT_TIMING_POLICY
@@ -2113,14 +2156,16 @@ def create_app(
                     current["segments"],
                     current["speakers"],
                     body.revision,
-                    action={
+                    action=action
+                    or {
                         "word": "word_correction",
                         "mapped_word": "word_correction",
                         "timed_word": "word_timing_edit",
                         "free": "free_rewrite",
                         "restore": "original_restore",
                     }[body.mode],
-                    context={
+                    context=context
+                    or {
                         "segment_id": segment_id,
                         "mode": body.mode,
                         **({"text_policy": text_policy} if text_policy else {}),

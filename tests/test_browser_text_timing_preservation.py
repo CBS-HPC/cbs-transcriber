@@ -95,10 +95,12 @@ def test_text_replacement_retains_intervals_and_inserted_word_stays_untimed(page
     assert saved["words_current"] is True and saved["word_timing"] is False
     expect(passage.locator(".word")).to_have_count(2)
     passage.locator('[data-action="edit"]').click()
-    passage.locator("[data-editor-mode]").select_option("timing")
-    passage.locator("[data-timing-word]").select_option("2")
-    expect(passage.locator("[data-timing-start]")).to_have_value("")
-    expect(passage.locator("[data-timing-end]")).to_have_value("")
+    # The inserted word stays untimed: its word-time boxes are empty but editable.
+    passage.locator("textarea").evaluate("e => { e.focus(); e.setSelectionRange(7, 7); }")
+    expect(passage.locator("[data-word-times-status]")).to_have_text("“nye”")
+    expect(passage.locator('[data-word-time="start"]')).to_be_enabled()
+    expect(passage.locator('[data-word-time="start"]')).to_have_value("")
+    expect(passage.locator('[data-word-time="end"]')).to_have_value("")
     assert store.all("SELECT id FROM jobs") == []
 
 

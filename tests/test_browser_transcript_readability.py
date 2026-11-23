@@ -67,22 +67,13 @@ def test_larger_text_keeps_wrapping_highlights_drafts_and_controls(page, local_a
     expect(overlay).to_be_visible()
     expect(passage.locator('[data-action="save-edit"]')).to_be_disabled()
 
-    passage.locator("[data-editor-mode]").select_option("timing")
-    expect(passage.locator(".editor-playback-preview")).to_be_visible()
-    assert (
-        passage.locator(".editor-playback-text").evaluate("e => getComputedStyle(e).fontSize")
-        == "15px"
-    )
-    passage.locator('[data-action="edit-timed-word"]').click()
-    word = passage.locator("[data-timing-text]")
-    word.fill("corrected")
-    expect(word).to_have_value("corrected")
-    for selector in (
-        "[data-timing-word]",
-        "[data-timing-text]",
-        "[data-timing-start]",
-        "[data-timing-end]",
-    ):
+    # ADR 0195: the word-time boxes below the Text editor fit every width.
+    draft.evaluate("e => { e.focus(); e.setSelectionRange(2, 2); }")
+    start = passage.locator('[data-word-time="start"]')
+    expect(start).to_have_value("0")
+    start.fill("0.1")
+    expect(start).to_have_value("0.1")
+    for selector in ('[data-word-time="start"]', '[data-word-time="end"]'):
         control = passage.locator(selector)
         assert control.evaluate("e => getComputedStyle(e).fontSize") == "13px"
         assert control.evaluate("""e => {
@@ -90,7 +81,7 @@ def test_larger_text_keeps_wrapping_highlights_drafts_and_controls(page, local_a
           const parent = e.closest('.passage').getBoundingClientRect();
           return box.left >= parent.left && box.right <= parent.right + 1;
         }""")
-    passage.locator('[data-editor-pane="timing"] [data-action="cancel-edit"]').click()
+    passage.locator('[data-action="cancel-edit"]').click()
     expect(passage.locator("textarea")).to_have_count(0)
     text = passage.locator(".passage-text")
     expect(text).to_have_text(original)

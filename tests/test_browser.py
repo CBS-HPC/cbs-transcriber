@@ -316,23 +316,25 @@ def test_browser_review_modes_and_restart(page, local_app, wav_bytes):
     expect(page.locator("#timing-badge")).to_have_text("Word timing")
     first = page.locator("#passage-0")
     first.locator("[data-word='0']").dblclick()
-    expect(first.locator("[data-editor-mode]")).to_have_value("text")
-    first.locator("[data-editor-mode]").select_option("timing")
-    first.locator('[data-action="edit-timed-word"]').click()
-    first.locator("[data-timing-text]").fill("Goddag")
-    first.get_by_role("button", name="Save word").click()
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(first.locator("[data-timing-text]")).to_have_value("Goddag")
-    first.locator("[data-editor-mode]").select_option("text")
+    # The double-clicked word is selected in Text, so its times show in the boxes (ADR 0195).
+    expect(first.locator('[data-word-time="start"]')).to_have_value("0")
+    expect(first.locator('[data-word-time="end"]')).to_have_value("0.6")
+    first.get_by_role("textbox", name="Edit passage").press_sequentially("Goddag")
+    expect(first.get_by_role("textbox", name="Edit passage")).to_have_value("🙂 Goddag København.")
+    first.get_by_role("button", name="Save passage").click()
+    # A Text save keeps the replaced word's interval; the unmapped emoji token becomes an
+    # untimed word under ADR 0166, so the save names the missing timing.
+    expect(page.locator("#save-status")).to_contain_text("Passage saved.")
+    first.get_by_role("button", name="Edit", exact=True).click()
     first.get_by_role("textbox", name="Edit passage").fill("🙂 Goddag København. Tak.")
     first.get_by_role("button", name="Save passage").click()
+    expect(first.locator(".passage-text")).to_have_text("🙂 Goddag København. Tak.")
     expect(first.locator(".timing-tag button")).to_have_attribute(
         "title", __import__("re").compile("Word timing incomplete")
     )
     first.get_by_role("button", name="Edit", exact=True).click()
-    expect(first.locator("[data-editor-mode] option[value=timing]")).not_to_have_attribute(
-        "disabled", ""
-    )
+    first.locator("textarea").evaluate("e => { e.focus(); e.setSelectionRange(12, 12); }")
+    expect(first.locator('[data-word-time="start"]')).to_have_value("0.6")
     # Fresh Text saves retain proved timing and leave inserted words explicitly untimed,
     # so the current partial mapping remains editable without an alignment job.
     store = local_app.server.config.app.state.store
@@ -353,9 +355,8 @@ def test_browser_review_modes_and_restart(page, local_app, wav_bytes):
     first.get_by_role("button", name="Restore original").click()
     expect(first.locator(".passage-text")).to_have_text("🙂 Hej København.")
     first.get_by_role("button", name="Edit", exact=True).click()
-    expect(first.locator("[data-editor-mode] option[value=timing]")).not_to_have_attribute(
-        "disabled", ""
-    )
+    first.locator("textarea").evaluate("e => { e.focus(); e.setSelectionRange(4, 4); }")
+    expect(first.locator('[data-word-time="start"]')).to_have_value("0")
     first.get_by_role("button", name="Cancel", exact=True).first.click()
     first.locator("[data-word='1']").click()
     expect(first.locator("[data-word='1']")).to_have_class("word current", timeout=5000)

@@ -1,4 +1,4 @@
-"""A lazy word dropdown shares its column with deliberate spelling correction."""
+"""Word-time boxes replace the word dropdown: literal labels, keyboard use, long passages."""
 
 import pytest
 from playwright.sync_api import expect
@@ -34,90 +34,89 @@ def open_words(page, local_app, words=None):
     return store, rid, result["id"], source[0], page.locator("#passage-0 .passage-editor")
 
 
-def test_word_dropdown_labels_are_literal_and_save_times_and_spelling(page, local_app):
+def test_word_labels_are_literal_and_times_save_with_a_spelling_fix(page, local_app):
     store, rid, result_id, source, editor = open_words(page, local_app)
-    selector = editor.locator("[data-timing-word]")
-    expect(selector).to_have_count(1)
-    expect(selector.locator("option")).to_have_count(0)
-    editor.locator("[data-editor-mode]").select_option("timing")
-    assert selector.evaluate("e => e.tagName") == "SELECT"
-    assert selector.locator("option").all_text_contents() == ["1 – før", "2 – <b>", "3 – café,"]
-    expect(selector.locator("b")).to_have_count(0)
-    selector.select_option("2")
-    expect(editor.locator("[data-timing-start]")).to_have_value("1")
-    expect(editor.locator("[data-timing-end]")).to_have_value("1.8")
-    expect(editor.locator("[data-timing-text]")).to_be_hidden()
-    word_box = selector.bounding_box()
-    start_box = editor.locator("[data-timing-start]").bounding_box()
-    end_box = editor.locator("[data-timing-end]").bounding_box()
-    assert start_box["x"] > word_box["x"] + word_box["width"]
+    expect(editor.locator("select")).to_have_count(0)
+    draft = editor.locator("textarea")
+    start = editor.locator('[data-word-time="start"]')
+    end = editor.locator('[data-word-time="end"]')
+    status = editor.locator("[data-word-times-status]")
+    draft.evaluate("e => { e.focus(); e.setSelectionRange(5, 5); }")  # <|b>
+    expect(status).to_have_text("“<b>”")
+    expect(status.locator("b")).to_have_count(0)
+    expect(start).to_have_value("1")
+    expect(end).to_have_value("1.8")
+    start_box, end_box = start.bounding_box(), end.bounding_box()
     assert end_box["x"] > start_box["x"] + start_box["width"]
-    assert abs(start_box["y"] - word_box["y"]) < 2
-
-    # Timing can be saved without opening a separate spelling field.
-    editor.locator("[data-timing-start]").fill("1.1")
-    editor.locator("[data-timing-end]").fill("1.7")
-    editor.locator('[data-action="save-timed-word"]').click()
+    assert abs(start_box["y"] - end_box["y"]) < 2
+    start.fill("1.1")
+    end.fill("1.7")
+    # Correct the word's spelling in the same draft: its typed times stay with it.
+    draft.evaluate("e => { e.focus(); e.setSelectionRange(4, 7); }")
+    draft.press_sequentially("β-rettet")
+    expect(draft).to_have_value("før β-rettet café,")
+    draft.evaluate("e => { e.focus(); e.setSelectionRange(9, 9); }")
+    expect(status).to_have_text("“β-rettet”: unsaved times.")
+    expect(start).to_have_value("1.1")
+    editor.locator('[data-action="save-edit"]').click()
     expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(editor.locator("[data-timing-text]")).to_be_hidden()
-    expect(selector).to_have_value("2")
-    assert store.result(rid, result_id)["segments"][0]["words"][1]["start"] == 1.1
-
-    editor.locator('[data-action="edit-timed-word"]').click()
-    correction = editor.locator("[data-timing-text]")
-    expect(correction).to_be_focused()
-    correction.fill("β-rettet")
-    correction.evaluate("e => e.setSelectionRange(2, 5)")
-    editor.locator('[data-action="save-timed-word"]').click()
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(correction).to_be_focused()
-    expect(correction).to_have_value("β-rettet")
-    assert correction.evaluate("e => [e.selectionStart, e.selectionEnd]") == [2, 5]
-    expect(selector.locator('option[value="2"]')).to_have_text("2 – β-rettet")
     saved = store.result(rid, result_id)["segments"][0]
     assert saved["text"] == "før β-rettet café,"
-    assert saved["words"][1]["start"] == 1.1 and saved["words"][1]["end"] == 1.7
+    assert (saved["words"][1]["word"], saved["words"][1]["start"], saved["words"][1]["end"]) == (
+        "β-rettet",
+        1.1,
+        1.7,
+    )
+    assert saved["words"][2]["start"] == 2 and saved["words"][2]["word"] == "café,"
     assert saved["original_words"] == source["original_words"]
+    assert len(store.result_versions(rid, result_id)) == 2
     recording = store.recording(rid)
     assert recording["result_roles"]["working"]["version_id"] == recording["active_version"]["id"]
-    editor.locator(".passage-word-fields").screenshot(path="test-results/word-selector.png")
 
 
-def test_keyboard_choice_keeps_hidden_unsaved_word_until_confirmed_discard(page, local_app):
+def test_keyboard_reaches_the_boxes_and_returns_to_the_same_caret(page, local_app):
     store, rid, result_id, source, editor = open_words(page, local_app)
-    editor.locator("[data-editor-mode]").select_option("timing")
-    selector = editor.locator("[data-timing-word]")
-    selector.focus()
-    selector.press("ArrowDown")
-    expect(selector).to_have_value("2")
-    expect(editor.locator("[data-timing-start]")).to_have_value("1")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("Unsaved Ω")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    expect(editor.locator("[data-timing-text]")).to_be_hidden()
-    page.once("dialog", lambda dialog: dialog.dismiss())
-    selector.press("ArrowUp")
-    expect(selector).to_have_value("2")
-    expect(editor.locator("[data-timing-text]")).to_have_value("Unsaved Ω")
+    draft = editor.locator("textarea")
+    start = editor.locator('[data-word-time="start"]')
+    end = editor.locator('[data-word-time="end"]')
+    draft.press("Control+Home")
+    draft.press("ArrowRight")  # f|ør
+    expect(start).to_have_value("0")
+    draft.press("Tab")
+    expect(start).to_be_focused()
+    page.keyboard.press("Control+a")
+    page.keyboard.type("0.05")
+    page.keyboard.press("Tab")
+    expect(end).to_be_focused()
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Shift+Tab")
+    expect(draft).to_be_focused()
+    assert draft.evaluate("e => [e.selectionStart, e.selectionEnd]") == [1, 1]
+    expect(start).to_have_value("0.05")
     expect(page.locator("#save-status")).to_have_text("Unsaved changes")
-    page.once("dialog", lambda dialog: dialog.accept())
-    editor.locator('[data-action="next-timed-word"]').click()
-    expect(selector).to_have_value("3")
-    expect(editor.locator("[data-timing-text]")).to_have_value("café,")
-    editor.locator('[data-editor-pane="timing"] [data-action="cancel-edit"]').click()
+    # Text typing and its native Undo never touch the typed time of another word.
+    draft.press("Control+End")
+    draft.press_sequentially(" nu")
+    expect(start).to_be_disabled()
+    for _ in range(5):  # Chrome may undo typed characters in one or several steps.
+        if draft.input_value() == source["text"]:
+            break
+        draft.press("Control+z")
+    expect(draft).to_have_value(source["text"])
+    draft.press("Control+Home")
+    draft.press("ArrowRight")
+    expect(start).to_have_value("0.05")
+    editor.locator('[data-action="cancel-edit"]').click()
     expect(page.locator("#passage-0 .passage-editor")).to_have_count(0)
     assert store.result(rid, result_id)["segments"][0] == source
 
 
-def test_long_word_list_is_populated_only_when_timing_is_opened(page, local_app):
+def test_long_passage_needs_no_word_list(page, local_app):
     _, _, _, _, editor = open_words(page, local_app, [f"ord{i}" for i in range(200)])
-    selector = editor.locator("[data-timing-word]")
-    expect(selector.locator("option")).to_have_count(0)
-    editor.locator("[data-editor-mode]").select_option("timing")
-    expect(selector.locator("option")).to_have_count(200)
-    selector.select_option("200")
-    expect(selector.locator("option:checked")).to_have_text("200 – ord199")
-    expect(editor.locator("[data-timing-start]")).to_have_value("199")
-    editor.locator('[data-action="previous-timed-word"]').click()
-    expect(selector).to_have_value("199")
-    expect(editor.locator("[data-timing-text]")).to_be_hidden()
+    draft = editor.locator("textarea")
+    expect(editor.locator("option")).to_have_count(0)
+    draft.press("Control+End")
+    expect(editor.locator('[data-word-time="start"]')).to_be_disabled()  # after the last word
+    draft.press("ArrowLeft")
+    expect(editor.locator('[data-word-time="start"]')).to_have_value("199")
+    expect(editor.locator("[data-word-times-status]")).to_have_text("“ord199”")

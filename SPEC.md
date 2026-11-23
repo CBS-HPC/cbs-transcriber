@@ -74,10 +74,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   published, current versioned MVP installation commands remain the available route.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space
   permits, wrapping on narrow screens. Uncertainty controls follow Next to review.
-- UI: Text / Word and timing editor dropdown defaults to Text; audio/video switch retains position.
+- UI: the passage editor is the Text editor with Start/End boxes for the word at the cursor
+  (V272, ADR 0195); the earlier Text / Word and timing dropdown is retired. The audio/video
+  switch retains position.
 - UI: double-clicking a rendered transcript word opens Text editing with that exact mapped word
   selected, including repeated words and Unicode/newline offsets. Opening does not save or align.
-- UI: Save passage requires a changed text draft. Split at cursor requires unchanged text and
+- UI: Save passage requires a changed text draft or typed word times (V272). Split at cursor requires unchanged text and
   a single caret with non-whitespace text on both sides. Cancel discards only the passage draft;
   ordinary cancellation preserves unrelated transcript nodes, search, review and playback state.
 - UI: continuous Play transcript and Follow playback appear in the transcript header;
@@ -348,6 +350,22 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V272: The passage editor shows Start/End boxes for the word at the Text cursor (ADR 0195):
+  a caret strictly inside a word, or beside a one-grapheme word and no other word, or a
+  selection within one word. Between words, on a space or across several words the boxes
+  are empty and disabled. Saved words show saved times; new or changed draft words start
+  empty; nothing is inferred. Typed times are part of the passage draft (dirty, guarded,
+  Cancel discards them) and follow their token through spelling fixes. Deleting, splitting
+  or losing proof of the token drops its draft times with a notice. Bind the draft to the
+  recording, result, revision, passage and saved text so same-revision metadata replies
+  preserve it and newer revisions refuse Save with the draft intact (B583–B584).
+  Save passage sends text and typed times once
+  (edit-v4): the ADR 0166 text policy first, then each range names exactly one resulting
+  word, all times set, then edit_timed_word's rules checked against the final times; one
+  revision/Working-fenced version (free_rewrite, or word_timing_edit for times alone) that
+  Undo restores. A timing-only edit cannot revive a stale legacy word map (B582).
+  Invalid times are refused before sending with the word named. edit-v4 never realigns;
+  edit-v1/v2/v3 and timed_word/mapped_word stay unchanged for older clients.
 - V271: A completed timing capture can retain an empty passage map as evidence. It is not
   ready to add and it does not reserve the passages against a new request (B551, ADR 0191).
 - V264: Settings has a Backup tab in every profile: what a complete backup includes, this
@@ -832,8 +850,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Keep strict input refusal before writes, canonical fallback for legacy mirrors, authoritative
   history encoding and synchronous snapshots. Supported native-JSON mutations preserve legacy
   wire/error/header behavior, including _sa-key omission; no global/GET shortcut (ADR 0159).
-- V190: Word-and-timing editing uses one lazy word dropdown labelled with ordinal and literal
-  saved word text. Edit word reveals correction within that column; start/end remain separate.
+- V190 (superseded for the editor by V272, ADR 0195, 23 November): Word-and-timing editing
+  used one lazy word dropdown labelled with ordinal and literal saved word text. Edit word reveals correction within that column; start/end remain separate.
   Preserve text/timing/CAS/Working guards, unsaved-switch protection, keyboard access and exact
   Unicode. Ordinary text-editor opening does not allocate every word option; opening timing does.
   Double-clicking a rendered word opens Text editing, including current partial playback maps;
@@ -2288,6 +2306,7 @@ T160|x|Project deletion in Activity implemented on claude/deletion-activity and 
 T161|~|Backup in Settings with Activity (local rc3 candidate): server-owned local backup task with reserved admission before 202, cancellable waiting, phases/counts, Stop until a durable publication latch, identity-bound staging cleanup, file notes across restart, Check again finish-only verification; Settings → Backup tab and Library Create hand-off; synthetic backend and Chromium checks pass; 12-original Windows local capture and separate restore checked in H21; large/removable/cloud-synced destinations, crash recovery, macOS and approved UCloud transfer remain open|V259,V260,V261,V262,V263,V264,V254,V3,V5,V8,ADR0096,ADR0158,ADR0192
 T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review, unmerged): derived automatic Needs review for missing/added timing with reasons, Activity outcomes for finished word timing, worker outcome message kept, Repair all count without in-flight passages; synthetic checks pass (239 focused backend and 77 browser cases; a broader 670-case backend run had one failure, the base branch's packaged mvp profile); real-library acceptance H15c pending|V243,V244,V186,V223,V103,I.passage-review,ADR0191
 T163|x|Derived Uncertain/Timing missing review dropdown on codex/night-review-dropdown-20261120 (9b56e20): separate Review suggested tag retired; current-content manual marks win, no derived writes, native controls and existing filters retained;58 focused browser passes with exact source hashes and explicitly qualified cached Spylls host/child imports; local integration only, final composition gates separate, no app reload|V257,V243,V223,V192,ADR0191
+T164|x|Word-timing editor (07d9bbd, local rc3 composition): Start/End boxes for the word at the Text cursor replace the word dropdown; typed times are part of the passage draft and save with the text through edit-v4 as one version that Undo restores; Cancel discards both; conservative caret/selection/one-grapheme rules; synthetic backend and Chromium browser checks pass; real IME, screen reader, Mac/Firefox and real-user acceptance pending|V272,V190,V59,V149,ADR0166,ADR0180,ADR0195
 
 ## §B Bug memory
 
@@ -2434,5 +2453,14 @@ B522|2026-11-21|TODO and Codex's proposal: a complete backup ran inside one HTTP
 B523|2026-11-21|Implementing T161: CaptureGate.capture left waiting mutations asleep when a capture ended its admission wait without becoming active, which a cancellable reservation can now do|V260,ADR0192; the capture admission always notifies on exit; a deterministic gate-level regression fails without that notification and passes with it (the HTTP stop-while-waiting test alone passed either way because Stop's own wake-up usually wins the race)
 B524|2026-11-23|Related browser gate for T161: five isolated portable.js harness tests replied only to the synchronous POST /library/portable-backups, and the Library dialog test expected the refused capture to log 400; the first loaded-module version of the hand-off also called a Settings-module helper the harness does not load|V264,ADR0192; Create backup uses only the shared api function (exact-replay start, then a 500 ms status follow while the dialog stays open), the harness answers the task POST and status GET, and the console expectation is 409 for the refused admission; assertions otherwise unchanged
 B551|2026-11-23|A sealed empty timing map was truthy, so Activity offered Apply and a new request stayed blocked after the worker found no complete timing|V271; keep the capture and derive readiness and requested-target reservation from the output map
+B552|2026-11-23|Building ADR0195: tracking typed times with the playback rule's letter-based separation left them on "β" when "β-rettet" was typed, so the token Save pairs and the word the boxes showed differed|V272,ADR0195; typed times follow their whitespace-separated token, as the server's token pairing does; browser spelling-fix tests
+B553|2026-11-23|Codex's prototype rule (caret strictly inside a word) made one-character words unreachable by caret and treated an emoji's surrogate halves as positions|V272,ADR0195; beside a one-grapheme word the caret selects it unless it touches another word; surrogate-splitting carets select nothing; Unicode/emoji browser test
+B554|2026-11-23|Placing the boxes in the editor toolbar would put two tab stops between the textarea and Spelling/Replay, changing the existing Shift+Tab route|V272; the boxes sit just below the textarea: Tab goes from the text to Start, Shift+Tab still reaches Replay
+B555|2026-11-23|Rewriting existing CRLF test files through LF-only tools produced mixed line endings|Harness-only: edit with an explicit line-ending-preserving helper and check `git ls-files --eol`; no product change
+B556|2026-11-23|Building ADR0195: adding the combined helper to transcripts.py changed the source the portable semantic checker pins (and pushed it past its 64 KiB bound), so three contained capture/restore tests refused the trusted resource|V272,ADR0195; the helper lives in word_times.py and only composes transcripts.py's unchanged functions; transcripts.py stays byte-identical, so no repin
+B557|2026-11-23|Building ADR0195: validating each typed time one at a time with edit_timed_word refused valid multi-word moves (moving two neighbours later fails if the first is checked while the second still has its old time)|V272,ADR0195; set every typed time first, then check each changed word with the unchanged single-word rules against the final times; test_order_of_typed_edits_does_not_matter
 B580|2026-11-23|Live UCloud backup test on Windows: the initial attempts to back up the test library failed in "Listing recordings and evidence files" with "filesystem witness is invalid or changed", because NTFS reports a recording folder that has not been listed recently as size 0 and as 4096 after os.scandir, and the portable witness compared directory sizes; each failed attempt only warmed the folders it reached|V137,V259,ADR0081,ADR0192; directory witnesses compare device, inode, mtime and ctime but not size; files keep their size; regression tests simulate a cold folder
 B581|2026-11-23|PREPARE=1 checked the general terminal set and could start setup beside a suspended matching legacy reader whose supervisor lacks the shared lock|V214,T136,ADR0172; keep SUSPENDED blocking for preparation only; five red-to-green cases exercise singleton, shared batch and standalone callers before setup side effects
+B582|2026-11-23|A timing-only passage save could mark a stale legacy word map current through its manual timing flag|V272,ADR0195. Require a current map before assigning typed times. The stale edit-v4 test keeps the result unchanged.
+B583|2026-11-23|An edit beside repeated text could transfer typed times to the wrong occurrence|V272,ADR0195. Validate the native replacement range or retain times only when the fallback positions agree. Chromium insertion and deletion reproduce the issue.
+B584|2026-11-23|A recording Rename reply replaced segment objects at the same revision and could omit the editor's typed times on Save passage|V272,ADR0195. Use recording, result, passage, text and revision as the draft fence. Keep the draft on a newer revision and refuse Save until reopened.

@@ -1,4 +1,4 @@
-"""Editing one mapped word in the passage editor keeps unrelated evidence intact."""
+"""Typed word times in the passage editor keep unrelated evidence intact (ADR 0195)."""
 
 import pytest
 from playwright.sync_api import expect
@@ -53,119 +53,113 @@ def open_editor(page, local_app, *, partial=False):
     return store, rid, result_id, passage
 
 
-def test_inline_timing_edit_preserves_drafts_and_working_choice(page, local_app):
+def at(editor, position):
+    editor.locator("textarea").evaluate(
+        "(e, at) => { e.focus(); e.setSelectionRange(at, at); }", position
+    )
+
+
+def test_typed_times_and_a_text_draft_save_together_with_the_working_choice(page, local_app):
     store, rid, result_id, passage = open_editor(page, local_app)
     before = store.result(rid, result_id)["segments"][0]
     editor = passage.locator(".passage-editor")
     text = editor.locator("textarea")
-    text.fill("A separate unsaved draft")
-    mode = editor.locator("[data-editor-mode]")
-    mode.select_option("timing")
-    save_word = editor.locator('[data-action="save-timed-word"]')
-    expect(save_word).to_be_disabled()
-    expect(editor.locator("[data-timing-draft-note]")).to_be_visible()
-    mode.select_option("text")
-    expect(text).to_have_value("A separate unsaved draft")
-    text.fill("Hej verden")
-    mode.select_option("timing")
-    expect(save_word).to_be_enabled()
-    editor.locator('[data-action="edit-timed-word"]').click()
-    word = editor.locator("[data-timing-text]")
-    assert word.evaluate("e => e.spellcheck") is False
-    word.fill("Hejsa")
-    word.evaluate("e => e.setSelectionRange(2, 2)")
-    editor.locator("[data-timing-start]").fill("0.2")
-    editor.locator("[data-timing-end]").fill("0.9")
-    save_word.click()
+    assert text.evaluate("e => e.spellcheck") is False
+    start = editor.locator('[data-word-time="start"]')
+    end = editor.locator('[data-word-time="end"]')
+    assert start.evaluate("e => e.spellcheck") is False
+    at(editor, 1)
+    start.fill("0.2")
+    end.fill("0.9")
+    at(editor, 3)
+    text.press_sequentially("sa")  # Hej -> Hejsa: the typed times follow the corrected word
+    at(editor, 2)
+    expect(start).to_have_value("0.2")
+    with page.expect_response(lambda response: response.url.endswith("/edit-v4")):
+        editor.locator('[data-action="save-edit"]').click()
     expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(editor.locator("[data-editor-mode]")).to_have_value("timing")
-    expect(editor.locator("[data-timing-text]")).to_have_value("Hejsa")
-    expect(editor.locator("[data-timing-text]")).to_be_focused()
-    assert editor.locator("[data-timing-text]").evaluate("e => e.selectionStart") == 2
     after = store.result(rid, result_id)["segments"][0]
-    assert after["words"][0]["start"] == 0.2
-    assert after["words"][0]["end"] == 0.9
-    assert after["words"][0]["word"] == "Hejsa"
+    assert after["text"] == "Hejsa verden"
+    assert (after["words"][0]["word"], after["words"][0]["start"], after["words"][0]["end"]) == (
+        "Hejsa",
+        0.2,
+        0.9,
+    )
+    assert after["words"][0]["manual_timing"] is True
     assert after["words"][1] == before["words"][1] | {"char_start": 6, "char_end": 12}
     assert after["original_words"] == before["original_words"]
-    assert after["words"][0]["manual_timing"] is True
     recording = store.recording(rid)
     assert recording["result_roles"]["working"]["version_id"] == recording["active_version"]["id"]
 
 
-def test_word_switch_refuses_to_discard_unsaved_correction(page, local_app):
-    _, _, _, passage = open_editor(page, local_app)
-    editor = passage.locator(".passage-editor")
-    editor.locator("[data-editor-mode]").select_option("timing")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("Draft")
-    page.once("dialog", lambda dialog: dialog.dismiss())
-    editor.locator('[data-action="next-timed-word"]').click()
-    expect(editor.locator("[data-timing-word]")).to_have_value("1")
-    expect(editor.locator("[data-timing-text]")).to_have_value("Draft")
-    editor.locator('[data-action="reset-timed-word"]').click()
-    expect(editor.locator("[data-timing-text]")).to_have_value("Hej")
-
-
 @pytest.mark.parametrize("choice", [False, True])
-def test_realign_choice_survives_word_save(page, local_app, choice):
-    _, _, _, passage = open_editor(page, local_app)
+def test_realign_choice_is_kept_and_typed_times_are_never_realigned(page, local_app, choice):
+    store, rid, _, passage = open_editor(page, local_app)
     editor = passage.locator(".passage-editor")
     realign = editor.locator("[data-editor-realign]")
     realign.set_checked(choice)
-    editor.locator("[data-editor-mode]").select_option("timing")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("Hejsa")
-    editor.locator('[data-action="save-timed-word"]').click()
+    at(editor, 1)
+    editor.locator('[data-word-time="start"]').fill("0.2")
+    with page.expect_request(lambda request: request.url.endswith("/edit-v4")) as sent:
+        editor.locator('[data-action="save-edit"]').click()
+    assert "realign" not in sent.value.post_data_json
     expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(editor.locator("[data-timing-text]")).to_have_value("Hejsa")
-    editor.locator("[data-editor-mode]").select_option("text")
-    assert realign.is_checked() is choice
+    if choice:
+        expect(page.locator("#toast")).to_have_text(
+            "Passage saved. It was not realigned, because you typed word times."
+        )
+    assert not store.all("SELECT id FROM jobs WHERE recording_id=? AND kind='enhance'", (rid,))
 
 
 @pytest.mark.parametrize("refused", [False, True])
-def test_word_save_freezes_draft_and_preserves_it_on_refusal(page, local_app, refused):
+def test_save_freezes_the_draft_and_preserves_it_on_refusal(page, local_app, refused):
     store, rid, result_id, passage = open_editor(page, local_app)
     editor = passage.locator(".passage-editor")
-    editor.locator("[data-editor-mode]").select_option("timing")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("Correction")
+    start = editor.locator('[data-word-time="start"]')
+    at(editor, 6)
+    start.fill("1.1")
     held = []
 
     def hold(route):
         held.append((route, None if refused else route.fetch()))
         page.evaluate("window.wordReplyHeld = true")
 
-    page.route(f"**/api/recordings/{rid}/segments/0", hold)
-    editor.locator('[data-action="save-timed-word"]').click()
+    page.route(f"**/api/recordings/{rid}/segments/0/edit-v4", hold)
+    editor.locator('[data-action="save-edit"]').click()
     page.wait_for_function("() => window.wordReplyHeld === true")
-    expect(editor.locator("[data-timing-text]")).to_be_disabled()
-    expect(editor.locator("[data-editor-mode]")).to_be_disabled()
+    expect(start).to_be_disabled()
+    expect(editor.locator('[data-word-time="end"]')).to_be_disabled()
+    expect(editor.locator("textarea")).to_be_disabled()
     route, response = held.pop()
     if refused:
         route.fulfill(status=409, json={"detail": "A newer revision was saved."})
-        expect(editor.locator("[data-timing-text]")).to_be_enabled()
-        expect(editor.locator("[data-timing-text]")).to_have_value("Correction")
-        assert store.result(rid, result_id)["segments"][0]["text"] == "Hej verden"
+        expect(start).to_be_enabled()
+        expect(start).to_have_value("1.1")
+        assert store.result(rid, result_id)["segments"][0]["words"][1]["start"] == 1
     else:
         route.fulfill(response=response)
         expect(page.locator("#save-status")).to_have_text("All changes saved")
-        expect(editor.locator("[data-timing-text]")).to_have_value("Correction")
-        assert store.result(rid, result_id)["segments"][0]["text"] == "Correction verden"
+        expect(passage.locator(".passage-editor")).to_have_count(0)
+        assert store.result(rid, result_id)["segments"][0]["words"][1]["start"] == 1.1
 
 
-def test_partial_word_spelling_keeps_missing_timestamps(page, local_app):
+def test_untimed_word_stays_untimed_unless_times_are_typed(page, local_app):
     store, rid, result_id, passage = open_editor(page, local_app, partial=True)
     before = store.result(rid, result_id)["segments"][0]
     assert before["word_timing"] is False
     editor = passage.locator(".passage-editor")
-    editor.locator("[data-editor-mode]").select_option("timing")
-    expect(editor.locator("[data-timing-start]")).to_have_value("")
-    expect(editor.locator("[data-timing-end]")).to_have_value("")
-    editor.locator('[data-action="edit-timed-word"]').click()
-    editor.locator("[data-timing-text]").fill("Hejsa")
-    editor.locator('[data-action="save-timed-word"]').click()
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
+    start = editor.locator('[data-word-time="start"]')
+    end = editor.locator('[data-word-time="end"]')
+    at(editor, 1)
+    expect(start).to_be_enabled()
+    expect(start).to_have_value("")
+    expect(end).to_have_value("")
+    # A text-only fix keeps the untimed word untimed; nothing is guessed for it.
+    at(editor, 3)
+    editor.locator("textarea").press_sequentially("sa")
+    with page.expect_request(lambda request: request.url.endswith("/edit-v3")):
+        editor.locator('[data-action="save-edit"]').click()
+    expect(page.locator("#save-status")).to_contain_text("Passage saved")
     after = store.result(rid, result_id)["segments"][0]
     assert after["text"] == "Hejsa verden"
     assert after["words"][0]["start"] is None and after["words"][0]["end"] is None
