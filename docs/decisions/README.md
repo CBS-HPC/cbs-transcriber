@@ -197,4 +197,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0191 — Word timing in review and Activity](0191-word-timing-in-review-and-activity.md) (post-v2; derived automatic Needs review, Activity outcomes)
 - [0192 — Backup in Settings with Activity](0192-backup-in-settings-with-activity.md) (post-v2; server-owned local backup task, Stop until saved; UCloud transfer unchanged)
 
+- [0193 — Exact editing performance on long transcripts](0193-exact-editing-performance.md) (rc3 candidate)
+
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

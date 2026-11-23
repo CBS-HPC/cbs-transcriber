@@ -458,6 +458,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Review the existing current-Working version
   lookup's broad metadata projection and bound it without changing preview or export behavior.
   [Audit and benchmark plan](docs/work-plans/manual-transcript-editing-performance.md).
+  The [23 November rc3 candidate check](docs/verification-2026-11-23-rc3-editing.md)
+  covers matched 600- and 1,200-passage server and browser pairs. The first 1,200-passage
+  round reduced median Save from 6.987 to 3.963 s and Split from 5.375 to 3.839 s until
+  controls were ready. Larger histories, measurement on the installed build and representative
+  hardware, and the long-history Undo scan remain open.
 - [ ] **Preparation and passage-repair acceptance (T87d/T87f/T90e/T90f).** New inference uses
   immutable originals independently of browser playback; remote compressed-input preparation
   and bounded older-recording cloud repairs are implemented offline. Validate real codecs,
