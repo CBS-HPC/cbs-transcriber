@@ -8,17 +8,19 @@ Open PowerShell in the folder containing both rc3 files. In File Explorer, open 
 
 Run `uv --version` first. If PowerShell cannot find uv or the version is older than 0.9.29, follow your organisation's installation instructions, then open PowerShell again. On a managed CBS computer, contact CBS IT if the installer or app reports **Access denied**.
 
-Paste this block from the folder containing the wheel and constraints file. It checks for both files and stops if an App folder already exists. If that happens, contact the maintainer for update instructions.
+Paste this block from the folder containing the wheel and constraints file. It checks for both files and creates the pilot app under `CBS Transcriber\rc3-test\App`. If that pilot App folder already exists, contact the maintainer for update instructions.
 
 ```powershell
 & {
     $ErrorActionPreference = 'Stop'
     $wheel = (Get-Item -LiteralPath '.\cbs_transcriber-0.2.0rc3-py3-none-any.whl').FullName
     $constraints = (Get-Item -LiteralPath '.\cbs-transcriber-0.2.0rc3-constraints.txt').FullName
-    $app = Join-Path $env:USERPROFILE 'CBS Transcriber\App'
-    if (Test-Path -LiteralPath $app) { throw 'The App folder already exists. Ask for update instructions.' }
+    $pilot = Join-Path $env:USERPROFILE 'CBS Transcriber\rc3-test'
+    $app = Join-Path $pilot 'App'
+    if (Test-Path -LiteralPath $app) { throw 'The pilot App folder already exists. Ask for update instructions.' }
     uv python install 3.13
     if ($LASTEXITCODE -ne 0) { throw 'Python installation failed.' }
+    New-Item -ItemType Directory -Path $pilot -Force | Out-Null
     New-Item -ItemType Directory -Path $app | Out-Null
     $venv = Join-Path $app '.venv'
     $python = Join-Path $venv 'Scripts\python.exe'
@@ -32,9 +34,8 @@ Paste this block from the folder containing the wheel and constraints file. It c
 Start the app from any PowerShell folder. Leave PowerShell open while you work. Press **Ctrl+C** to stop the app.
 
 ```powershell
-$root = Join-Path $env:USERPROFILE 'CBS Transcriber'
-$python = Join-Path $root 'App\.venv\Scripts\python.exe'
-$pilot = Join-Path $root 'rc3-test'
+$pilot = Join-Path $env:USERPROFILE 'CBS Transcriber\rc3-test'
+$python = Join-Path $pilot 'App\.venv\Scripts\python.exe'
 $launch = @('--profile', 'mvp', '--data-dir', (Join-Path $pilot 'Library'), '--projects-dir', (Join-Path $pilot 'Projects'))
 & $python -m cbs_transcriber @launch
 ```
@@ -56,4 +57,4 @@ Once startup works, you can create a Desktop shortcut with the same settings. Ru
 
 Report the build label shown in Settings, what you did, what you expected and what happened. Include the passage time for playback issues and the exact error for setup problems. Keep API keys and interview content out of reports.
 
-To uninstall this test copy, stop the app and remove its shortcut and the `.venv` folder inside `CBS Transcriber\App`. Keep `rc3-test`, `Library` and `Projects` if you want to retain your work.
+To uninstall this test copy, stop the app and remove its pilot shortcut if you created one. Remove `CBS Transcriber\rc3-test\App\.venv`. Keep the pilot's `Library` and `Projects` folders to retain its work.
