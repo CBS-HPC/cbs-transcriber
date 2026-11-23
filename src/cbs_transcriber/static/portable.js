@@ -401,6 +401,27 @@
       `Backup files matched the saved receipt when read at ${saved.folder}. This checks stored bytes, not a test restore.${canReuseForUpload ? " Save the receipt outside your backup storage." : " Existing upload choices were kept."}`,
     );
   });
+  // One exact request: an uncertain reply is answered by repeating it, which returns the
+  // task the server already accepted, never a second backup (ADR 0192).
+  const startBackup = async (destination) => {
+    const body = {
+      operation_id: crypto.randomUUID().replaceAll("-", ""),
+      destination: destination || null,
+    };
+    try {
+      return await api("/library/backup-tasks", { method: "POST", body });
+    } catch (error) {
+      if (error.status && error.status !== 408 && error.status < 500)
+        throw error;
+      try {
+        return await api("/library/backup-tasks", { method: "POST", body });
+      } catch {
+        throw new Error(
+          "The backup request did not finish normally. Check Activity before trying again.",
+        );
+      }
+    }
+  };
   // Making a backup hands off to a server-owned Activity task (ADR 0192); this dialog only
   // follows it while open, then loads its receipt as before.
   bind("portable-create", async () => {
@@ -412,14 +433,21 @@
     );
     let saved;
     try {
-      const accepted = await CBSBackupTasks.start(
+      const accepted = await startBackup(
         node("portable-destination").value.trim() || null,
       );
-      const done = await CBSBackupTasks.settle(
-        accepted.id,
-        () => node("library-dialog").open && opened === libraryClosings,
-      );
-      if (!done) return; // Activity owns the outcome once this window moved on.
+      if (typeof pollJobs === "function") pollJobs().catch(() => {});
+      let done = accepted;
+      while (done.state === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (!node("library-dialog").open || opened !== libraryClosings) {
+          status("This backup continues in Activity.");
+          return;
+        }
+        done = await api(`/library/backup-tasks/${accepted.id}`, {
+          background: true,
+        });
+      }
       if (done.state !== "ready" || !done.receipt)
         throw new Error(done.message);
       saved = done.receipt;

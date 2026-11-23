@@ -105,7 +105,9 @@ Settings gains a **Backup** tab: what is included, the current library, the last
 receipt, the backup folder (same default and same-device warning), **Make backup**,
 *View Activity* and *Library backups* (receipts; restore and UCloud where the profile offers
 them). Library → Backups → Create backup hands off to the same task and, while that dialog
-stays open, loads the finished receipt into its existing upload/restore fields.
+stays open, loads the finished receipt into its existing upload/restore fields. It uses
+only the shared `api` function (exact-replay start, then a status follow), so the isolated
+Library script keeps no dependency on the Settings module (B524).
 
 ### Release profile
 
