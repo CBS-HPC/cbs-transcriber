@@ -71,8 +71,12 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** Without pressing Retry, Activity picks the same batch up again, follows it and
   saves each result once; the UCloud working folder is cleaned up afterwards.
 - **Why human:** Startup reconnect (T141, ADR 0174) is new in v2. On 12 November the overnight
-  batch needed an explicit Retry; this preview is the reconnect's first real use.
-- **Status:** Not run.
+  batch needed an explicit Retry.
+- **Status:** Passed 23 November 2026 on Windows 11, full-profile source code at
+  `9575be8`, in the isolated test library. Three public FLEURS clips (23 seconds total)
+  were queued on a B200 1g MIG. The app closed in queue, then reopened to the same
+  allocation without Retry. Each recording received one result and one version. The
+  batch's working folder disappeared from the UCloud listing after Trash settlement.
 
 ### H8 · Closing the app while files upload (paid if resubmitted)
 
@@ -80,14 +84,21 @@ the user's approval each time; checks marked **later** belong to features still 
   Start again and press Retry on the interrupted batch.
 - **Pass when:** Only files without a confirmed upload are uploaded again (a half-uploaded file is
   replaced), one UCloud job is submitted, and no file is transcribed twice.
-- **Status:** Not run.
+- **Status:** Passed 23 November 2026 on the H7 setup. The app closed with the first
+  clip uploaded and the second partially uploaded. Explicit Retry reused the first,
+  replaced the partial upload and sent the third. UCloud received one submission for
+  this batch. Each recording received one result and the working folder moved to Trash.
 
 ### H9 · Closing the app while results download
 
 - **Do:** Stop the app while Activity reports results being saved; start again.
 - **Pass when:** Saved files stay saved, the rest are fetched and saved once, and nothing in the
   project is half-written.
-- **Status:** Not run.
+- **Status:** Passed 23 November 2026 on the H7 setup. During shutdown, an in-progress
+  save finished and a third recording still downloading remained recoverable. On
+  restart the same allocation saved the third result automatically. The two saved
+  results kept one version each. The working folder moved to Trash. An additional
+  attempt finished before shutdown and did not exercise the interruption.
 
 ### H10 · Early uploads, upload limits and plain status (paid)
 
@@ -224,7 +235,12 @@ the user's approval each time; checks marked **later** belong to features still 
 
 - **Do:** Make a backup from Library, restore it into a new library, switch to it; repeat on a Mac.
 - **Pass when:** The restored library opens with every project, transcript, version and note.
-- **Status:** Not run on a real library.
+- **Status:** Windows local capture and restore passed 23 November on the isolated public-clip
+  library. The new library was registered in the test profile. Row comparisons confirmed four
+  projects, 12 recordings/results/versions and 16 note versions. All 36 mapped files matched their
+  captured hashes. Interactive library switching and macOS remain open. UCloud upload paused on an
+  unapproved transfer origin. The local backup and journal are retained for investigation.
+  [Verification](../verification-2026-11-23-rc3-backup-and-reconnect.md).
 - **Also (backup in Activity, ADR 0192):** on a copy of a real library with several GB of
   recordings, (1) open Settings → Backup and choose **Make backup**, close Settings and follow
   Activity: Waiting, Copying the library database, Listing files, Copying files with counts,
@@ -239,9 +255,9 @@ the user's approval each time; checks marked **later** belong to features still 
   a plain reason and any leftover folder named on the card. (4) shows "Backup not finished"
   with any incomplete copy named and removable; a backup closed while saving asks for
   **Check again**, which confirms it or names its folders. Nothing restarts by itself.
-- **Status (Activity):** Not run. Implemented on `claude/backup-activity` (ADR 0192) with
-  synthetic backend and Chromium tests only; real large libraries, slow/removable and
-  cloud-synced folders, process crashes and macOS are unverified.
+- **Status (Activity):** Windows capture passed for the 12-original test library after correcting
+  the directory witness (B580). The broader backend gate passed. Large libraries, slow/removable
+  and cloud-synced folders, process crashes and macOS are open.
 
 ### H22 · Switching libraries and two browser tabs
 

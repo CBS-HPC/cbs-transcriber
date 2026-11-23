@@ -118,8 +118,12 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   durable Stop and no new allocation/upload/followup. Final 76 focused cases and independent
   review pass; earlier 444 passes/one platform skip remain qualified prior-source evidence.
   [Verification](docs/verification-2026-11-12-native-startup-reconnection.md).
-  Not loaded or real-provider accepted. Fresh singleton generic-curated failures, historical
-  generic failures, uncertain submissions and cleanup-only obligations remain manual.
+  The 23 November Windows full-profile live checks passed H7–H9 on local source `9575be8`.
+  Startup rejoined a queued allocation, explicit Retry reused a confirmed upload, and startup
+  recovered the remaining download without duplicating results.
+  [Live scope and limits](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
+  Fresh singleton generic-curated failures, historical generic failures, uncertain submissions
+  and cleanup-only obligations remain manual. Live missing-output Retry remains unverified.
 
 - [ ] **Isolated Runtime recovery (T144), authorized stability work.** Stage1 on
   `codex/mvp-v2-runtime-generations` from reviewed observation checkpoint `857a727` implements
@@ -596,18 +600,20 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   renewed approval and preserves the original identity of any frozen transfer.
   The local capture parent is selectable; a same-device warning is shown and a best-effort
   Windows check can identify the same filesystem volume. Hardware independence is not established.
-  Validate a real UCloud transfer, download, independent receipt, restore and retention workflow,
-  including separately hosted transfer endpoints, which remain blocked until explicitly trusted,
-  plus real-library Windows and Mac restore. The user waived a new backup for this disposable test
-  library; that does not waive preservation requirements for other libraries.
-- [ ] **Backup Settings and Activity.** Implemented on `claude/backup-activity` (post-v2,
-  unmerged; [ADR 0192](docs/decisions/0192-backup-in-settings-with-activity.md), T161): a
-  Settings → Backup tab and Library → Backups → Create backup hand a local backup to one
+  A Windows test-library capture and local restore verified four projects, 12 original recordings,
+  12 saved results and versions, and 16 note versions. The same UCloud upload resumed its existing
+  operation but refused a transfer origin outside the approved list. The backup and exact operation
+  are preserved. Validate approved transfer, download, receipt, restore and retention, plus
+  larger Windows libraries and macOS.
+  [Verification](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
+- [ ] **Backup Settings and Activity.** Integrated in the local rc3 candidate
+  ([ADR 0192](docs/decisions/0192-backup-in-settings-with-activity.md), T161): the Settings → Backup tab and Library → Backups → Create backup hand a local backup to one
   server-owned Activity task with stages, copy counts, Stop until it is being saved, and a
   verified/stopped/failed outcome; its own incomplete copy is removed or named, and a restart
   reports interrupted backups without resuming them. Synthetic backend and Chromium checks
-  pass. Remaining: real-device acceptance (H21: large libraries, removable and cloud-synced
-  folders, crashes, macOS); separately verified UCloud status in Settings (UCloud transfer
+  pass, and Windows local Activity capture passed with 12 public originals. Remaining:
+  real-device acceptance (H21: large libraries, removable and cloud-synced folders, crashes,
+  macOS) and separately verified UCloud status in Settings (UCloud transfer
   stays in Library → Backups, hidden in MVP, unchanged). Explicit destination approval,
   restore isolation and manual retention confirmation are unchanged. The Restore flow checks
   earlier or external receipts against local or UCloud package bytes; this is a transport
