@@ -624,8 +624,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   are preserved. Zero verified objects does not establish an empty remote folder.
   First identify the exact refused origin and transfer direction without changing approval.
   Any later recovery must keep the owned destination and verify existing objects before
-  writing missing ones. Validate approved transfer, download, receipt, restore and retention,
-  plus larger Windows libraries and macOS.
+  writing missing ones. The separate diagnostic prototype `fc05ec6` keeps the existing
+  approval and journal. Its broader run had one intermittent Windows settings-save failure.
+  Before live use, verify the WebSocket transfer guard after review found the pinned
+  client could follow redirects. Validate approved transfer, download, receipt, restore
+  and retention, plus larger Windows libraries and macOS.
   [Verification](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
 - [ ] **Backup Settings and Activity.** Integrated in the local rc3 candidate
   ([ADR 0192](docs/decisions/0192-backup-in-settings-with-activity.md), T161): the Settings → Backup tab and Library → Backups → Create backup hand a local backup to one
@@ -961,8 +964,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   [verification and activation limits](docs/verification-2026-11-20-native-gpu-helpers.md).
   (V233/T154; activation remains separate). The unintegrated switching prototype still
   needs a fail-closed MVP gate, terminal ownership and reviewed Continue authority.
-  Start with a standalone mocked read-only observer for products, wallets and application
-  eligibility, using the verified parsers. User decisions 19 November: ask as soon as two
+  The separate mock-only observer `093814c` exercises product, wallet and application
+  reads against synthetic fixtures. Its scoped suite passed 203 tests. Independent review
+  found a synthetic response stream/close error that needs a sanitized fallback.
+  Authenticated observation, a hard I/O deadline and live metadata remain open.
+  User decisions 19 November: ask as soon as two
   capacity reads agree the MIG is full and a full B200 is free (no queue-time threshold),
   preferably before the POST; a queued MIG is cancelled and proven never started first; Retry
   returns to the MIG; hidden in MVP v2. Read-only live evidence is permitted once implemented;
