@@ -526,3 +526,47 @@ def test_newer_transcript_revision_cannot_silently_replace_a_timing_draft(page, 
     expect(editor.locator("textarea")).to_have_value(TEXT)
     assert store.recording(rid)["revision"] == newer["revision"]
     assert len(store.result_versions(rid, result_id)) == history_count
+
+
+def test_composition_keeps_typed_times_when_the_interim_word_split_disappears(page, local_app):
+    store, rid, result_id, editor = open_editor(page, local_app)
+    first, _, _ = boxes(editor)
+    caret(editor, 6)
+    first.fill("1.2")
+    caret(editor, 6)
+    textarea = editor.locator("textarea")
+
+    textarea.evaluate(
+        """(input) => {
+            input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+            input.value = "Hej ver den i dag";
+            input.dispatchEvent(new InputEvent("input", {
+                bubbles: true, inputType: "insertCompositionText", isComposing: true,
+            }));
+        }"""
+    )
+    expect(textarea).to_have_value("Hej ver den i dag")
+    expect(textarea).to_be_focused()
+    expect(first).to_be_disabled()
+    editor.get_by_role("button", name="Save passage").evaluate("(button) => button.click()")
+    expect(page.locator("#toast")).to_contain_text("Finish composing the text before saving")
+    assert store.result(rid, result_id)["segments"][0]["text"] == TEXT
+
+    textarea.evaluate(
+        """(input, text) => {
+            input.value = text;
+            input.setSelectionRange(6, 6);
+            input.dispatchEvent(new InputEvent("input", {
+                bubbles: true, inputType: "insertCompositionText", isComposing: true,
+            }));
+            input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+        }""",
+        TEXT,
+    )
+    expect(textarea).to_have_value(TEXT)
+    expect(textarea).to_be_focused()
+    assert textarea.evaluate("(input) => [input.selectionStart, input.selectionEnd]") == [6, 6]
+    expect_word(editor, "1.2", "1.8", "unsaved times")
+    editor.get_by_role("button", name="Save passage").click()
+    expect(editor).to_have_count(0)
+    assert store.result(rid, result_id)["segments"][0]["words"][1]["start"] == 1.2

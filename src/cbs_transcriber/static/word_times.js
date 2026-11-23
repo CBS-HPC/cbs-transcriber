@@ -160,7 +160,8 @@ function wordTimeMove(entry, [head, tail], after, shift) {
 // Keep the occurrence identified by the native edit. For changes without an
 // exact edit range, keep typed times only when both possible extremes agree.
 function trackWordTimes(record, value) {
-  if (value === record.draft) return;
+  // An IME candidate may briefly split the word that owns a typed interval.
+  if (record.composing || value === record.draft) return;
   const edit = record.edit;
   record.edit = null;
   record.layout = null;
@@ -420,6 +421,10 @@ function wordTimesPayload(segment, editor, text) {
   if (!record) return [];
   if (!wordTimeRecordMatches(record, segment))
     throw new Error(wordTimeStaleMessage);
+  if (record.composing && record.entries.some(wordTimeEntryDirty))
+    throw new Error(
+      "Finish composing the text before saving typed word times.",
+    );
   trackWordTimes(
     record,
     editor.querySelector(".passage-text-surface textarea").value,
@@ -537,6 +542,7 @@ function wordTimesPayload(segment, editor, text) {
     const record = wordTimeDrafts.get(found.editor);
     if (
       wordTimeRecordMatches(record, found.segment) &&
+      !record.composing &&
       record.draft !== textarea.value
     )
       refreshPassageDraft(found.segment, found.editor);
