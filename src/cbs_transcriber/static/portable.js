@@ -429,7 +429,7 @@
     const draft = backupDraftRevision;
     const opened = libraryClosings;
     status(
-      "Copying originals and evidence, then checking the complete package. Follow it in Activity; changes wait until the backup finishes, and closing this window does not stop it…",
+      "Making the backup. Follow it in Activity after closing this window. Edits wait while files are copied…",
     );
     let saved;
     try {
@@ -468,7 +468,7 @@
     }
     useReceipt(saved);
     status(
-      `Complete backup saved: ${receipt.originals} original(s), ${receipt.files} file(s). Location: ${receipt.folder}. Contents were checked during creation; this was not a test restore. ${receipt.legacy_gaps} historical evidence gap(s) recorded. Save the receipt outside your backup storage.`,
+      `Complete backup saved: ${receipt.originals} original(s), ${receipt.files} file(s) in ${receipt.folder}. Creation checks passed. A restore test is separate. ${receipt.legacy_gaps} gaps in older processing evidence. Save the receipt outside your backup storage.`,
     );
     loadCaptures().catch(() => {});
   });

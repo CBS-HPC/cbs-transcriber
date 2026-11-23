@@ -489,7 +489,7 @@
                   <span
                     id="uncertainty-note"
                     class="field-note"
-                    title="Model signals compared within this transcript. They are not calibrated probabilities of being correct; alignment fit is not transcription accuracy."
+                    title="Marks what the model was least sure of in this transcript. A guide for review, not a measure of accuracy."
                   ></span>
                 </div>
               </div>
@@ -690,14 +690,13 @@
         </div>
       </div>
       <p class="drawer-description">
-        Your conversion and transcription jobs. Completed parts are kept when
-        you retry. Clear finished hides settled activity. Cleanup and recovery
-        remain under Needs attention until resolved.
+        Follow running work here. Retry keeps completed parts. Clear finished
+        hides settled work. Cleanup and recovery stay under Needs attention.
       </p>
       <div id="jobs"></div>
       <p class="drawer-note">
-        Retries use the job’s original provider settings. A request already
-        accepted by a provider may still incur charges.
+        Retry uses the job’s original settings. Work a provider has already
+        accepted may still be charged.
       </p>
     </aside>
 
@@ -780,10 +779,9 @@
           </button>
         </div>
         <p class="settings-note">
-          A library contains your projects, transcripts and history. Finish or
-          cancel jobs before switching; opening another library restarts the app
-          and is remembered next time. Delete permanently shows a preview and
-          asks you to confirm before removing anything.
+          Finish or cancel jobs before switching libraries. Switching restarts
+          the app and remembers your choice. Delete permanently shows what will
+          be removed and asks you to confirm.
         </p>
         <ul class="library-list" data-library-list></ul>
         <section
@@ -804,9 +802,9 @@
         <h3 class="settings-subhead">Backups</h3>
         <section id="portable-panel" aria-label="Complete library backups">
           <p class="settings-note">
-            A complete backup copies all originals, saved results, history and
-            available processing evidence. Finish or stop processing first. Keys
-            and tokens are excluded.
+            A backup includes originals, saved results, notes, history and
+            available processing evidence. Keys and tokens stay out. Finish or
+            stop processing first.
           </p>
           <button id="portable-create" type="button" class="button primary">
             Create backup
@@ -833,11 +831,9 @@
               volume.
             </p>
             <p id="portable-destination-help" class="settings-note">
-              Leave the location blank to use the backups folder inside the
-              library. A different folder on that device does not protect
-              against device failure. For an independent copy, choose a
-              different physical device; the folder choice alone cannot verify
-              independence.
+              Leave the folder blank to use the default. To protect against
+              device failure, choose a folder on another physical device, such
+              as an external drive.
             </p>
           </details>
           <button id="portable-receipt" type="button" class="button" disabled>
@@ -1183,8 +1179,8 @@
       </form>
       <div class="project-danger">
         <p class="settings-note">
-          Deleting the collection keeps its recordings in the project, as
-          Unsorted. Files on disk never move.
+          Deleting this collection lists its recordings under Unsorted. Their
+          files stay in place.
         </p>
         <button id="collection-delete" type="button" class="button danger">
           Delete Collection
@@ -1214,8 +1210,7 @@
         </button>
       </div>
       <p class="settings-note">
-        Import adds a UCloud JSON or CSV transcript as a new result; the
-        existing results are kept.
+        Import a UCloud JSON or CSV as a new result. Existing results are kept.
       </p>
       <!-- Private spelling vocabulary (ADR 0186): hidden in the MVP profile. -->
       <div class="file-settings-actions" data-feature="spelling">
@@ -2157,8 +2152,8 @@
         ></label
       >
       <p class="field-note">
-        Copies the selected original audio/video files into their recording
-        folders in the ZIP. Leave formats unchecked for originals only.
+        Each selected original goes in its recording folder in the ZIP. Clear
+        all formats to export originals only.
       </p>
       <fieldset class="export-choices">
         <legend>Recordings</legend>
@@ -2180,10 +2175,8 @@
         </select></label
       >
       <p id="export-batch-note" class="settings-note" hidden>
-        Downloads a ZIP with the selected formats for each result, plus a report
-        identifying exported or skipped recordings and formats. Original
-        recordings are included only when Include original recordings is
-        checked.
+        The ZIP contains the selected formats and a report of what was exported
+        or skipped. Check Include original recordings to add the source files.
       </p>
       <fieldset id="export-formats" class="export-choices">
         <legend>Formats</legend>
@@ -2345,8 +2338,8 @@
           </button>
         </div>
         <p class="dialog-intro">
-          Adds word timing or speaker labels as a new result; the reviewed
-          wording and the selected result stay unchanged.
+          Adds word timing or speaker labels as a new result. Your current
+          result and its wording are kept.
         </p>
         <div id="batch-settings" hidden>
           <p id="batch-summary" class="settings-note"></p>
@@ -2359,10 +2352,9 @@
             </select></label
           >
           <p class="settings-note">
-            Starts immediately and runs unattended. Keep this app and computer
-            running. Each original transcription is kept; missing features
-            create a separate result. Review failures and retry them in
-            Activity.
+            Keep this app and computer running. The original transcription is
+            kept. Missing word timing or speakers are added as a separate
+            result. Retry failures in Activity.
           </p>
         </div>
         <p
@@ -2444,10 +2436,9 @@
               /></label>
             </div>
             <p class="field-note">
-              New jobs retain valid timing estimates. Review hints flag
-              uncertainty; scores are not calibrated timing accuracy. Without
-              word timing, speaker detection labels passages and marks mixed
-              passages explicitly.
+              Timing scores suggest where to review. Without word timing,
+              speakers are labelled per passage, and passages with several
+              speakers are marked.
             </p>
           </details>
         </fieldset>
@@ -2600,8 +2591,8 @@
           />
         </label>
         <p class="field-note">
-          Saving the optional token checks access and prepares configured models
-          when allowed in Settings. Follow progress in Activity.
+          A token lets the app download the speaker model. Saving checks access
+          and prepares allowed models. Follow progress in Activity.
         </p>
         <label class="checkbox-label"
           ><input id="first-use-remember" type="checkbox" checked />Remember
@@ -2727,12 +2718,11 @@
           disabled
         >
           <p class="settings-note">
-            WhisperX word timing uses public alignment models and needs no
-            token. Speaker labels use the gated pyannote model: a read token and
-            accepted model terms are needed only to download it. Cached models
-            run offline. Saving checks access and prepares configured models
-            when allowed in Settings; follow progress in Activity. The token is
-            never sent with recordings.
+            Word timing needs no token. To download the speaker model, accept
+            its terms on Hugging Face and paste a read token here. Once cached,
+            the model works offline. Saving checks access and prepares allowed
+            models. Follow progress in Activity. The token never goes with
+            recordings.
           </p>
           <label
             >Hugging Face read token<span
@@ -2788,8 +2778,8 @@
             How word timing<span data-feature="retranscribe"
               >, WhisperX transcription</span
             >
-            and speaker labels run. Checks happen by themselves; changes save
-            automatically and apply to new jobs.
+            and speaker labels run. Device and download choices save at once and
+            apply to new jobs.
           </p>
           <h3 class="settings-subhead">This computer</h3>
           <p
@@ -2811,9 +2801,8 @@
             local models when a job needs them</label
           >
           <p class="field-note">
-            Pinned public models for word timing and WhisperX. The speaker model
-            is prepared under Hugging Face → Check token. Audio and transcript
-            text stay on this computer.
+            Word timing uses public models. Prepare the speaker model in the
+            Hugging Face tab. Local jobs keep audio and text on this computer.
           </p>
           <label data-feature="runtime_python"
             >Python executable for WhisperX<input
@@ -3025,17 +3014,14 @@
           disabled
         >
           <p class="settings-note">
-            A complete backup copies every original recording, saved results,
-            history, notes and available processing evidence, including
-            Protected projects and Trash. Keys and tokens are excluded. Finish
-            or stop processing first.
+            A backup includes originals, saved results, notes, history and
+            available processing evidence, including Protected projects and
+            Trash. Keys and tokens stay out. Finish or stop processing first.
           </p>
           <p class="settings-note">
-            The backup runs in Activity, so closing Settings does not stop it.
-            You can keep reading while it runs; edits and new work wait until
-            the files are copied. Stop in Activity ends it before it is saved.
-            Backups are made only when you choose Make backup; there are no
-            automatic schedules.
+            Follow the backup in Activity, even after closing Settings. Stop is
+            available until saving starts. You can read while files are copied.
+            Edits and new work wait. Backups start when you choose Make backup.
           </p>
           <p id="backup-settings-current" class="field-note"></p>
           <p id="backup-settings-last" class="field-note" role="status"></p>
@@ -3050,9 +3036,8 @@
             Default: the backups folder inside this library.
           </p>
           <p class="settings-note">
-            A folder on the same device does not protect against device failure.
-            For an independent copy, choose a different physical device; the
-            folder choice alone cannot verify independence.
+            Use a folder on another physical device, such as an external drive,
+            for protection against device failure.
           </p>
           <p
             id="backup-settings-running"
@@ -3256,8 +3241,8 @@
               ></select
             ></label>
             <p class="settings-note">
-              Connect your token to find your project and storage. Native models
-              use 1g MIG for new requests. No transcription starts during setup.
+              Connect UCloud to find your project and storage. Setup starts no
+              transcription. New UCloud runs use a B200 1g MIG slice.
             </p>
             <button id="connect-ucloud" type="button" class="button">
               Connect UCloud
@@ -3331,8 +3316,8 @@
                 Check UCloud setup
               </button>
               <p class="settings-note">
-                This check reads template/storage metadata. It uploads no audio
-                and starts no job.
+                Checks your UCloud app and storage. It uploads no audio and
+                starts no job.
               </p>
             </fieldset>
             <div
@@ -3451,8 +3436,9 @@
           <fieldset class="provider-approvals">
             <legend>Protected projects</legend>
             <p class="settings-note">
-              Your provider eligibility choice, not institutional certification.
-              Standard projects can use any configured provider.
+              Tick only if your data rules allow Protected data with this
+              provider. Confirm institutional approval separately. Standard
+              projects can use any configured provider.
             </p>
             <label class="checkbox-label"
               ><input
@@ -3501,9 +3487,8 @@
                 /></label>
               </div>
               <p id="native-limits-note" class="field-note">
-                Upload speed depends on your network, not this computer's
-                processors. A single-file run counts as one batch. Changes apply
-                to new batches; running batches keep their limits and continue.
+                Upload speed depends on your network. A single file counts as
+                one batch. Running batches keep their original limits.
               </p>
               <p id="native-limits-status" class="field-note" role="status"></p>
             </div>
@@ -3533,8 +3518,8 @@
               ></p>
             </div>
             <p class="settings-note">
-              Configurations using the same endpoint share its saved key. Blank
-              key fields retain saved credentials.
+              Configurations with the same address share one saved key. Leave a
+              key field blank to keep the saved key.
             </p>
           </details>
           <div class="dialog-actions">
