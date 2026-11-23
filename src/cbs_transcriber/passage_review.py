@@ -13,7 +13,7 @@ import sqlite3
 import threading
 from collections import OrderedDict
 
-from .history import decode_payload, encode_payload, validate_revision
+from .history import serialized_payload_matches, validate_revision, verified_passage_texts
 from .store import new_id, now
 from .transcripts import MAX_TRANSCRIPT_BYTES
 
@@ -166,13 +166,16 @@ def _context(db, recording_id, result_id, revision=None):
         if len(passages) > MAX_PASSAGES:
             raise ValueError("This transcript has too many passages to mark safely.")
         return recording["revision"], head["id"], passages, expects
-    payload = decode_payload(head["payload"], head["payload_sha256"])
-    if encode_payload(json.loads(result["segments"]), json.loads(result["speakers"]))[0] != head[
-        "payload"
-    ] or (
+    # Verified canonical bytes give each passage's exact fingerprint input as a slice, and
+    # proven mirror bindings replace re-encoding; every use still hashes the bytes (ADR 0193).
+    payload, texts = verified_passage_texts(head["payload"], head["payload_sha256"])
+    if not serialized_payload_matches(
+        result["segments"], result["speakers"], head["payload"], head["payload_sha256"]
+    ) or (
         recording_pair != result_pair
-        and encode_payload(json.loads(recording["segments"]), json.loads(recording["speakers"]))[0]
-        != head["payload"]
+        and not serialized_payload_matches(
+            recording["segments"], recording["speakers"], head["payload"], head["payload_sha256"]
+        )
     ):
         raise ValueError("The saved transcript and its history disagree. Preserve the library.")
     passages = payload["segments"]
@@ -183,7 +186,15 @@ def _context(db, recording_id, result_id, revision=None):
         not isinstance(item, str) or not 1 <= len(item) <= 200 or "\x00" in item for item in ids
     ) or (len(set(ids)) != len(ids)):
         raise ValueError("The saved transcript has ambiguous passage identifiers.")
-    passages = tuple((item["id"], fingerprint(item), *_timing_flags(item)) for item in passages)
+    digests = (
+        [hashlib.sha256(text.encode("utf-8")).hexdigest() for text in texts]
+        if texts is not None
+        else [fingerprint(item) for item in passages]
+    )
+    passages = tuple(
+        (item["id"], digest, *_timing_flags(item))
+        for item, digest in zip(passages, digests, strict=True)
+    )
     with _CONTEXT_LOCK:
         _CONTEXTS[key] = passages
         _CONTEXTS.move_to_end(key)

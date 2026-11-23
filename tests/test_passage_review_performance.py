@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from cbs_transcriber import history
 from cbs_transcriber import passage_review as subject
 from cbs_transcriber.history import encode_payload
 from cbs_transcriber.store import Store
@@ -53,23 +54,34 @@ def save(scene, loaded):
     )
 
 
-def test_identical_mirrors_encode_once_and_warm_marks_skip_full_content_work(scene, monkeypatch):
+def counted(monkeypatch, module, name):
     calls = []
-    original = subject.encode_payload
+    original = getattr(module, name)
 
-    def encode(*args):
+    def wrapper(*args, **kwargs):
         calls.append(True)
-        return original(*args)
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(subject, "encode_payload", encode)
+    monkeypatch.setattr(module, name, wrapper)
+    return calls
+
+
+def test_identical_mirrors_encode_once_and_warm_marks_skip_full_content_work(scene, monkeypatch):
+    # ADR 0193: identical mirrors need one binding check, and the producer's proven binding
+    # (ADR 0159) means no canonical re-encoding; fingerprints come from verified slices.
+    heads = counted(monkeypatch, subject, "verified_passage_texts")
+    mirrors = counted(monkeypatch, subject, "serialized_payload_matches")
+    encodes = counted(monkeypatch, history, "encode_payload")
+    fingerprints = counted(monkeypatch, subject, "fingerprint")
     loaded = read(scene)
-    assert calls == [True]
+    assert (heads, mirrors, encodes, fingerprints) == ([True], [True], [], [])
 
     def unexpected(*args, **kwargs):
         raise AssertionError("A warm unchanged mark must not redo full payload work")
 
-    monkeypatch.setattr(subject, "encode_payload", unexpected)
-    monkeypatch.setattr(subject, "decode_payload", unexpected)
+    monkeypatch.setattr(subject, "verified_passage_texts", unexpected)
+    monkeypatch.setattr(subject, "serialized_payload_matches", unexpected)
+    monkeypatch.setattr(history, "encode_payload", unexpected)
     monkeypatch.setattr(subject, "fingerprint", unexpected)
     assert save(scene, loaded)["counts"]["checked"] == 1
     assert read(scene)["counts"]["checked"] == 1
@@ -115,16 +127,13 @@ def test_nonidentical_but_equivalent_mirrors_are_fully_revalidated(scene, monkey
         "UPDATE recordings SET segments=? WHERE id=?",
         (json.dumps(json.loads(segments), ensure_ascii=True, indent=2), rid),
     )
-    calls = []
-    encode = subject.encode_payload
-
-    def checked(*args):
-        calls.append(True)
-        return encode(*args)
-
-    monkeypatch.setattr(subject, "encode_payload", checked)
+    mirrors = counted(monkeypatch, subject, "serialized_payload_matches")
+    encodes = counted(monkeypatch, history, "encode_payload")
     assert read(scene) == original
-    assert len(calls) == 2
+    # Both mirrors are checked; the differently formatted one has no proven binding and is
+    # canonically re-encoded in full (ADR 0193 keeps ADR 0159's fallback).
+    assert len(mirrors) == 2
+    assert len(encodes) == 1
     assert store.all("SELECT * FROM passage_reviews WHERE result_id=?", (result_id,)) == []
 
 
@@ -181,14 +190,7 @@ def test_cache_retains_only_bounded_ids_and_digests_and_eviction_rechecks(scene,
     assert len(subject._CONTEXTS) == 1
     assert sum(map(len, subject._CONTEXTS.values())) <= 2
     store.activate_result(rid, result_id, store.recording(rid)["revision"])
-    calls = []
-    decode = subject.decode_payload
-
-    def checked(*args):
-        calls.append(True)
-        return decode(*args)
-
-    monkeypatch.setattr(subject, "decode_payload", checked)
+    calls = counted(monkeypatch, subject, "verified_passage_texts")
     assert read(scene)["passages"] == loaded["passages"]
     assert calls == [True]
 

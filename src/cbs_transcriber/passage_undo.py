@@ -2,7 +2,7 @@
 
 import json
 
-from .history import encode_payload, validate_revision, verify_payload
+from .history import encode_payload, validate_revision, verified_passage_texts, verify_payload
 from .result_actions import append_edit
 from .transcripts import (
     MANUAL_SPLIT_POLICY,
@@ -21,14 +21,68 @@ MAX_HISTORY_BYTES = 32 * 1024 * 1024
 PRESENCE_ACTIONS = {"change_undo", "change_redo"}
 
 
-def _read_payload(payload, digest):
+def _read_payload(payload, digest, canonical=None):
     # Reuse only the bounded canonical-validation fact. Each read still hashes the
     # current bytes and decodes fresh objects; ownership and eligibility are uncached.
-    verify_payload(payload, digest)
-    return json.loads(payload)
+    if canonical is None:
+        verify_payload(payload, digest)
+        return json.loads(payload)
+    decoded, texts = verified_passage_texts(payload, digest)
+    if texts is not None:
+        canonical.register(decoded["segments"], texts)
+    return decoded
 
 
-def _read_current(store, db, recording_id, result_id, revision=None):
+class Canonical:
+    """Exact canonical JSON of passages decoded from verified history payloads (ADR 0193).
+
+    Each decoded passage keeps its verified payload slice, which is exactly what _same
+    would encode again. Registered objects are held, so identities stay unique, and the
+    scans never mutate them; any other value is encoded exactly as _same always did.
+    A child registry (one history row) is dropped with its row, keeping memory per row.
+    """
+
+    def __init__(self, parent=None):
+        self._texts = {}
+        self._parent = parent
+
+    def read(self, payload, digest):
+        return _read_payload(payload, digest, self)
+
+    def register(self, passages, texts):
+        for passage, text in zip(passages, texts, strict=True):
+            self._texts[id(passage)] = (passage, text)
+
+    def _known(self, value):
+        registry = self
+        while registry is not None:
+            known = registry._texts.get(id(value))
+            if known is not None and known[0] is value:
+                return known[1]
+            registry = registry._parent
+        return None
+
+    def text(self, value):
+        known = self._known(value)
+        if known is not None:
+            return known
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+    def same(self, left, right):
+        """_same for a passage or a passage list; a list encodes as its items joined by commas."""
+        if not (isinstance(left, list) and isinstance(right, list)):
+            return self.text(left) == self.text(right)
+        # Encode every item first, as _same does, so an encoding error is raised the same way.
+        left_texts = [self.text(value) for value in left]
+        right_texts = [self.text(value) for value in right]
+        return left_texts == right_texts
+
+
+def _same_passages(canonical, left, right):
+    return _same(left, right) if canonical is None else canonical.same(left, right)
+
+
+def _read_current(store, db, recording_id, result_id, revision=None, canonical=None):
     current = db.execute("SELECT * FROM recordings WHERE id=?", (recording_id,)).fetchone()
     if current is None:
         raise KeyError(recording_id)
@@ -47,7 +101,7 @@ def _read_current(store, db, recording_id, result_id, revision=None):
         head = store._head_version(db, result)
     except RuntimeError as error:
         raise ValueError(str(error)) from error
-    payload = _read_payload(head["payload"], head["payload_sha256"])
+    payload = _read_payload(head["payload"], head["payload_sha256"], canonical)
     mirrors_match = (
         current["segments"] == result["segments"] and current["speakers"] == result["speakers"]
     )
@@ -76,7 +130,7 @@ def _ids(segments):
     return ids
 
 
-def _merge_inverse(before, after, context, current, ids):
+def _merge_inverse(before, after, context, current, ids, canonical=None):
     selected, adjacent, direction = (
         context["segment_id"],
         context["adjacent_segment_id"],
@@ -99,15 +153,17 @@ def _merge_inverse(before, after, context, current, ids):
     expected = merge_passages(
         before_segments, selected, direction, merged["speaker"], before["speakers"]
     )
-    if not _same(expected, after_segments) or not _same(before["speakers"], after["speakers"]):
+    if not _same_passages(canonical, expected, after_segments) or not _same(
+        before["speakers"], after["speakers"]
+    ):
         return None
-    if not _same(current[ids.index(retained)], merged):
+    if not _same_passages(canonical, current[ids.index(retained)], merged):
         return None
     first = min(index, other)
     return retained, before_segments[first : first + 2]
 
 
-def _split_inverse(before, after, context, current, ids):
+def _split_inverse(before, after, context, current, ids, canonical=None):
     selected = context["segment_id"]
     if not isinstance(selected, str) or selected not in ids:
         return None
@@ -127,19 +183,25 @@ def _split_inverse(before, after, context, current, ids):
     split = split_passage_manual if policy == MANUAL_SPLIT_POLICY else split_passage
     expected = split(before_segments, selected, context["cursor"], context.get("split_time"))
     expected[index + 1]["id"] = right_id
-    if not _same(expected, after_segments) or not _same(before["speakers"], after["speakers"]):
+    if not _same_passages(canonical, expected, after_segments) or not _same(
+        before["speakers"], after["speakers"]
+    ):
         return None
     current_index = ids.index(selected)
     if (
         current_index + 1 >= len(ids)
         or ids[current_index + 1] != right_id
-        or not _same(current[current_index : current_index + 2], after_segments[index : index + 2])
+        or not _same_passages(
+            canonical,
+            current[current_index : current_index + 2],
+            after_segments[index : index + 2],
+        )
     ):
         return None
     return selected, [before_segments[index]], right_id
 
 
-def _delete_proof(before, after, context):
+def _delete_proof(before, after, context, canonical=None):
     selected = context["segment_id"]
     if not isinstance(selected, str) or not selected:
         return None
@@ -151,9 +213,9 @@ def _delete_proof(before, after, context):
     passage = before_segments[index]
     if not isinstance(passage.get("text"), str) or not isinstance(passage.get("speaker"), str):
         return None
-    if not _same(delete_passage(before_segments, selected), after_segments) or not _same(
-        before["speakers"], after["speakers"]
-    ):
+    if not _same_passages(
+        canonical, delete_passage(before_segments, selected), after_segments
+    ) or not _same(before["speakers"], after["speakers"]):
         return None
     return (
         selected,
@@ -176,8 +238,11 @@ def _restore_index(ids, left, right):
     return index if index < len(ids) and ids[index] == right else None
 
 
-def _candidates(db, recording_id, result_id, current, head_sequence, *, target=None):
+def _candidates(
+    db, recording_id, result_id, current, head_sequence, *, target=None, canonical=None
+):
     """Verify structural inverses in one newest-first scan with shared history budgets."""
+    canonical = Canonical() if canonical is None else canonical
     rows = db.execute(
         "SELECT m.id,m.predecessor_id,m.sequence,m.action,"
         "CASE WHEN length(CAST(m.context AS BLOB))<=1048576 THEN m.context END AS context,"
@@ -278,24 +343,26 @@ def _candidates(db, recording_id, result_id, current, head_sequence, *, target=N
             ):
                 deletion_history_unknown, limited = True, True
                 continue
-            before = _read_payload(before_row["payload"], before_row["payload_sha256"])
-            after = _read_payload(after_row["payload"], after_row["payload_sha256"])
+            # This row's texts are released with the row; the head's stay with the scan.
+            row_canonical = Canonical(canonical)
+            before = row_canonical.read(before_row["payload"], before_row["payload_sha256"])
+            after = row_canonical.read(after_row["payload"], after_row["payload_sha256"])
             before_ids, after_ids = _ids(before["segments"]), _ids(after["segments"])
             if row["action"] == "passage_merge":
-                inverse = _merge_inverse(before, after, context, segments, ids)
+                inverse = _merge_inverse(before, after, context, segments, ids, row_canonical)
                 if inverse is not None:
                     retained, parts = inverse
                     # The proven version itself is last, for History's Revert (ADR 0181).
                     merges.setdefault(retained, (parts, before_row["id"], after_row["id"]))
             elif row["action"] == "passage_split":
-                inverse = _split_inverse(before, after, context, segments, ids)
+                inverse = _split_inverse(before, after, context, segments, ids, row_canonical)
                 if inverse is not None:
                     retained, parts, right_id = inverse
                     splits.setdefault(
                         retained, (parts, before_row["id"], right_id, after_row["id"])
                     )
             elif row["action"] == "passage_delete":
-                proof = _delete_proof(before, after, context)
+                proof = _delete_proof(before, after, context, row_canonical)
                 if proof is None:
                     deletion_history_unknown, limited = True, True
                     continue
@@ -332,14 +399,19 @@ def options(store, recording_id, result_id, *, steps=False):
     """Proven passage undos; with steps, also the Undo last change/Redo blocks (ADR 0180)."""
     with store.connection() as db:
         db.execute("BEGIN")
-        current, head, payload = _read_current(store, db, recording_id, result_id)
+        canonical = Canonical()
+        current, head, payload = _read_current(
+            store, db, recording_id, result_id, canonical=canonical
+        )
         matches, splits, deletions, limited = _candidates(
-            db, recording_id, result_id, payload, head["sequence"]
+            db, recording_id, result_id, payload, head["sequence"], canonical=canonical
         )
         if steps:
             from . import change_undo
 
-            step_blocks = change_undo.options(store, db, recording_id, result_id, head, payload)
+            step_blocks = change_undo.options(
+                store, db, recording_id, result_id, head, payload, canonical=canonical
+            )
             # History's "Revert this change" offers exactly these proven versions (ADR 0181).
             step_blocks["revertible"] = [
                 {"kind": "merge", "segment_id": identifier, "version_id": proof[-1]}
@@ -416,8 +488,13 @@ def apply_restore(
         raise ValueError("Choose the exact deleted passage before restoring it.")
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        current, head, payload = _read_current(store, db, recording_id, result_id, revision)
-        _, _, deletions, _ = _candidates(db, recording_id, result_id, payload, head["sequence"])
+        canonical = Canonical()
+        current, head, payload = _read_current(
+            store, db, recording_id, result_id, revision, canonical=canonical
+        )
+        _, _, deletions, _ = _candidates(
+            db, recording_id, result_id, payload, head["sequence"], canonical=canonical
+        )
         proof = deletions.get(segment_id)
         if proof is None or proof["delete_version_id"] != delete_version_id:
             raise ValueError(
@@ -444,17 +521,17 @@ def apply_restore(
             reason=reason,
             working_choice=working_choice,
         )
-    recording = store.recording(recording_id)
-    store.snapshot_project(recording["project_id"])
-    recording["snapshot_error"] = store.snapshot_errors.get(recording["project_id"])
-    return recording
+    return store.saved_recording(recording_id)
 
 
 def _apply(store, recording_id, result_id, segment_id, revision, reason, *, working_choice, split):
     validate_revision(revision)
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        current, head, payload = _read_current(store, db, recording_id, result_id, revision)
+        canonical = Canonical()
+        current, head, payload = _read_current(
+            store, db, recording_id, result_id, revision, canonical=canonical
+        )
         merges, splits, _, _ = _candidates(
             db,
             recording_id,
@@ -462,6 +539,7 @@ def _apply(store, recording_id, result_id, segment_id, revision, reason, *, work
             payload,
             head["sequence"],
             target=("split" if split else "merge", segment_id),
+            canonical=canonical,
         )
         matches = splits if split else merges
         if segment_id not in matches:
@@ -491,7 +569,4 @@ def _apply(store, recording_id, result_id, segment_id, revision, reason, *, work
             reason=reason,
             working_choice=working_choice,
         )
-    recording = store.recording(recording_id)
-    store.snapshot_project(recording["project_id"])
-    recording["snapshot_error"] = store.snapshot_errors.get(recording["project_id"])
-    return recording
+    return store.saved_recording(recording_id)
