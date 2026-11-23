@@ -692,3 +692,53 @@ def test_v137_existing_v1_inventory_is_not_promoted_to_v2(package):
     expected = seal(root, {"format": "cbs-library-backup-v1", "originals": []})
     with pytest.raises(ValueError):
         portable.inspect_transport(root, expected_commit_sha256=expected)
+
+
+def _stat_like(info, **changes):
+    fields = {
+        name: getattr(info, name)
+        for name in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_mode")
+    }
+    fields["st_nlink"] = info.st_nlink
+    fields["st_file_attributes"] = getattr(info, "st_file_attributes", 0)
+    return SimpleNamespace(**(fields | changes))
+
+
+def test_b580_directory_size_is_not_a_witness(tmp_path):
+    # Live test, 23 November 2026: NTFS reported recording folders as size 0 before they were
+    # listed and 4096 afterwards, so every complete backup of a real library failed.
+    folder = tmp_path / "recording"
+    folder.mkdir()
+    (folder / "original.wav").write_bytes(b"audio")
+    info = folder.lstat()
+    portable._same_path(_stat_like(info, st_size=0), _stat_like(info, st_size=4096))
+    for change in (
+        {"st_mtime_ns": info.st_mtime_ns + 1},
+        {"st_ino": info.st_ino + 1},
+        {"st_dev": info.st_dev + 1},
+        {"st_ctime_ns": info.st_ctime_ns + 1},
+    ):
+        with pytest.raises(ValueError, match="filesystem witness"):
+            portable._same_path(_stat_like(info), _stat_like(info, **change))
+    # A regular file's size remains part of its witness.
+    file_info = (folder / "original.wav").lstat()
+    with pytest.raises(ValueError, match="filesystem witness"):
+        portable._same_path(_stat_like(file_info), _stat_like(file_info, st_size=6))
+
+
+def test_b580_listing_a_cold_directory_is_accepted(tmp_path, monkeypatch):
+    folder = tmp_path / "recording"
+    folder.mkdir()
+    (folder / "original.wav").write_bytes(b"audio")
+    original, calls = portable._node, []
+
+    def cold_then_listed(path, root, *, directory=False):
+        info = original(path, root, directory=directory)
+        calls.append(path)
+        if directory and len(calls) == 1:
+            return _stat_like(info, st_size=0)
+        return _stat_like(info, st_size=4096) if directory else info
+
+    monkeypatch.setattr(portable, "_node", cold_then_listed)
+    names, _ = portable._entries(folder, tmp_path, maximum=10, guard=None)
+    assert names == {"original.wav"} and len(calls) == 2
