@@ -1,14 +1,17 @@
 """Word-timing editor: start/end boxes for the word at the Text cursor (ADR 0195).
 
-Synthetic libraries only; no media, network or real library is used.
+Synthetic libraries and generated silent playback only.
 """
+
+import io
+import wave
 
 import pytest
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
 
-from cbs_transcriber.transcripts import normalize_segments
+from cbs_transcriber.transcripts import edit_manual_text_retaining_timing, normalize_segments
 
 pytestmark = pytest.mark.browser
 
@@ -51,6 +54,15 @@ def seed(local_app, text=TEXT, words=WORDS, *, end=3):
 
 def open_editor(page, local_app, **kwargs):
     store, rid, result_id = seed(local_app, **kwargs)
+    stream = io.BytesIO()
+    with wave.open(stream, "wb") as audio:
+        audio.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        audio.writeframes(bytes(8 * 16000 * 2))
+    silence = stream.getvalue()
+    page.route(
+        f"**/api/recordings/{rid}/media/audio",
+        lambda route: route.fulfill(content_type="audio/wav", body=silence),
+    )
     page.goto(local_app.url + f"/#/recordings/{rid}")
     passage = page.locator("#passage-0")
     passage.locator('[data-action="edit"]').click()
@@ -336,6 +348,95 @@ def test_spelling_fix_keeps_typed_times_and_removing_the_word_drops_them(page, l
     expect_word(editor, "1", "1.8", "“verden”")
 
 
+@pytest.mark.parametrize("delete_first", [True, False])
+def test_deleting_a_repeated_word_keeps_only_the_surviving_draft_time(
+    page, local_app, delete_first
+):
+    store, rid, result_id, editor = open_editor(
+        page,
+        local_app,
+        text="ord ord",
+        words=[
+            {"word": "ord", "start": 0, "end": 0.8},
+            {"word": "ord", "start": 1, "end": 1.8},
+        ],
+    )
+    caret(editor, 1)
+    first, _, _ = boxes(editor)
+    first.fill("0.15")
+    caret(editor, *(0, 4) if delete_first else (3, 7))
+    editor.locator("textarea").press("Delete")
+    caret(editor, 1)
+    if delete_first:
+        expect(page.locator("#toast")).to_contain_text("“ord” were removed")
+        expect_word(editor, "", "", "new or changed")
+    else:
+        expect_word(editor, "0.15", "0.8", "unsaved times")
+    editor.locator('[data-action="save-edit"]').click()
+    if delete_first:
+        expect(page.locator("#save-status")).to_contain_text("Some words have no verified timing")
+    else:
+        expect(page.locator("#save-status")).to_have_text("All changes saved")
+    word = store.result(rid, result_id)["segments"][0]["words"][0]
+    if delete_first:
+        assert word["start"] is None and word["end"] is None
+        assert not word.get("manual_timing")
+    else:
+        assert word["start"] == 0.15 and word["manual_timing"] is True
+
+
+def test_inserting_a_matching_word_before_preserves_the_actual_typed_occurrence(page, local_app):
+    store, rid, result_id, editor = open_editor(
+        page,
+        local_app,
+        text="ord mere",
+        words=[
+            {"word": "ord", "start": 0.1, "end": 0.8},
+            {"word": "mere", "start": 1, "end": 1.8},
+        ],
+    )
+    first, _, _ = boxes(editor)
+    caret(editor, 1)
+    first.fill("0.2")
+    caret(editor, 0)
+    page.keyboard.insert_text("ord ")
+    expect(editor.locator("textarea")).to_have_value("ord ord mere")
+    caret(editor, 1)
+    expect_word(editor, "", "", "new or changed")
+    caret(editor, 5)
+    expect_word(editor, "0.2", "0.8", "unsaved times")
+    editor.locator('[data-action="save-edit"]').click()
+    expect(page.locator("#save-status")).to_contain_text("Some words have no verified timing")
+    words = store.result(rid, result_id)["segments"][0]["words"]
+    assert words[0]["start"] is None and words[0]["end"] is None
+    assert not words[0].get("manual_timing")
+    assert words[1].get("manual_timing") and words[1]["start"] == 0.2
+
+
+def test_ambiguous_replacement_without_an_edit_range_drops_times(page, local_app):
+    _, _, _, editor = open_editor(
+        page,
+        local_app,
+        text="ord ord",
+        words=[
+            {"word": "ord", "start": 0, "end": 0.8},
+            {"word": "ord", "start": 1, "end": 1.8},
+        ],
+    )
+    caret(editor, 1)
+    first, _, _ = boxes(editor)
+    first.fill("0.15")
+    editor.locator("textarea").evaluate(
+        """node => {
+            node.value = 'ord';
+            node.dispatchEvent(new Event('input', { bubbles: true }));
+        }"""
+    )
+    expect(page.locator("#toast")).to_contain_text("could not be matched safely")
+    caret(editor, 1)
+    expect_word(editor, "", "", "new or changed")
+
+
 def test_draft_switch_guards_cover_typed_times(page, local_app):
     store, rid, result_id, editor = open_editor(page, local_app)
     first, _, _ = boxes(editor)
@@ -374,3 +475,54 @@ def test_passage_without_word_map_or_bounds_keeps_boxes_disabled(page, local_app
     editor = page.locator("#passage-0 .passage-editor")
     caret(editor, 6)
     expect_empty(editor, "no usable word timing")
+
+
+def test_rename_recording_preserves_open_text_and_word_time_draft(page, local_app):
+    store, rid, result_id, editor = open_editor(page, local_app)
+    revision = store.recording(rid)["revision"]
+    textarea = editor.locator("textarea")
+    caret(editor, len(TEXT))
+    textarea.press("!")
+    caret(editor, 6)
+    first, _, _ = boxes(editor)
+    first.fill("1.2")
+
+    page.locator("#recording-rename").click()
+    page.locator("#name-input").fill("Renamed synthetic recording")
+    page.locator("#name-input").press("Enter")
+    expect(page.locator("#recording-title")).to_have_text("Renamed synthetic recording")
+    assert store.recording(rid)["revision"] == revision
+
+    # Save without returning to the textarea first. The metadata response has
+    # replaced the parsed segment, while the same native draft remains open.
+    editor.get_by_role("button", name="Save passage").click()
+    expect(editor).to_have_count(0)
+    saved = store.result(rid, result_id)["segments"][0]
+    assert saved["text"] == "Hej verden i dag!"
+    assert saved["words"][1]["start"] == 1.2
+
+
+def test_newer_transcript_revision_cannot_silently_replace_a_timing_draft(page, local_app):
+    store, rid, result_id, editor = open_editor(page, local_app)
+    caret(editor, 6)
+    first, _, _ = boxes(editor)
+    first.fill("1.2")
+    before = store.recording(rid)
+    changed = before["segments"][:]
+    changed[0], _ = edit_manual_text_retaining_timing(changed[0], "Hej verden i dag igen")
+    newer = store.save_transcript(rid, changed, before["speakers"], before["revision"])
+    assert newer["revision"] > before["revision"]
+    history_count = len(store.result_versions(rid, result_id))
+
+    page.locator("#recording-rename").click()
+    page.locator("#name-input").fill("Renamed synthetic recording")
+    page.locator("#name-input").press("Enter")
+    expect(page.locator("#recording-title")).to_have_text("Renamed synthetic recording")
+
+    caret(editor, 6)
+    expect_empty(editor, "This passage changed while you were editing.")
+    editor.get_by_role("button", name="Save passage").click()
+    expect(page.locator("#toast")).to_contain_text("This passage changed while you were editing.")
+    expect(editor.locator("textarea")).to_have_value(TEXT)
+    assert store.recording(rid)["revision"] == newer["revision"]
+    assert len(store.result_versions(rid, result_id)) == history_count

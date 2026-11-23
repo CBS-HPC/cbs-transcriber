@@ -259,6 +259,22 @@ def test_stale_revision_and_extra_fields_are_refused(client):
     assert len(versions(store, current)) == 2
 
 
+def test_times_only_save_cannot_reactivate_a_stale_legacy_map(client):
+    store, current = seed(client)
+    segments = deepcopy(current["segments"])
+    segments[0].update(edited=True, word_timing=False, words_current=False)
+    current = store.save_transcript(
+        current["id"], segments, current["speakers"], current["revision"], action="manual_save"
+    )
+    text = segments[0]["text"]
+    before = versions(store, current)
+    response = save(client, current, text, [typed(text, "Hej", 0.1, 0.5)])
+    assert response.status_code == 400
+    assert "saved word mapping is stale" in response.json()["detail"]
+    assert store.recording(current["id"])["segments"] == current["segments"]
+    assert versions(store, current) == before
+
+
 def test_pure_helper_never_mutates_its_input_or_times_unnamed_words():
     original = passage("en to tre")
     before = deepcopy(original)

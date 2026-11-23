@@ -55,22 +55,49 @@ function wordTimeCodePoints(text) {
   return count;
 }
 
+function wordTimeSplitsSurrogate(text, position) {
+  if (position <= 0 || position >= text.length) return false;
+  const left = text.charCodeAt(position - 1),
+    right = text.charCodeAt(position);
+  return left >= 0xd800 && left <= 0xdbff && right >= 0xdc00 && right <= 0xdfff;
+}
+
 function wordTimeRecord(segment, editor) {
   let record = wordTimeDrafts.get(editor);
-  if (!record || record.segment !== segment) {
+  if (!record) {
     record = {
       segment,
+      owner: recordingContext(),
+      revision: state.recording.revision,
       draft: editor.querySelector(".passage-text-surface textarea").value,
       entries: [],
       composing: false,
       layout: null,
       current: null,
       key: "",
+      edit: null,
     };
     wordTimeDrafts.set(editor, record);
   }
   return record;
 }
+
+function wordTimeRecordMatches(record, segment) {
+  if (!record) return false;
+  const { epoch, id, result } = recordingContext();
+  // Metadata replies can replace a parsed segment without changing the transcript.
+  return (
+    record.owner.epoch === epoch &&
+    record.owner.id === id &&
+    record.owner.result === result &&
+    record.revision === state.recording.revision &&
+    record.segment.id === segment.id &&
+    record.segment.text === segment.text
+  );
+}
+
+const wordTimeStaleMessage =
+  "This passage changed while you were editing. Close and reopen the editor to see the new passage.";
 
 function wordTimeEntryDirty(entry) {
   const [start, end] = entry.values.map(wordTimeSeconds);
@@ -82,11 +109,60 @@ function wordTimeEntryDirty(entry) {
   );
 }
 
-// Keep typed times on their word while the text around it changes. An edit inside or
-// touching the word (a spelling fix, punctuation) keeps them on the corrected word;
-// removing or splitting it drops them, with a notice.
+// Find the extremes of an edit consistent with the two strings. Repeated text can
+// make a deletion or insertion fit at several positions.
+function wordTimeEditRanges(before, after) {
+  const limit = Math.min(before.length, after.length);
+  let prefix = 0,
+    suffix = 0;
+  while (prefix < limit && before[prefix] === after[prefix]) prefix++;
+  while (
+    suffix < limit &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  )
+    suffix++;
+  return [
+    [Math.min(prefix, limit - suffix), before.length - suffix],
+    [prefix, before.length - Math.min(suffix, limit - prefix)],
+  ];
+}
+
+function wordTimeNativeRange(edit, first, last, shift, length) {
+  if (!edit) return null;
+  let { start, end } = edit;
+  if (start === end && edit.type.startsWith("delete")) {
+    if (edit.type.endsWith("Backward")) start += shift;
+    else if (edit.type.endsWith("Forward")) end -= shift;
+  }
+  // Confirm that the observed replacement leaves the old prefix and suffix intact.
+  return start >= 0 &&
+    end <= length &&
+    start <= end &&
+    end - start + shift >= 0 &&
+    start <= last[0] &&
+    end >= first[1]
+    ? [start, end]
+    : null;
+}
+
+function wordTimeMove(entry, [head, tail], after, shift) {
+  const { start, end } = entry;
+  if (end < head || (end === head && wordTimeSeparated(after[end])))
+    return [start, end];
+  if (
+    start > tail ||
+    (start === tail && wordTimeSeparated(after[start + shift - 1]))
+  )
+    return [start + shift, end + shift];
+  return start <= head && tail <= end ? [start, end + shift] : [start, start];
+}
+
+// Keep the occurrence identified by the native edit. For changes without an
+// exact edit range, keep typed times only when both possible extremes agree.
 function trackWordTimes(record, value) {
   if (value === record.draft) return;
+  const edit = record.edit;
+  record.edit = null;
   record.layout = null;
   if (!record.entries.length) {
     record.draft = value;
@@ -94,40 +170,27 @@ function trackWordTimes(record, value) {
   }
   const before = Array.from(record.draft),
     after = Array.from(value),
-    limit = Math.min(before.length, after.length);
-  let prefix = 0;
-  while (prefix < limit && before[prefix] === after[prefix]) prefix++;
-  let suffix = 0;
-  while (
-    suffix < limit - prefix &&
-    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-  )
-    suffix++;
-  const shift = after.length - before.length,
-    tail = before.length - suffix,
+    shift = after.length - before.length,
+    [first, last] = wordTimeEditRanges(before, after),
+    known = wordTimeNativeRange(edit, first, last, shift, before.length),
     kept = [];
   for (const entry of record.entries) {
-    let { start, end } = entry;
-    if (end < prefix || (end === prefix && wordTimeSeparated(after[end]))) {
-      // Unchanged, before the edit.
-    } else if (
-      start > tail ||
-      (start === tail && wordTimeSeparated(after[start + shift - 1]))
-    ) {
-      start += shift;
-      end += shift;
-    } else if (start <= prefix && tail <= end) end += shift;
-    else end = start;
-    const word = after.slice(start, end).join(""),
+    const [start, end] = wordTimeMove(entry, known ?? first, after, shift),
+      [otherStart, otherEnd] = wordTimeMove(entry, known ?? last, after, shift),
+      ambiguous = start !== otherStart || end !== otherEnd,
+      word = after.slice(start, end).join(""),
       previous = kept[kept.length - 1];
     if (
+      ambiguous ||
       end <= start ||
       /\s/u.test(word) ||
       (previous && previous.end > start)
     ) {
       if (wordTimeEntryDirty(entry))
         toast(
-          `The times you typed for “${entry.word}” were removed, because the word was deleted or split.`,
+          ambiguous
+            ? `The times you typed for “${entry.word}” were removed, because the edited word could not be matched safely.`
+            : `The times you typed for “${entry.word}” were removed, because the word was deleted or split.`,
           true,
         );
       continue;
@@ -165,9 +228,15 @@ function wordTimeLayout(segment, record) {
       saved.offsets[word.char_start],
       saved.offsets[word.char_end],
     ]),
+    [first, last] = same
+      ? []
+      : wordTimeEditRanges(saved.characters, characters),
     unchanged = same
       ? ranges
-      : draftUnchangedRanges(segment, record.draft, ranges).words;
+      : draftUnchangedRanges(segment, record.draft, ranges).words.filter(
+          ([index]) =>
+            ranges[index][2] <= first[0] || last[1] <= ranges[index][1],
+        );
   let words = mergeWordTimeRanges(
     record.entries.map((entry) => ({
       start: entry.start,
@@ -206,15 +275,12 @@ function wordTimeLayout(segment, record) {
 
 function wordTimeTarget(textarea, layout) {
   const value = textarea.value,
-    { selectionStart: from, selectionEnd: to } = textarea,
-    high = (code) => code >= 0xd800 && code <= 0xdbff,
-    low = (code) => code >= 0xdc00 && code <= 0xdfff,
-    splits = (position) =>
-      position > 0 &&
-      position < value.length &&
-      high(value.charCodeAt(position - 1)) &&
-      low(value.charCodeAt(position));
-  if (splits(from) || splits(to)) return { reason: "between" };
+    { selectionStart: from, selectionEnd: to } = textarea;
+  if (
+    wordTimeSplitsSurrogate(value, from) ||
+    wordTimeSplitsSurrogate(value, to)
+  )
+    return { reason: "between" };
   const words = layout.words;
   let start = wordTimeCodePoints(value.slice(0, from)),
     end = start;
@@ -293,8 +359,9 @@ function refreshWordTimes(segment, editor) {
   const box = editor?.querySelector("[data-word-times]");
   if (!box) return false;
   const textarea = editor.querySelector(".passage-text-surface textarea"),
-    record = wordTimeRecord(segment, editor);
-  trackWordTimes(record, textarea.value);
+    record = wordTimeRecord(segment, editor),
+    current = wordTimeRecordMatches(record, segment);
+  if (current) trackWordTimes(record, textarea.value);
   const dirty = record.entries.some(wordTimeEntryDirty);
   if (passageTextSaving || timedWordSaving) return dirty;
   const inputs = [...box.querySelectorAll("[data-word-time]")],
@@ -302,7 +369,8 @@ function refreshWordTimes(segment, editor) {
   let word = null,
     problem = null,
     message = "";
-  if (!wordTimeBounded(segment))
+  if (!current) message = wordTimeStaleMessage;
+  else if (!wordTimeBounded(segment))
     message = "No word times: this passage has no start and end time.";
   else if (!editableTimedWords(segment))
     message =
@@ -349,7 +417,9 @@ function refreshWordTimes(segment, editor) {
 // message naming the word when a typed time is not valid, so nothing is sent.
 function wordTimesPayload(segment, editor, text) {
   const record = wordTimeDrafts.get(editor);
-  if (!record || record.segment !== segment) return [];
+  if (!record) return [];
+  if (!wordTimeRecordMatches(record, segment))
+    throw new Error(wordTimeStaleMessage);
   trackWordTimes(
     record,
     editor.querySelector(".passage-text-surface textarea").value,
@@ -398,6 +468,39 @@ function wordTimesPayload(segment, editor, text) {
     const segment = editor ? segmentFromNode(editor) : null;
     return editor && segment ? { editor, segment } : null;
   };
+  transcript.addEventListener("beforeinput", (event) => {
+    const input = event.target;
+    if (!input.matches?.(".passage-text-surface textarea")) return;
+    const found = editorOf(input),
+      record = found && wordTimeDrafts.get(found.editor);
+    if (
+      !record?.entries.length ||
+      !wordTimeRecordMatches(record, found.segment)
+    )
+      return;
+    record.edit = null;
+    const { value, selectionStart, selectionEnd } = input,
+      type = event.inputType;
+    if (
+      event.isComposing ||
+      record.draft !== value ||
+      !/^(?:insertText|insertFromPaste|insertLineBreak|insertParagraph|deleteByCut|deleteContent|delete.*(?:Backward|Forward))$/u.test(
+        type,
+      ) ||
+      wordTimeSplitsSurrogate(value, selectionStart) ||
+      wordTimeSplitsSurrogate(value, selectionEnd)
+    )
+      return;
+    const edit = {
+      start: wordTimeCodePoints(value.slice(0, selectionStart)),
+      end: wordTimeCodePoints(value.slice(0, selectionEnd)),
+      type,
+    };
+    record.edit = edit;
+    setTimeout(() => {
+      if (record.edit === edit) record.edit = null;
+    }, 0);
+  });
   transcript.addEventListener("input", (event) => {
     const input = event.target;
     if (
@@ -409,7 +512,7 @@ function wordTimesPayload(segment, editor, text) {
     const found = editorOf(input),
       record = found && wordTimeDrafts.get(found.editor),
       word = record?.current;
-    if (!word || record.segment !== found.segment) return;
+    if (!word || !wordTimeRecordMatches(record, found.segment)) return;
     if (!word.entry) {
       word.entry = {
         start: word.start,
@@ -432,7 +535,10 @@ function wordTimesPayload(segment, editor, text) {
     const found = editorOf(textarea);
     if (!found || passageTextSaving || timedWordSaving) return;
     const record = wordTimeDrafts.get(found.editor);
-    if (record?.segment === found.segment && record.draft !== textarea.value)
+    if (
+      wordTimeRecordMatches(record, found.segment) &&
+      record.draft !== textarea.value
+    )
       refreshPassageDraft(found.segment, found.editor);
     else refreshWordTimes(found.segment, found.editor);
   };

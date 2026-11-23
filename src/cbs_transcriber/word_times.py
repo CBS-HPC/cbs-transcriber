@@ -6,7 +6,12 @@ this module only composes that module's unchanged text policy and single-word ti
 
 from bisect import bisect_right
 
-from .transcripts import _complete_words, edit_manual_text_retaining_timing, edit_timed_word
+from .transcripts import (
+    _complete_words,
+    edit_manual_text_retaining_timing,
+    edit_timed_word,
+    word_mapping_current,
+)
 
 MAX_TYPED_WORD_TIMES = 1000
 _TYPED_TIME_MISMATCH = (
@@ -30,6 +35,10 @@ def edit_text_and_word_times(segment, text, word_times):
     text_changed = edited.get("text") != segment.get("text")
     if not word_times:
         return edited, warning, text_changed, []
+    # A text edit may produce a new current map. A timing-only edit cannot
+    # use the manual flag to revive stale timings from a legacy rewrite.
+    if not word_mapping_current(edited):
+        raise ValueError("The saved word mapping is stale. Restore or add word timing first.")
     passage_text, words = edited.get("text"), edited.get("words")
     if not isinstance(passage_text, str) or not isinstance(words, list):
         raise ValueError("The saved word mapping no longer matches the passage text.")
