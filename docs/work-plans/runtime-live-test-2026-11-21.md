@@ -1,7 +1,9 @@
 # CBS Runtime controlled live test — plan for the user's approval (21 November 2026)
 
-Nothing in this plan has run. Each step marked **approval** needs the user's explicit OK in
-chat at the time; a yes to one step does not cover the next.
+The separate test app is running. On 23 November its read-only Check reported that base Runtime
+preparation is needed. Each step marked **approval** needs the user's explicit OK in chat at the
+time. Verify the exact folder, lock and owner state again before any preparation.
+[Offline guard verification](../verification-2026-11-23-runtime-reader-guard.md).
 
 ## Starting point (verified 20 November)
 

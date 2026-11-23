@@ -125,6 +125,13 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   Fresh singleton generic-curated failures, historical generic failures, uncertain submissions
   and cleanup-only obligations remain manual. Live missing-output Retry remains unverified.
 
+- [ ] **Runtime preparation and lifecycle acceptance.** The local rc3 candidate includes B581,
+  which treats a matching suspended legacy job as a possible reader at preparation admission.
+  Its scoped synthetic gates pass. The full-profile Windows test app reported base preparation
+  needed in a read-only check. Controlled paid preparation and a real small batch await approval.
+  Audit the broader effect of resumable states on preparation ownership, capacity, Stop and cleanup
+  separately. [Guard verification](docs/verification-2026-11-23-runtime-reader-guard.md).
+
 - [ ] **Isolated Runtime recovery (T144), authorized stability work.** Stage1 on
   `codex/mvp-v2-runtime-generations` from reviewed observation checkpoint `857a727` implements
   only bounded registry/selection/path data and candidate CAS, default disabled; [46 distinct
