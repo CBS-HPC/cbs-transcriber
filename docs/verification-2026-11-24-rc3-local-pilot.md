@@ -64,3 +64,21 @@ One test server exceeded its teardown limit after the first-use case. Waiting
 for setup readiness exposed an obsolete hidden-form expectation after clearing
 the key. The test now verifies the documented reminder and passed a clean
 isolated rerun. The running pilot still serves the earlier wheel.
+
+## Passage Undo and Redo follow-up
+
+The local colleague candidate adds **Undo / Redo** to a passage row. It steps
+through verified text, word-time and eligible speaker-assignment edits. The
+recording toolbar and Restore original stay available. Structural edits and
+other changes without a proven passage scope bound the row history.
+
+The focused gate passed 64 backend cases and seven Chromium cases in the MVP
+profile. The new browser case interleaves saves in two passages, then walks two
+Undo and two Redo steps in one row. The other row keeps its saved edit. The
+first browser run caught a row closure after a successful undo. B591 fixes the
+continuation by following the editor token from the committed view. The final
+gate also covers stale and late replies, draft safety and word-time Undo.
+
+These results apply to source on `codex/rc3-passage-history-20261124`. The
+local wheel and running preview still use the earlier package above. Build and
+fresh Windows installation of this follow-up remain pending.

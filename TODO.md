@@ -811,10 +811,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   decision exposes all three in MVP v2 and keeps the per-passage controls as well. Code is
   implemented and the rc2 package preserves that profile; broader real-user/history workflow
   acceptance remains separate. The earlier pending-choice/hidden-MVP description is obsolete.
-  **Passage Undo/Redo follow-up, 24 November.** Step through the selected passage's saved
-  changes while preserving edits elsewhere. Use action labels consistent with the recording
-  toolbar and keep Restore original as a separate action. Reuse result history and define
-  safe boundaries around split, merge or deletion before extending the passage history.
+  **Passage Undo/Redo follow-up, 24 November — implemented locally (T166, ADR 0196).**
+  The row controls walk saved text, word-time and eligible speaker-assignment changes while
+  preserving edits in other passages. Split, merge and deletion bound that history. Labels
+  match the recording toolbar. Restore original stays available as a separate action. Include
+  this in the next colleague build after the held rebuild and fresh-install checks.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.

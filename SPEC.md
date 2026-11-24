@@ -162,6 +162,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
+- I.passage-change-steps: GET and POST …/transcripts/{result}/segments/{passage}/change-steps[/undo or /redo]
+  read or apply the next saved step for one passage. Apply requires result, head version, revision
+  and offered version. Reuse the Working edit choice and return the saved recording.
 - I.change-undo: the same merge-undo-options reply carries `head_version_id` plus `undo` and
   `redo` blocks (action, version, counts, confirm, or an unavailable message) when the
   `undo_last_change` feature is on. POST transcripts/{rid}/undo-last and redo-last bind
@@ -350,6 +353,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V274: Passage Undo/Redo walks recent, proven single-passage saves. Other passages and shared
+  speaker names keep their exact current values. A new save of this passage clears its redo.
+  Structural or unproven history bounds the walk. Undo/Redo append revision-fenced versions.
+  Drafts and stale views cannot apply a step. Read scoped history only on demand (ADR 0196).
 - V273: Project recording lists use one request-owned read transaction for the project,
   the ordered recording rows, export eligibility and source readiness. Use the bounded
   cache/job decoder and restored-owner exclusion on that same snapshot. Preserve the
@@ -2317,6 +2324,7 @@ T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review,
 T163|x|Derived Uncertain/Timing missing review dropdown on codex/night-review-dropdown-20261120 (9b56e20): separate Review suggested tag retired; current-content manual marks win, no derived writes, native controls and existing filters retained;58 focused browser passes with exact source hashes and explicitly qualified cached Spylls host/child imports; local integration only, final composition gates separate, no app reload|V257,V243,V223,V192,ADR0191
 T164|x|Word-timing editor (07d9bbd and B585, local rc3 composition): Start/End boxes for the word at the Text cursor replace the word dropdown; typed times are part of the passage draft and save with the text through edit-v4 as one version that Undo restores; Cancel discards both; conservative caret/selection/one-grapheme rules; synthetic backend and Chromium browser checks pass; real IME, screen reader, Mac/Firefox and real-user acceptance pending|V272,V190,V59,V149,ADR0166,ADR0180,ADR0195
 T165|x|Project recording-list readiness uses one read-only SQLite snapshot. Mixed-state wire parity and connection-count gate pass. On 1,204 synthetic recordings, HTTP API calls took 0.41–0.60 s versus 10.91–12.63 s with the same canonical response. Matched Chromium verification at the same scale took a median 1.38 s to enabled controls and every card, versus 8.59 s earlier. Real-device and larger-library acceptance remain open|V273,V138,B586
+T166|x|Add multi-step passage Undo/Redo to the local colleague candidate. Prove scoped steps, concurrent refusals, structure boundaries and recording-toolbar coexistence in backend and Chromium checks|V274,V224,V185,V186,I.passage-change-steps,ADR0196
 
 ## §B Bug memory
 
@@ -2480,3 +2488,4 @@ B587|2026-11-24|The pinned synchronous WebSocket connector could follow redirect
 B588|2026-11-24|The isolated Library dialog browser fixture treated the old backup listing request as a pending capture and lacked the UUID API used by Activity task creation|V259,V264,ADR0192. Provide a synthetic UUID and require the pending task POST before checking ownership of the disabled controls. Existing refusal assertions still run.
 B589|2026-11-24|First-use UCloud Save skipped the Settings model selection and enabled every native preset|V213,ADR0126. Save the native catalog defaults through the existing version-checked selection API. Verify the saved flags in the first-use browser test.
 B590|2026-11-24|The first-use browser test checked the hidden form immediately after reload and expected it to stay hidden after clearing the key|V213,ADR0171. Wait for setup readiness and verify the reminder returns after key removal.
+B591|2026-11-24|The first saved passage Undo closed its row controls. The continuation checked the editor token from before its own successful save, which had already advanced|V274,ADR0196. Capture the committed view after the accepted save. The Chromium regression walks two Undo and two Redo steps without closing the controls or reverting an edit elsewhere.

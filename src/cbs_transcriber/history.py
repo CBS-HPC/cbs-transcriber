@@ -33,6 +33,8 @@ EDIT_ACTIONS = {
     # Undo last change / Redo (ADR 0180): server-recorded exact predecessor restorations.
     "change_undo",
     "change_redo",
+    "passage_change_undo",
+    "passage_change_redo",
 }
 EDIT_CONTEXT = {
     "segment_id",

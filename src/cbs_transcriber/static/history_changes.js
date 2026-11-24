@@ -9,6 +9,8 @@ const historyChangeNames = {
   manual_save: "Text edit",
   word_timing_edit: "Word timing edit",
   original_restore: "Restore original",
+  passage_change_undo: "Passage undo",
+  passage_change_redo: "Passage redo",
   passage_speaker: "Speaker change",
   speaker_rename: "Speaker rename",
   passage_merge: "Merge",

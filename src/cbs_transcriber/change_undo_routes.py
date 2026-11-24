@@ -5,10 +5,13 @@ save refuses with 409 so the button relabels to the new newest change. The relea
 guards these routes as new work for the undo_last_change feature (ADR 0145).
 """
 
+from functools import partial
+from typing import Literal
+
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import change_list, change_undo, version_graph
+from . import change_list, change_undo, passage_change_steps, version_graph
 
 
 class StepWorkingChoice(BaseModel):
@@ -53,6 +56,30 @@ def install(app, store):
     @app.post("/api/recordings/{identifier}/transcripts/{result_id}/redo-last")
     def redo_last_change(identifier: str, result_id: str, body: ChangeStep):
         return step(change_undo.redo, identifier, result_id, body)
+
+    @app.get(
+        "/api/recordings/{identifier}/transcripts/{result_id}/segments/{segment_id}/change-steps"
+    )
+    def passage_steps(identifier: str, result_id: str, segment_id: str):
+        app.state.profile.require("undo_last_change")
+        try:
+            return passage_change_steps.options(store, identifier, result_id, segment_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.post(
+        "/api/recordings/{identifier}/transcripts/{result_id}/segments/{segment_id}/change-steps/{kind}"
+    )
+    def passage_step(
+        identifier: str,
+        result_id: str,
+        segment_id: str,
+        kind: Literal["undo", "redo"],
+        body: ChangeStep,
+    ):
+        app.state.profile.require("undo_last_change")
+        operation = partial(passage_change_steps.apply, segment_id=segment_id, kind=kind)
+        return step(operation, identifier, result_id, body)
 
     @app.get("/api/recordings/{identifier}/transcripts/{result_id}/versions/{version_id}/changes")
     def version_changes(
