@@ -11,6 +11,7 @@ from admission_support import checked_connection
 from browser_provider_support import mock_native_check
 
 from cbs_transcriber import native_batch, providers, ucloud_native
+from cbs_transcriber.media import Cancelled
 
 NATIVE_KEY = "synthetic-ucloud-key"
 NATIVE_SERVER = "https://cloud.sdu.dk"
@@ -98,7 +99,12 @@ def mock_native_runs(monkeypatch, respond):
         commit(worker.store, job, recording, settings)
 
     def run_batch(worker, job, *, reconnect=None):
-        """Settle one shared allocation as a successful import of every member would."""
+        """Settle one shared allocation as a successful import of every member would.
+
+        Like the real coordinator (ADR 0183), an early selection's batch imports nothing until
+        every selected file has an admission outcome, and then only its admitted members:
+        a file still being admitted has no accepted receipt for its result to match.
+        """
         assert reconnect is None
         store = worker.store
         batch = native_batch.batch_for_job(store, job)
@@ -106,7 +112,12 @@ def mock_native_runs(monkeypatch, respond):
             return
         settings = providers.Settings.model_validate(batch["params"]["settings"])
         assert worker.credentials.get(providers.credential_scope(settings)) == NATIVE_KEY
-        for member in batch["members"]:
+        while not native_batch.sealed(batch):
+            worker.cancel_event.wait(0.05)
+            if worker.cancel_event.is_set() or worker.stopping.is_set():
+                raise Cancelled()
+            batch = store.native_batch(batch["id"])
+        for member in native_batch._surviving_members(store, batch):
             child = store.job(member["job_id"])
             if child["state"] == "completed":
                 continue

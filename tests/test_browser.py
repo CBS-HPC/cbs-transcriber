@@ -1139,9 +1139,13 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(choices).to_have_count(
         len([m for m in ucloud_models() if runtime_offered or m.get("engine") != "whisperx"])
     )
+    # Fresh connections enable Turbo and Parakeet (ADR 0126, 24 November amendment).
+    expect(page.locator('[data-enabled-model="nvidia/parakeet-tdt-0.6b-v3"]')).to_be_checked()
+    expect(page.locator('[data-enabled-model="large-v3"]')).not_to_be_checked()
     for model in ("large-v3", "large-v3-turbo", "small"):
         page.locator(f'[data-enabled-model="{model}"]').check()
-    page.locator('[data-enabled-model="small"]').uncheck()
+    for model in ("small", "nvidia/parakeet-tdt-0.6b-v3"):
+        page.locator(f'[data-enabled-model="{model}"]').uncheck()
     enabled = choices.evaluate_all(
         "items => items.filter(i => i.checked).map(i => i.dataset.enabledModel)"
     )
@@ -1155,8 +1159,9 @@ def test_browser_provider_tabs_project_storage_and_policy(
         "synthetic-ucloud-key"
     )
     expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
+    # The connection's default model (Turbo) is listed first.
     expect(page.locator("#bulk-provider option")).to_have_text(
-        ["whisper/large-v3 (Transcriber)", "whisper/large-v3-turbo (Transcriber)"]
+        ["whisper/large-v3-turbo (Transcriber)", "whisper/large-v3 (Transcriber)"]
     )
     expect(page.locator("#bulk-provider")).not_to_contain_text("whisper/small")
     page.locator("#settings-open").click()
@@ -1184,7 +1189,13 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#provider-policy-summary")).to_have_text(
         "Allowed for Standard and Protected projects."
     )
-    deny_protected(app.state.store, page.locator("#settings-provider").input_value())
+    # Deny Protected for Large-v3 only. Turbo, the fresh default, stays allowed.
+    large = next(
+        p
+        for p in public_profiles(app.state.store, app.state.credentials)["providers"]
+        if p["provider_type"] == "ucloud" and p["model"] == "large-v3"
+    )
+    deny_protected(app.state.store, large["id"])
     page.get_by_role("button", name="Close settings").click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
     page.reload()
@@ -1285,7 +1296,7 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#bulk-provider-kind option")).to_have_count(1)
     expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
     expect(page.locator("#bulk-provider option")).to_have_text(
-        ["whisper/large-v3 (Transcriber)", "whisper/large-v3-turbo (Transcriber)"]
+        ["whisper/large-v3-turbo (Transcriber)", "whisper/large-v3 (Transcriber)"]
     )
     for kind in ("openai", "custom", "ucloud-vllm"):
         expect(page.locator(f'#bulk-provider-kind option[value="{kind}"]')).to_have_count(0)

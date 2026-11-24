@@ -81,7 +81,8 @@ def test_browser_token_first_native_presets_and_cleanup(page, local_app, monkeyp
         "large-v3",
     ]:
         checkbox = page.locator(f'[data-enabled-model="{model}"]')
-        if model == "large-v3":
+        # Fresh connections enable Turbo and Parakeet (ADR 0126, 24 November amendment).
+        if model in {"large-v3-turbo", "nvidia/parakeet-tdt-0.6b-v3"}:
             expect(checkbox).to_be_checked()
         else:
             expect(checkbox).not_to_be_checked()
@@ -105,7 +106,7 @@ def test_browser_token_first_native_presets_and_cleanup(page, local_app, monkeyp
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator("#api-key")).to_have_value("")
     expect(page.locator("#native-cleanup")).to_be_checked()
-    expect(page.locator("#native-model-choice")).to_have_value("large-v3")
+    expect(page.locator("#native-model-choice")).to_have_value("large-v3-turbo")
     screenshot = Path("test-results/ucloud-token-first.png")
     screenshot.parent.mkdir(exist_ok=True)
     page.screenshot(path=str(screenshot))

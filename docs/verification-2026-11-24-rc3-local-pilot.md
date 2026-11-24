@@ -148,3 +148,26 @@ and 20 Chromium, 2 min). The word-times editor, result-trash, Hugging Face Activ
 first-use modules (61 Chromium cases) and four further Settings modules passed. The new B596 regression
 fails on the unfixed file. These results qualify source, not the installed
 `d993fcc` wheel, which stays loaded until a rebuild is agreed.
+
+## Full gate on d5454cc
+
+Three lanes, 1 h 34 min, same interpreter, plugins and deselected main-only
+profile case as the earlier gate. Backend: 7,125 passed and 26 skipped of
+7,151 (two lanes, no failures). Chromium: 759 passed, 4 failed and 1 teardown
+error of 763.
+
+- Three failures were provider journeys still asserting the earlier
+  fresh-connection defaults (B599, test-only). They now assert Turbo and
+  Parakeet, with Turbo listed first.
+- The pending-video playback handoff case timed out once and passed in the
+  focused rerun.
+- The language-save teardown error recurred. It has now appeared in both full
+  gates and two 20-node sessions, but not in 22 smaller runs, including three
+  20-node sessions with a thread-dump plugin. Its cause is still open; the
+  test body passes each time.
+- B600 corrects the native batch mock behind the intermittent speaker-label
+  failure. A forced delay of the second inspection fails 3 of 3 with the old
+  mock and passes 3 of 3 with the fix.
+
+After B599 and B600, `test_browser.py`, provider setup, feature controls and
+playback handoff (51 Chromium cases) passed.

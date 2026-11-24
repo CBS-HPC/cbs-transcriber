@@ -343,8 +343,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     and rc3 regressions B596/B597 (plus stale B598), fixed in source. All 25 nodes pass.
   - [ ] Rebuild the rc3 wheel from the fixed candidate, repeat the fresh isolated install
     and update the pilot guide's "next pilot build" wording; held until the user agrees.
-  - [ ] Root-cause the intermittent "Working authority differs from its admission" failure
-    in speaker-label follow-ups (also on main).
+  - [x] Root-cause the intermittent "Working authority differs from its admission" failure
+    in speaker-label follow-ups: a test-only native batch mock imported a file still being
+    admitted (B600). Real batches wait for sealing; the mock now does too.
+  - [ ] Root-cause the intermittent browser-test teardown where the language-save case's
+    server is still running 10 s after stop (both full gates; not in 22 smaller runs).
   - [ ] Complete real-device/provider/backup/NVivo acceptance. A fresh monolithic full-suite
     run on the exact packaged RC remains distinct from the documented layered verification.
 
