@@ -12113,14 +12113,14 @@ function jobActions(job) {
     return `<button class="button" data-local-delete="${h(item.id)}" ${item.busy || pendingLocalCleanup.has(item.id) ? "disabled" : ""}>${item.committed ? "Retry local cleanup" : "Retry file recovery"}</button>`;
   }
   if (job.input_preparation) return inputPreparationActions(job);
-  if (job.remote_release?.kind === "deletion") return remoteReleaseActions(job);
+  if (job.remote_release) return remoteReleaseActions(job);
   if (job.runtime_batch) return runtimeBatchActions(job);
   let actions = "";
   if (
-    job.ucloud_cleanup_state === "pending" &&
+    (job.ucloud_cleanup_state === "pending" || job.ucloud_batch_discardable) &&
     !["queued", "running"].includes(job.state)
   )
-    actions += `<p class="settings-note">Remote cleanup is pending${job.ucloud_cleanup_error ? `: ${h(job.ucloud_cleanup_error)}` : "; removal could not be verified."}</p><button class="button" data-cleanup="${job.id}">Retry remote cleanup</button>`;
+    actions += `<p class="settings-note">${job.ucloud_cleanup_state === "pending" ? `Remote cleanup is pending${job.ucloud_cleanup_error ? `: ${h(job.ucloud_cleanup_error)}` : "; removal could not be verified."}` : "Some transcripts have not been saved."}</p><button class="button" data-cleanup="${job.id}"${job.ucloud_batch_id ? " data-native-cleanup" : ""}>Retry remote cleanup</button>`;
   if (job.ucloud_cleanup_state === "trashed")
     actions +=
       '<span class="field-note">UCloud run files moved to UCloud Trash. Empty Trash in UCloud to free the space.</span>';
@@ -12158,7 +12158,7 @@ function remoteReleaseActions(job) {
       `<button class="button" data-release-action="${action}" data-release-kind="${h(release.owner_kind)}" data-release-owner="${h(release.id)}">${label}</button>`;
   if (["trashed", "deleted"].includes(release.cleanup_state))
     return '<span class="field-note">UCloud run files moved to UCloud Trash. Empty Trash in UCloud to free the space.</span>';
-  let actions = `<p class="settings-note">${h(job.ucloud_cleanup_error || (release.waiting_for_stop ? "Waiting for the UCloud job to stop before cleanup." : "Local data deleted; UCloud cleanup is pending."))}</p>`;
+  let actions = `<p class="settings-note">${h(job.ucloud_cleanup_error || (release.waiting_for_stop ? "Waiting for the UCloud job to stop before cleanup." : release.kind === "discard" ? "Batch discarded. UCloud cleanup is pending." : "Local data deleted; UCloud cleanup is pending."))}</p>`;
   if (release.can_retry) actions += button("retry", "Retry remote cleanup");
   if (release.submission_uncertain)
     actions +=
@@ -12967,10 +12967,26 @@ $("#jobs").addEventListener(
       absent = event.target.closest("[data-no-allocation]"),
       cleanup = event.target.closest("[data-cleanup]");
     if (cleanup) {
-      const result = await api(
-        `/jobs/${cleanup.dataset.cleanup}/cleanup-ucloud`,
-        { method: "POST" },
-      );
+      const path = `/jobs/${cleanup.dataset.cleanup}/cleanup-ucloud`;
+      let result = await api(path, {
+        method: "POST",
+        ...(cleanup.hasAttribute("data-native-cleanup") ? { body: {} } : {}),
+      });
+      const preview = result.discard_preview;
+      if (preview) {
+        if (
+          !confirm(
+            `Discard unsaved outputs for ${preview.unsaved_count} of ${preview.unsaved_count + preview.saved_count} recordings? ` +
+              `The working folder for UCloud job ${preview.remote_job_id} will move to Trash. ` +
+              "Saved transcripts and original recordings on this computer will be kept.",
+          )
+        )
+          return;
+        result = await api(path, {
+          method: "POST",
+          body: { discard_fingerprint: preview.fingerprint },
+        });
+      }
       toast(
         result.cleanup_state === "pending"
           ? "Remote cleanup is pending; see Activity for the reason."

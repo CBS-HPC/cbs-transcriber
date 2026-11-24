@@ -95,3 +95,21 @@ one mocked Stop. An earlier failed attempt did not replace the cancelled one.
 The test also checks dismissal and reload. The existing retained cleanup case
 passed after scoping its locator to the group summary (B593). Provider calls
 were mocked. The earlier rc3 wheel remains the loaded pilot.
+
+## Confirmed cleanup of an ended native batch
+
+T168 and ADR 0197 add a saved/unsaved count and explicit confirmation to
+**Retry remote cleanup** when a verified ended native batch has unsaved
+outputs. The confirmation keeps local recordings, results, original response
+files and versions. Only the exact UCloud working folder is moved to Trash
+and verified there. The old Retry is closed and the resolved Activity item
+can be cleared. No live UCloud action was taken for this change.
+
+Three focused backend cases and six distinct Chromium cases passed with
+synthetic libraries and mocked provider responses. The new backend case
+proves the side-effect-free preview, stale fingerprint refusal, suspended
+remote refusal, saved output preservation, protected cleanup scope and
+idempotent release replay. The Chromium test verifies both dismissal and
+confirmation, the unsaved count and the resolved Activity state. Its first
+run raced the asynchronous dialog. B595 fixes the locator timing only. The
+running preview uses the earlier package.

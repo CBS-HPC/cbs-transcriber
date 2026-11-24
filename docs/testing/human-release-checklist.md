@@ -126,6 +126,17 @@ the user's approval each time; checks marked **later** belong to features still 
   recordings in the batch keep their own status.
 - **Status:** Not run in the packaged pilot.
 
+### H11b · Confirmed remote cleanup of an ended batch
+
+- **Do:** In a disposable pilot batch with unsaved outputs you can discard, choose **Retry
+  remote cleanup**. Review and dismiss the warning first. Confirm only when you intend to
+  discard those outputs and the working folder.
+- **Pass when:** The warning identifies the exact job and unsaved count. Declining keeps
+  recovery available. Confirmation keeps local originals and saved results, and the exact
+  batch folder moves to UCloud Trash when the job is verified ended. The resolved card can
+  be cleared from Activity.
+- **Status:** Not run in the packaged pilot.
+
 ### H12 · Delete a recording that is in a running batch (paid)
 
 - **Do:** Delete one file of a running batch and confirm the impact warning.

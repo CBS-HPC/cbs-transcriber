@@ -353,6 +353,11 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V276: Explicit discard of unsaved native batch outputs (ADR 0197) requires a fresh exact
+  preview, an owner reservation and a durable confirmation before Trash. Validate the frozen
+  batch folder and new remote ID/name/final-state observation on every cleanup attempt.
+  Preserve local results, originals, and raw artifacts. A confirmed discard fences old Retry.
+  Pending Trash stays visible and replays idempotently. Standard cleanup keeps save-first.
 - V275: A ready recording without a saved transcript shows Failed - See Activity when its
   latest transcription attempt failed and its Activity entry remains visible. Use each file's
   outcome in grouped batches. A newer attempt, cancellation, or dismissal clears the old
@@ -2332,6 +2337,8 @@ T166|x|Add multi-step passage Undo/Redo to the local colleague candidate. Prove 
 
 T167|x|Show an actionable transcription failure on the project recording card and clear it when Activity resolves it|V275,V105,V162
 
+T168|x|Allow Retry remote cleanup to prompt before discarding unsaved native batch outputs on a known ended allocation|V276,V275,V105,V86,ADR0197
+
 ## §B Bug memory
 
 Historical entries B1–B354 are preserved verbatim in the [bug archive](docs/archive/SPEC-bugs-archive-2026-11.md). Continue numbering after the latest entry below; historical gaps are retained.
@@ -2497,3 +2504,5 @@ B590|2026-11-24|The first-use browser test checked the hidden form immediately a
 B591|2026-11-24|The first saved passage Undo closed its row controls. The continuation checked the editor token from before its own successful save, which had already advanced|V274,ADR0196. Capture the committed view after the accepted save. The Chromium regression walks two Undo and two Redo steps without closing the controls or reverting an edit elsewhere.
 B592|2026-11-24|Project recording cards fell back to media readiness after a transcription failed, even though Activity showed the failure|V275. Use the latest visible per-file failure from the accepted Activity poll. The synthetic batch test proves cancellation and dismissal restore readiness without reopening the project.
 B593|2026-11-24|The retained Activity browser check matched each nested job Details summary as well as the group summary|V105. Scope the check and click to the group summary and retain the cleanup action assertions.
+B594|2026-11-24|A native batch with two persistently unreadable outputs stayed pending because Retry remote cleanup always required saved transcripts|V276,ADR0197. Offer a separate loss warning inside the cleanup action, bind explicit confirmation to the exact ended owner and keep existing local artifacts.
+B595|2026-11-24|The discard-prompt browser case asserted its captured message before the asynchronous cleanup response could dispatch the dialog|Wait for the dialog event before asserting its text. Keep the decline/accept and settled Activity assertions.

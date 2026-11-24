@@ -453,6 +453,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Project recording cards now show visible per-file transcription failures in the local rc3
   follow-up (T167). Confirm the failed badge and reset after cancellation or dismissal in the
   [pilot checklist](docs/testing/human-release-checklist.md#h11a--failed-transcription-on-the-project-page).
+  The local rc3 follow-up adds a confirmed discard path for an ended native batch whose
+  outputs cannot be imported (T168). Keep the ordinary save-first cleanup and add the
+  discard prompt to the colleague candidate after verification. Missing-output automatic
+  resubmission and broader cleanup remain separate work.
 - [ ] **Task dependency composition audit.** Media preparation and original-backed native
   transcription are intentionally independent; the current twelve-file overlap has a healthy
   local checkpoint and source review found no conflicting-write defect. Complete combined

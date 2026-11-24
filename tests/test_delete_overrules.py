@@ -724,3 +724,61 @@ def test_runtime_lane_reevaluates_retained_obligations_at_startup(tmp_path, monk
         finally:
             queue.stop()
     assert seen[0] == (store, queue)
+
+
+def test_native_cleanup_confirmation_releases_only_the_failed_batch(client, remote):
+    store = client.app.state.store
+    project, recordings, identifier, folder = native_owner(client, state="cancelled")
+    first, second = store.native_batch(identifier)["members"]
+    saved = store.add_result(
+        first["recording_id"],
+        normalize_segments([{"text": "Saved", "start": 0, "end": 1}]),
+        {},
+        "Saved",
+        {},
+        job_id=first["job_id"],
+    )
+    store.update_job(first["job_id"], state="completed")
+    native_output = native_batch._raw_path(store, first)
+    native_output.parent.mkdir(parents=True, exist_ok=True)
+    native_output.write_bytes(b"synthetic previously saved response")
+    endpoint = f"/api/jobs/{second['job_id']}/cleanup-ucloud"
+    before = store.native_batch(identifier)
+    preview = client.post(endpoint, json={}).json()["discard_preview"]
+    assert preview["unsaved_count"] == preview["saved_count"] == 1
+    assert preview["remote_job_id"] == "native-remote-job"
+    assert store.native_batch(identifier) == before
+    assert remote.retrieved == remote.trashed == []
+    assert client.post(endpoint, json={"discard_fingerprint": "0" * 64}).status_code == 400
+    assert store.native_batch(identifier) == before
+
+    def retrieve(job_id):
+        remote.retrieved.append(job_id)
+        return {
+            "id": job_id,
+            "status": {"state": remote.state},
+            "specification": {"name": f"CBS Transcriber batch {identifier}"},
+        }
+
+    remote.retrieve_job = retrieve
+    confirm = {"discard_fingerprint": preview["fingerprint"]}
+    remote.state = "SUSPENDED"
+    response = client.post(endpoint, json=confirm)
+    assert response.json()["cleanup_state"] == "pending", response.text
+    assert remote.trashed == remote.terminated == []
+    assert store.job(second["job_id"])["state"] == "cancelled"
+    assert (
+        client.post(f"/api/jobs/{second['job_id']}/retry", json={"replace": True}).status_code
+        == 400
+    )
+    remote.state = "SUCCESS"
+    response = client.post(endpoint, json=confirm)
+    assert response.json()["cleanup_state"] == "trashed", response.text
+    assert client.post(endpoint, json=confirm).json()["cleanup_state"] == "trashed"
+    assert remote.trashed == [folder]
+    assert len(remote.retrieved) == 2
+    assert remote.submitted == remote.terminated == []
+    assert store.results(first["recording_id"])[0]["id"] == saved["id"]
+    assert native_output.read_bytes() == b"synthetic previously saved response"
+    assert all(store.recording(row["id"])["project_id"] == project["id"] for row in recordings)
+    assert not native_batch.unresolved(store.native_batch(identifier))

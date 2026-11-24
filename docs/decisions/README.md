@@ -201,5 +201,6 @@ record explicitly rather than rewriting its historical rationale.
 - [0195 — Word times in the passage draft](0195-word-times-in-the-passage-draft.md) (rc3; Start/End boxes for the word at the Text cursor, saved with the text as one version; replaces the word dropdown)
 
 - [0196 — Passage Undo and Redo within saved history](0196-passage-undo-redo.md)
+- [0197 - Confirmed cleanup of a failed native batch](0197-native-batch-cleanup-with-discard.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

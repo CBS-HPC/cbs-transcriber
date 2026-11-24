@@ -274,6 +274,16 @@ def _finish_native(store, credentials, identifier):
         store.update_native_batch(identifier, run_update={**diagnostic, **attempted})
         return "pending"
     folder = native_batch.folder_for(batch)
+    decision = run.get("release_decision") or {}
+    discard = decision.get("kind") == "discard"
+    if discard and (
+        decision.get("folder") != folder
+        or run.get("owned_folder") != folder
+        or run.get("folders_created") is not True
+        or not run.get("job_id")
+        or decision.get("remote_job_id") != run["job_id"]
+    ):
+        raise ValueError("The confirmed UCloud batch identity changed. Its folder was kept.")
     if run.get("owned_folder") not in (None, folder):
         raise ValueError("The UCloud batch folder receipt disagrees with its identity.")
     settings = providers.Settings.model_validate(batch["params"]["settings"])
@@ -282,7 +292,30 @@ def _finish_native(store, credentials, identifier):
         key = credentials.get(providers.credential_scope(settings))
         native.require_setup(settings, key)
         with _native_client(settings, key) as client:
-            if run.get("job_id"):
+            if discard:
+                stage = "terminal_check"
+                job = native.cloud_call(client.retrieve_job, run["job_id"])
+                specification = job.get("specification") if isinstance(job, dict) else None
+                if (
+                    not isinstance(specification, dict)
+                    or specification.get("name") != "CBS Transcriber batch " + identifier
+                    or str(job.get("id")) != str(run["job_id"])
+                ):
+                    raise native.CleanupError(
+                        "The UCloud job could not be verified; its folder was kept.",
+                        stage,
+                        "remote_identity_mismatch",
+                    )
+                status = job.get("status")
+                state = status.get("state") if isinstance(status, dict) else None
+                if not isinstance(state, str) or state not in native_batch.DISCARD_TERMINAL:
+                    raise native.CleanupError(
+                        "Waiting for the UCloud job to end; its folder is kept.",
+                        stage,
+                        "remote_not_terminal",
+                    )
+                store.update_native_batch(identifier, run_update={"remote_state": state})
+            elif run.get("job_id"):
                 stage = "terminal_check"
                 state = api.remote_state(client, run["job_id"])
                 if state not in api.TERMINAL and not run.get("termination_requested"):
@@ -318,7 +351,7 @@ def _finish_native(store, credentials, identifier):
 
 
 def retry(store, credentials, kind, identifier):
-    """Explicit Activity Retry of a Delete-consented release; never a new allocation."""
+    """Explicit Activity Retry of an authorized release; never a new allocation."""
     if kind not in {"runtime_batch", "native_batch"}:
         raise KeyError(kind)
     restored_owners.require_owner(store, kind, identifier)

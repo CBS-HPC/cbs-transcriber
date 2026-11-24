@@ -839,6 +839,11 @@ class RuntimeBatchSettings(BaseModel):
     max_allocations: int = Field(strict=True, ge=1, le=4)
 
 
+class UCloudCleanup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    discard_fingerprint: str | None = Field(default=None, strict=True, pattern=r"^[a-f0-9]{64}$")
+
+
 class RuntimeDiscard(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fingerprint: str = Field(strict=True, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
@@ -4091,17 +4096,41 @@ def create_app(
         return retained_preview(store, credentials, store.job(identifier))
 
     @app.post("/api/jobs/{identifier}/cleanup-ucloud")
-    def cleanup_ucloud(identifier: str):
+    def cleanup_ucloud(identifier: str, body: UCloudCleanup | None = None):
         from . import restored_owners
 
         restored_owners.require_job(store, identifier)
         from . import repair_cloud
         from .ucloud_native import cleanup_owned
 
-        batch = runtime_batches.job_batch(store, store.job(identifier))
+        job = store.job(identifier)
+        if job["kind"] == "transcribe" and job["params"].get("native_batch_id"):
+            from . import native_batch
+
+            with queue.control_jobs([identifier]):
+                job = store.job(identifier)
+                batch = native_batch.batch_for_job(store, job)
+                if batch["state"] in {"queued", "running"}:
+                    raise HTTPException(409, "Wait for the UCloud batch to finish before cleanup.")
+                batch_id = batch["id"]
+                decision = batch["params"].get("ucloud_run", {}).get("release_decision") or {}
+                if body is not None and body.discard_fingerprint is not None:
+                    native_batch.confirm_discard(store, batch_id, body.discard_fingerprint)
+                    return remote_release.retry(store, credentials, "native_batch", batch_id)
+                if decision.get("kind") == "discard":
+                    return remote_release.retry(store, credentials, "native_batch", batch_id)
+                if body is not None:
+                    preview = native_batch.discard_preview(store, batch_id)
+                    if preview is not None:
+                        return {"discard_preview": preview}
+                return {"cleanup_state": native_batch.cleanup_batch(store, credentials, batch_id)}
+        if body is not None and body.discard_fingerprint is not None:
+            raise ValueError(
+                "Discard confirmation applies only to native UCloud Transcriber batches."
+            )
+        batch = runtime_batches.job_batch(store, job)
         if batch:
             return runtime_batches.retry_cleanup(store, credentials, batch["id"])
-        job = store.job(identifier)
         if job["params"].get("repair_cloud", {}).get("protocol") == repair_cloud.PROTOCOL:
             if job["state"] in {"queued", "running"}:
                 raise HTTPException(409, "Wait for the repair to finish before cleanup.")
@@ -4116,13 +4145,6 @@ def create_app(
                 raise HTTPException(409, "Wait for native transcription to finish before cleanup.")
             if job["params"].get("settings", {}).get("provider_type") != "ucloud":
                 raise ValueError("Cleanup applies only to native Transcriber jobs.")
-            if job["params"].get("native_batch_id"):
-                from .native_batch import batch_for_job, cleanup_batch
-
-                batch = batch_for_job(store, job)
-                if batch["state"] in {"queued", "running"}:
-                    raise HTTPException(409, "Wait for the UCloud batch to finish before cleanup.")
-                return {"cleanup_state": cleanup_batch(store, credentials, batch["id"])}
         return {"cleanup_state": cleanup_owned(store, credentials, job)}
 
     @app.post("/api/jobs/{identifier}/reconcile")
@@ -4338,7 +4360,7 @@ def create_app(
 
     @app.post("/api/remote-releases/{kind}/{identifier}/retry")
     def retry_remote_release(kind: Literal["runtime_batch", "native_batch"], identifier: str):
-        # Retries only the Trash step a confirmed Delete already authorized (ADR 0101).
+        # Retries only the previously authorized Trash step (ADRs 0101 and 0197).
         with queue.control_owner(kind, identifier):
             return remote_release.retry(store, credentials, kind, identifier)
 
