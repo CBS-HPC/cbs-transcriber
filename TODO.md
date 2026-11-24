@@ -333,12 +333,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     Packaged-profile tests, the MVP walkthrough and isolated installation smoke pass.
     Main stays full. This is the historical rc1 checkpoint; current user distribution is the
     published v0.1.0 wheel plus matching constraints, as described in README.
-  - [ ] Verify the MVP v2 rc3 pilot package and fresh Windows install after source
-    selection. The local offline build and packaged HTTP/asset smoke passed with
-    existing dependencies. A blank offline venv could not get the pinned CPU Torch
-    wheel, and managed Python 3.13 was unavailable offline on this PC. The pilot
-    guide uses its own App, Library and Projects folders.
-    [Rehearsal](docs/verification-2026-11-23-rc3-packaging-rehearsal.md).
+  - [x] Verify the local MVP v2 rc3 wheel and a fresh isolated Windows installation on
+    the development PC. The installed app passed synthetic upload, word timing edit,
+    export and restart. The local preview serves matching wheel assets from its own
+    pilot library. Managed Windows and shortcut acceptance remain open.
+    [Local pilot verification](docs/verification-2026-11-24-rc3-local-pilot.md).
   - [ ] Complete real-device/provider/backup/NVivo acceptance. A fresh monolithic full-suite
     run on the exact packaged RC remains distinct from the documented layered verification.
 

@@ -194,10 +194,16 @@ def test_closed_library_dialog_does_not_reload_after_held_switch_response(page):
 
 def test_failed_library_open_preserves_backup_owned_disabled_states(library):
     library_reply(library, data=libraries())
+    # This mocked document has no loopback secure context for the task's operation ID.
+    library.evaluate("""() => Object.defineProperty(crypto, 'randomUUID', {
+      value: () => '00000000-0000-4000-8000-000000000000'
+    })""")
     library.locator("#portable-create").click()
-    assert library.evaluate(
-        "pending.some(request => request.path === '/api/library/portable-backups')"
+    library.wait_for_function(
+        """() => pending.some(request => request.path === '/api/library/backup-tasks'
+          && request.options.method === 'POST')"""
     )
+    expect(library.locator("#portable-create")).to_be_disabled()
     library.locator('[data-library-open="/synthetic/new"]').click()
     library_reply(library, path="/api/libraries/open", error="Synthetic work is still running.")
     expect(library.locator("[data-library-status]")).to_have_text(
