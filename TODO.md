@@ -338,6 +338,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     export and restart. The local preview serves matching wheel assets from its own
     pilot library. Managed Windows and shortcut acceptance remain open.
     [Local pilot verification](docs/verification-2026-11-24-rc3-local-pilot.md).
+  - [x] Attribute the exact-wheel broad gate (5 backend, 9 Chromium failures, 1 teardown
+    error): load timing, the B588 fixture, two intermittent cases that also fail on main,
+    and rc3 regressions B596/B597 (plus stale B598), fixed in source. All 25 nodes pass.
+  - [ ] Rebuild the rc3 wheel from the fixed candidate, repeat the fresh isolated install
+    and update the pilot guide's "next pilot build" wording; held until the user agrees.
+  - [ ] Root-cause the intermittent "Working authority differs from its admission" failure
+    in speaker-label follow-ups (also on main).
   - [ ] Complete real-device/provider/backup/NVivo acceptance. A fresh monolithic full-suite
     run on the exact packaged RC remains distinct from the documented layered verification.
 

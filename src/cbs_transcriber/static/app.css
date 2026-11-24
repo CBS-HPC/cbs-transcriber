@@ -2693,6 +2693,8 @@ dialog .checkbox-label {
 }
 .settings-tabs {
   display: flex;
+  /* Narrow windows wrap tabs onto another line rather than widening the dialog (B597). */
+  flex-wrap: wrap;
   gap: 4px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 20px;

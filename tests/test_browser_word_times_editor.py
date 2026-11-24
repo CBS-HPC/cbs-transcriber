@@ -528,6 +528,36 @@ def test_newer_transcript_revision_cannot_silently_replace_a_timing_draft(page, 
     assert len(store.result_versions(rid, result_id)) == history_count
 
 
+def test_newer_revision_elsewhere_does_not_block_a_text_only_save(page, local_app):
+    """Without typed times there is no timing draft to fence (B596)."""
+    store, rid, result_id, editor = open_editor(page, local_app)
+    caret(editor, len(TEXT))
+    editor.locator("textarea").press("!")
+    before = store.recording(rid)
+    changed = before["segments"][:]
+    changed[1], _ = edit_manual_text_retaining_timing(changed[1], "Anden passage igen")
+    newer = store.save_transcript(rid, changed, before["speakers"], before["revision"])
+    assert newer["revision"] > before["revision"]
+
+    page.locator("#recording-rename").click()
+    page.locator("#name-input").fill("Renamed synthetic recording")
+    page.locator("#name-input").press("Enter")
+    expect(page.locator("#recording-title")).to_have_text("Renamed synthetic recording")
+
+    # The boxes follow the refreshed passage instead of asking to reopen the editor.
+    caret(editor, 6)
+    expect_word(editor, "1", "1.8", "“verden”")
+    editor.get_by_role("button", name="Save passage").click()
+    # The store-level edit left Working unassigned, so the editor asks again.
+    page.get_by_role("dialog", name="Which transcript should be Working?").get_by_role(
+        "button", name="Set edited version as Working"
+    ).click()
+    expect(editor).to_have_count(0)
+    saved = store.result(rid, result_id)["segments"]
+    assert saved[0]["text"] == "Hej verden i dag!"
+    assert saved[1]["text"] == "Anden passage igen"
+
+
 def test_composition_keeps_typed_times_when_the_interim_word_split_disappears(page, local_app):
     store, rid, result_id, editor = open_editor(page, local_app)
     first, _, _ = boxes(editor)

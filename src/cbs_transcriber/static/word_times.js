@@ -359,9 +359,15 @@ function wordTimeProblem(segment, layout, word) {
 function refreshWordTimes(segment, editor) {
   const box = editor?.querySelector("[data-word-times]");
   if (!box) return false;
-  const textarea = editor.querySelector(".passage-text-surface textarea"),
-    record = wordTimeRecord(segment, editor),
+  const textarea = editor.querySelector(".passage-text-surface textarea");
+  let record = wordTimeRecord(segment, editor),
     current = wordTimeRecordMatches(record, segment);
+  // Without typed times there is no timing draft to fence: follow the refreshed passage.
+  if (!current && !record.entries.some(wordTimeEntryDirty)) {
+    wordTimeDrafts.delete(editor);
+    record = wordTimeRecord(segment, editor);
+    current = true;
+  }
   if (current) trackWordTimes(record, textarea.value);
   const dirty = record.entries.some(wordTimeEntryDirty);
   if (passageTextSaving || timedWordSaving) return dirty;
@@ -418,7 +424,9 @@ function refreshWordTimes(segment, editor) {
 // message naming the word when a typed time is not valid, so nothing is sent.
 function wordTimesPayload(segment, editor, text) {
   const record = wordTimeDrafts.get(editor);
-  if (!record) return [];
+  // Only typed times depend on this panel's snapshot. A text-only save keeps its own
+  // server-side revision check, so a refreshed recording must not block it (B596).
+  if (!record || !record.entries.some(wordTimeEntryDirty)) return [];
   if (!wordTimeRecordMatches(record, segment))
     throw new Error(wordTimeStaleMessage);
   if (record.composing && record.entries.some(wordTimeEntryDirty))

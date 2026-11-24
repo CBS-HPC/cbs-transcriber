@@ -113,3 +113,38 @@ idempotent release replay. The Chromium test verifies both dismissal and
 confirmation, the unsaved count and the resolved Activity state. Its first
 run raced the asynchronous dialog. B595 fixes the locator timing only. The
 running preview uses the earlier package.
+
+## Broad gate attribution
+
+The exact-wheel broad gate on `d993fcc` ran three lanes in parallel for 4 h 12 min.
+Backend: 7,114 passed, 26 skipped and 5 failed of 7,145. Chromium: 750 passed,
+9 failed and 1 teardown error of 759. The separate full-default catalog case
+passed. Claude reran every failing case on its own, one lane at a time, on
+`d993fcc` and on `b7c006f`, and the reproducible ones on main `021d576`.
+
+- The five backend failures passed in isolation on both sources: three Runtime
+  batch waits, one Runtime preparation cancel wait and the hung spelling-lookup
+  time bound. They are timing limits exceeded under load.
+- The Library refusal case is the B588 fixture correction; it passes on `b7c006f`.
+- Four Chromium cases passed in isolation and are load-related: inline replay,
+  the first-use MIG save, the Runtime backend guard and the Runtime consent toast.
+- Two cases also fail intermittently on main, so they predate rc3: playback-
+  independent admission (`[error]` or `[preparing]`) and the speaker-label
+  follow-up (`selected-json-speaker_labels-*`), whose transcription job
+  sometimes fails with "The Working authority differs from its admission."
+  That race is under separate investigation.
+- Two are rc3 regressions, fixed here: B596, where a text-only Save passage was
+  refused after any recording refresh, and B597, where the Settings tab row was
+  too wide at 390 px. The focused rerun also found B598, a stale large-v3
+  expectation after the Turbo default change on the candidate.
+- The teardown error (the language-save case's server still running 10 s after
+  stop) reproduced in both isolated reruns. Those ran while a heavy job from
+  another project was using the PC, and took 9-11 min. It passed 10 later
+  isolated runs and the full rerun below. It is attributed to load-sensitive
+  shutdown timing.
+
+After the fixes all 25 previously failing nodes passed in one session (5 backend
+and 20 Chromium, 2 min). The word-times editor, result-trash, Hugging Face Activity and
+first-use modules (61 Chromium cases) and four further Settings modules passed. The new B596 regression
+fails on the unfixed file. These results qualify source, not the installed
+`d993fcc` wheel, which stays loaded until a rebuild is agreed.
