@@ -723,6 +723,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   complete local raw/chunk finalization; accepted requests drain. Never infer cache completeness
   from the fresh-only audio-plan helper alone. ADR 0170; mocked no-outbound checks.
 - V213: First-use home setup reuses exact UCloud discovery/save proofs and credential storage;
+  fresh native Save includes the catalog's default selection and rejects stale model-group choices.
   presentation is a separate accessible dialog; accepted saves cannot be dismissed while
   pending, and leaving/Skip cannot allow late checks to write. Keep the existing completion
   marker and existing-profile Settings handoff. Missing-key decoration uses only presence
@@ -2477,3 +2478,4 @@ B585|2026-11-23|A transient word split during IME composition discarded typed ti
 B586|2026-11-23|A project list opened a new SQLite connection for each recording's source-readiness lookup|V273. Borrow its read snapshot for the verified decoder and restored-owner check. Assert exact mixed readiness and one connection per request.
 B587|2026-11-24|The pinned synchronous WebSocket connector could follow redirects after the original provider transfer endpoint check|V18. Refuse redirects at the individual upload handshake. The mock gate on the pinned connector verifies a single connection, zero frames on refusal and successful direct transfers.
 B588|2026-11-24|The isolated Library dialog browser fixture treated the old backup listing request as a pending capture and lacked the UUID API used by Activity task creation|V259,V264,ADR0192. Provide a synthetic UUID and require the pending task POST before checking ownership of the disabled controls. Existing refusal assertions still run.
+B589|2026-11-24|First-use UCloud Save skipped the Settings model selection and enabled every native preset|V213,ADR0126. Save the native catalog defaults through the existing version-checked selection API. Verify the saved flags in the first-use browser test.

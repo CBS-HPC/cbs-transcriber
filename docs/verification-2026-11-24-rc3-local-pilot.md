@@ -39,3 +39,16 @@ The frozen broader regression is tracked separately. Its inventory is
 7,146 backend and 759 Chromium cases. The full-default catalog contract passed
 in its separate scratch configuration. Complete suite outcomes are pending
 at this checkpoint. The wheel and this record remain local.
+
+## Model defaults follow-up for the next local rc3 build
+
+The loaded pilot saved all six native UCloud models as enabled on its first
+connection. The first-use browser case reproduced that result with a synthetic
+account. B589 sends the catalog's native defaults through the existing
+version-checked Settings save. Fresh connections enable Large-v3, Large-v3-turbo
+and NVIDIA Parakeet v3. Large-v3 stays preselected and saved choices are preserved.
+
+Seven focused Chromium cases passed in the MVP profile and 20 provider/catalog
+backend cases passed. These checks qualify the local source follow-up. The
+already-loaded pilot and its wheel are the earlier build. Recompilation is held
+for further testing.

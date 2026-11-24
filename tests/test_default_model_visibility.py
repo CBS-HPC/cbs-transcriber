@@ -46,7 +46,11 @@ def test_builtin_visibility_defaults_are_explicit_and_danish_models_are_identifi
     openai = provider_catalog()["openai"]["models"]
     cloud = ucloud_models()
     assert {m["model"] for m in openai if m.get("default_enabled")} == {"gpt-transcribe"}
-    assert {m["model"] for m in cloud if m.get("default_enabled")} == {"large-v3"}
+    assert {m["model"] for m in cloud if m.get("default_enabled")} == {
+        "large-v3",
+        "large-v3-turbo",
+        "nvidia/parakeet-tdt-0.6b-v3",
+    }
     runtime = provider_catalog()["ucloud_cbs_runtime"]["models"]
     assert runtime and all(m.get("default_enabled") is False for m in runtime)
     assert all(m["name"].endswith("(Danish)") for m in cloud if m.get("fixed_language") == "da")

@@ -325,10 +325,16 @@ $("#first-use-setup").addEventListener("submit", async (event) => {
       firstUse.saving = version;
       status.textContent = "Saving the UCloud connection…";
       renderFirstUse();
+      const models = state.modelPresets.ucloud_transcriber.models;
       await api("/providers", {
         method: "POST",
         body: {
           ...draft,
+          enabled_models: models
+            .filter((model) => model.default_enabled !== false)
+            .map((model) => model.model),
+          enabled_models_touched: models.map((model) => model.model),
+          enabled_model_versions: {},
           ucloud_transcriber: result.setup,
           api_key: key,
           remember,

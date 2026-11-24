@@ -183,6 +183,14 @@ def test_first_use_connect_saves_exact_checked_mig_without_hf(page, local_app, n
     assert saved["native_allocation_choice"] == "mig1g"
     assert saved["ucloud_transcriber"]["product"] == MIG_PRODUCT
     assert saved["connection_check"]
+    providers = [
+        json.loads(row["value"]) for row in app.state.store.all("SELECT value FROM providers")
+    ]
+    assert {
+        provider["model"]
+        for provider in providers
+        if provider["provider_type"] == "ucloud" and provider["enabled"]
+    } == {"large-v3", "large-v3-turbo", "nvidia/parakeet-tdt-0.6b-v3"}
     assert not app.state.store.all("SELECT id FROM jobs")
     assert not any("huggingface-settings" in url for url, _ in writes)
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) == "1"
