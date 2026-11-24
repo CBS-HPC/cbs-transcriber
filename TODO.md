@@ -803,14 +803,18 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   19 November the user chose every recommended answer of the
   [design proposal](docs/proposals/history-undo-2026-11-18.md). Slice 1 is implemented on
   `claude/undo-last-change` (ADR 0180, T150): toolbar **Undo last change** / **Redo** with live
-  labels, exact predecessor restoration of every saved content change, one Redo until the next
-  change, reach to the result's start; review marks stay outside Undo. Slice 2 (ADR 0181,
+  labels and exact predecessor restoration of saved content changes. Redo can replay consecutive
+  undone changes until a new change is saved. Review marks stay outside Undo. Slice 2 (ADR 0181,
   T151) provides the History change list, word-level "What changed", undone/redone tags and
   "Revert this change" for proven older merges, splits and deletions. Slice 3 (ADR 0182,
   T152) draws results as branches with Working and undo markers. The user's 20 November
   decision exposes all three in MVP v2 and keeps the per-passage controls as well. Code is
   implemented and the rc2 package preserves that profile; broader real-user/history workflow
   acceptance remains separate. The earlier pending-choice/hidden-MVP description is obsolete.
+  **Passage Undo/Redo follow-up, 24 November.** Step through the selected passage's saved
+  changes while preserving edits elsewhere. Use action labels consistent with the recording
+  toolbar and keep Restore original as a separate action. Reuse result history and define
+  safe boundaries around split, merge or deletion before extending the passage history.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
