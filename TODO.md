@@ -450,6 +450,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   recording/project deletion in their test scenarios. Large-history/concurrent performance and
   untested recovery paths remain open. Routine batch-requested inspections now appear within the
   request or allocation in synthetic checks; validate the display in a real batch after activation.
+  Project recording cards now show visible per-file transcription failures in the local rc3
+  follow-up (T167). Confirm the failed badge and reset after cancellation or dismissal in the
+  [pilot checklist](docs/testing/human-release-checklist.md#h11a--failed-transcription-on-the-project-page).
 - [ ] **Task dependency composition audit.** Media preparation and original-backed native
   transcription are intentionally independent; the current twelve-file overlap has a healthy
   local checkpoint and source review found no conflicting-write defect. Complete combined

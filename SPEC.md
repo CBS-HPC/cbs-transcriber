@@ -353,6 +353,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V275: A ready recording without a saved transcript shows Failed - See Activity when its
+  latest transcription attempt failed and its Activity entry remains visible. Use each file's
+  outcome in grouped batches. A newer attempt, cancellation, or dismissal clears the old
+  failure badge. The existing Activity poll updates the badge without replacing the card.
 - V274: Passage Undo/Redo walks recent, proven single-passage saves. Other passages and shared
   speaker names keep their exact current values. A new save of this passage clears its redo.
   Structural or unproven history bounds the walk. Undo/Redo append revision-fenced versions.
@@ -2326,6 +2330,8 @@ T164|x|Word-timing editor (07d9bbd and B585, local rc3 composition): Start/End b
 T165|x|Project recording-list readiness uses one read-only SQLite snapshot. Mixed-state wire parity and connection-count gate pass. On 1,204 synthetic recordings, HTTP API calls took 0.41–0.60 s versus 10.91–12.63 s with the same canonical response. Matched Chromium verification at the same scale took a median 1.38 s to enabled controls and every card, versus 8.59 s earlier. Real-device and larger-library acceptance remain open|V273,V138,B586
 T166|x|Add multi-step passage Undo/Redo to the local colleague candidate. Prove scoped steps, concurrent refusals, structure boundaries and recording-toolbar coexistence in backend and Chromium checks|V274,V224,V185,V186,I.passage-change-steps,ADR0196
 
+T167|x|Show an actionable transcription failure on the project recording card and clear it when Activity resolves it|V275,V105,V162
+
 ## §B Bug memory
 
 Historical entries B1–B354 are preserved verbatim in the [bug archive](docs/archive/SPEC-bugs-archive-2026-11.md). Continue numbering after the latest entry below; historical gaps are retained.
@@ -2489,3 +2495,5 @@ B588|2026-11-24|The isolated Library dialog browser fixture treated the old back
 B589|2026-11-24|First-use UCloud Save skipped the Settings model selection and enabled every native preset|V213,ADR0126. Save the native catalog defaults through the existing version-checked selection API. Verify the saved flags in the first-use browser test.
 B590|2026-11-24|The first-use browser test checked the hidden form immediately after reload and expected it to stay hidden after clearing the key|V213,ADR0171. Wait for setup readiness and verify the reminder returns after key removal.
 B591|2026-11-24|The first saved passage Undo closed its row controls. The continuation checked the editor token from before its own successful save, which had already advanced|V274,ADR0196. Capture the committed view after the accepted save. The Chromium regression walks two Undo and two Redo steps without closing the controls or reverting an edit elsewhere.
+B592|2026-11-24|Project recording cards fell back to media readiness after a transcription failed, even though Activity showed the failure|V275. Use the latest visible per-file failure from the accepted Activity poll. The synthetic batch test proves cancellation and dismissal restore readiness without reopening the project.
+B593|2026-11-24|The retained Activity browser check matched each nested job Details summary as well as the group summary|V105. Scope the check and click to the group summary and retain the cleanup action assertions.

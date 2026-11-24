@@ -82,3 +82,16 @@ gate also covers stale and late replies, draft safety and word-time Undo.
 These results apply to source on `codex/rc3-passage-history-20261124`. The
 local wheel and running preview still use the earlier package above. Build and
 fresh Windows installation of this follow-up remain pending.
+
+## Failed transcription status on the project page
+
+T167 and B592 use the newest visible per-file failure from Activity. A recording
+with no transcript that would otherwise show Ready to transcribe displays
+Failed - See Activity. Cancellation or dismissal clears that badge in place.
+
+Seven Chromium cases passed in the MVP profile on this product source. The
+synthetic native batch showed two failed badges and returned both to ready after
+one mocked Stop. An earlier failed attempt did not replace the cancelled one.
+The test also checks dismissal and reload. The existing retained cleanup case
+passed after scoping its locator to the group summary (B593). Provider calls
+were mocked. The earlier rc3 wheel remains the loaded pilot.

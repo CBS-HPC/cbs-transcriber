@@ -2452,6 +2452,51 @@ async function refreshRecordings() {
   for (const id of state.selected) if (!ids.has(id)) state.selected.delete(id);
   renderRecordings();
 }
+const READY_TO_TRANSCRIBE = "Ready to transcribe";
+const TRANSCRIPTION_FAILED = "Failed - See Activity";
+let failedTranscriptions = new Set();
+
+function updateRecordingFailures(shown) {
+  const visibleFailures = new Set();
+  for (const card of shown) {
+    const members = card.activity_group?.members ??
+      card.ucloud_batch_members ?? [card];
+    for (const member of members) {
+      if (member.state === "failed")
+        visibleFailures.add(member.job_id ?? member.id);
+    }
+  }
+  // The durable rows in /jobs arrive newest first. A newer attempt supersedes a failed one.
+  const checked = new Set(),
+    failures = new Set();
+  for (const job of state.jobs) {
+    const id = job.recording_id;
+    if (
+      job.kind !== "transcribe" ||
+      !id ||
+      job.restored_history ||
+      checked.has(id)
+    )
+      continue;
+    checked.add(id);
+    if (job.state === "failed" && visibleFailures.has(job.id)) failures.add(id);
+  }
+  if (
+    failures.size === failedTranscriptions.size &&
+    [...failures].every((id) => failedTranscriptions.has(id))
+  )
+    return;
+  failedTranscriptions = failures;
+  // Activity actions can poll without refetching the project. Update badges in place.
+  for (const badge of $("#recordings").querySelectorAll(
+    "[data-ready-transcription]",
+  )) {
+    const failed = failures.has(badge.dataset.readyTranscription);
+    badge.textContent = failed ? TRANSCRIPTION_FAILED : READY_TO_TRANSCRIBE;
+    badge.classList.toggle("failed", failed);
+    badge.classList.toggle("neutral", !failed);
+  }
+}
 function renderRecordings(captureNotes = true) {
   if (captureNotes)
     document.querySelectorAll("[data-card-notes]").forEach(rememberCardNotes);
@@ -2480,9 +2525,11 @@ function renderRecordings(captureNotes = true) {
           : recording.has_transcript
             ? "Transcript ready"
             : recording.status === "ready"
-              ? "Ready to transcribe"
+              ? READY_TO_TRANSCRIBE
               : "Preparing";
-      return `<article class="recording-card ${state.selected.has(recording.id) ? "selected" : ""}" data-recording="${recording.id}"><div class="card-top"><span class="file-icon" aria-hidden="true">${recording.kind === "video" ? "▷" : "♫"}</span><label><span class="sr-only">Select ${h(recording.name)}</span><input type="checkbox" data-select="${recording.id}" ${state.selected.has(recording.id) ? "checked" : ""}></label><button class="icon-button danger" data-delete="${recording.id}" aria-label="Delete ${h(recording.name)}" title="Delete recording" ${pendingDeletions.has(`/recordings/${recording.id}`) ? "disabled" : ""}>×</button></div><button class="card-name" data-open="${recording.id}">${h(recording.name)}</button><div class="card-file">${h(recording.filename)}</div><div class="card-bottom"><span class="badge ${active ? "working" : recording.status === "error" ? "failed" : !recording.has_transcript ? "neutral" : ""}">${status}</span><span>${time(recording.duration)} · ${h(recording.filename.split(".").pop().toUpperCase())}</span></div><label class="card-language"><select aria-label="Language for ${h(recording.name)}" data-recording-language="${h(recording.id)}" ${pendingRecordingLanguages.has(recording.id) ? "disabled" : ""}>${recordingLanguageOptions(recording.language_override)}</select></label>${cardNotesMarkup(recording)}${pendingDeletions.has(`/recordings/${recording.id}`) ? `<p class="settings-note" role="status">${h(pendingDeletions.get(`/recordings/${recording.id}`))}</p>` : ""}<small class="card-results">${recording.transcript_count || 0} results</small></article>`;
+      const ready = status === READY_TO_TRANSCRIBE,
+        failed = ready && failedTranscriptions.has(recording.id);
+      return `<article class="recording-card ${state.selected.has(recording.id) ? "selected" : ""}" data-recording="${recording.id}"><div class="card-top"><span class="file-icon" aria-hidden="true">${recording.kind === "video" ? "▷" : "♫"}</span><label><span class="sr-only">Select ${h(recording.name)}</span><input type="checkbox" data-select="${recording.id}" ${state.selected.has(recording.id) ? "checked" : ""}></label><button class="icon-button danger" data-delete="${recording.id}" aria-label="Delete ${h(recording.name)}" title="Delete recording" ${pendingDeletions.has(`/recordings/${recording.id}`) ? "disabled" : ""}>×</button></div><button class="card-name" data-open="${recording.id}">${h(recording.name)}</button><div class="card-file">${h(recording.filename)}</div><div class="card-bottom"><span class="badge ${active ? "working" : failed || recording.status === "error" ? "failed" : !recording.has_transcript ? "neutral" : ""}"${ready ? ` data-ready-transcription="${h(recording.id)}"` : ""}>${failed ? TRANSCRIPTION_FAILED : status}</span><span>${time(recording.duration)} · ${h(recording.filename.split(".").pop().toUpperCase())}</span></div><label class="card-language"><select aria-label="Language for ${h(recording.name)}" data-recording-language="${h(recording.id)}" ${pendingRecordingLanguages.has(recording.id) ? "disabled" : ""}>${recordingLanguageOptions(recording.language_override)}</select></label>${cardNotesMarkup(recording)}${pendingDeletions.has(`/recordings/${recording.id}`) ? `<p class="settings-note" role="status">${h(pendingDeletions.get(`/recordings/${recording.id}`))}</p>` : ""}<small class="card-results">${recording.transcript_count || 0} results</small></article>`;
     })
     .join("");
   refreshRecordingLanguageDefaults();
@@ -12516,6 +12563,7 @@ async function pollJobs() {
   const shown = listed.filter(
     (job) => !clearedFromActivity(job) && !removedFromActivity(job),
   );
+  updateRecordingFailures(shown);
   const expanded = new Set(
     [...document.querySelectorAll("[data-batch-members][open]")].map(
       (details) => details.dataset.batchMembers,

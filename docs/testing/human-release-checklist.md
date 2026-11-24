@@ -117,6 +117,15 @@ the user's approval each time; checks marked **later** belong to features still 
   Trash; results already saved stay.
 - **Status:** Not run on v2.
 
+### H11a · Failed transcription on the project page
+
+- **Do:** If a transcription in the pilot fails, check the recording on its project page.
+  Stop it from Activity if Stop is offered, or remove its finished card when it can be dismissed.
+- **Pass when:** The recording without a transcript shows **Failed - See Activity**. Once the
+  job is cancelled or its entry is dismissed, it returns to **Ready to transcribe**. Other
+  recordings in the batch keep their own status.
+- **Status:** Not run in the packaged pilot.
+
 ### H12 · Delete a recording that is in a running batch (paid)
 
 - **Do:** Delete one file of a running batch and confirm the impact warning.
