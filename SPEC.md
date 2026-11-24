@@ -1222,7 +1222,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V18: protected projects use only explicitly approved configurations at selection, enqueue,
   retry, and before each upload; approval revocation/deletion or endpoint/model changes block
   pending work. Existing in-flight requests cannot be recalled.
-  Transcription/model-check clients do not follow endpoint redirects; configure the final URL explicitly.
+  Transcription/model-check clients and UCloud file transfers refuse endpoint redirects.
+  WebSocket uploads refuse a redirect during the opening handshake, before sending any
+  file frames or opening a second connection (B587).
 - V19: project folder choices create dedicated app-owned subfolders; media/export access stays
   ID based; existing storage and transcripts survive migration. Saved outputs retain original text.
 - V20: UCloud vLLM remains distinct from UCloud Transcriber; control/HF tokens never reach
@@ -2473,3 +2475,4 @@ B583|2026-11-23|An edit beside repeated text could transfer typed times to the w
 B584|2026-11-23|A recording Rename reply replaced segment objects at the same revision and could omit the editor's typed times on Save passage|V272,ADR0195. Use recording, result, passage, text and revision as the draft fence. Keep the draft on a newer revision and refuse Save until reopened.
 B585|2026-11-23|A transient word split during IME composition discarded typed times even when the original word returned|V272,ADR0195. Track the settled value and defer combined Save while typed intervals are composing. Reproduced and verified in Chromium.
 B586|2026-11-23|A project list opened a new SQLite connection for each recording's source-readiness lookup|V273. Borrow its read snapshot for the verified decoder and restored-owner check. Assert exact mixed readiness and one connection per request.
+B587|2026-11-24|The pinned synchronous WebSocket connector could follow redirects after the original provider transfer endpoint check|V18. Refuse redirects at the individual upload handshake. The mock gate on the pinned connector verifies a single connection, zero frames on refusal and successful direct transfers.

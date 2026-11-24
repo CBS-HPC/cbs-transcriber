@@ -626,8 +626,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Any later recovery must keep the owned destination and verify existing objects before
   writing missing ones. The separate diagnostic prototype `fc05ec6` keeps the existing
   approval and journal. Its broader run had one intermittent Windows settings-save failure.
-  Before live use, verify the WebSocket transfer guard after review found the pinned
-  client could follow redirects. Validate approved transfer, download, receipt, restore
+  The local rc3 composition now includes the WebSocket redirect guard (B587).
+  Live cloud backup and restore acceptance remains open. Validate approved transfer,
+  download, receipt, restore
   and retention, plus larger Windows libraries and macOS.
   [Verification](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
 - [ ] **Backup Settings and Activity.** Integrated in the local rc3 candidate
