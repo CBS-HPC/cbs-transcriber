@@ -348,6 +348,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     admitted (B600). Real batches wait for sealing; the mock now does too.
   - [ ] Root-cause the intermittent browser-test teardown where the language-save case's
     server is still running 10 s after stop (both full gates; not in 22 smaller runs).
+  - [ ] Stabilise the 1299 px breakpoint check in the wide-view language layout test; it
+    fails intermittently on main as well (4 of 6 runs).
   - [ ] Complete real-device/provider/backup/NVivo acceptance. A fresh monolithic full-suite
     run on the exact packaged RC remains distinct from the documented layered verification.
 

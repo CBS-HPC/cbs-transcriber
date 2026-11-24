@@ -171,3 +171,16 @@ error of 763.
 
 After B599 and B600, `test_browser.py`, provider setup, feature controls and
 playback handoff (51 Chromium cases) passed.
+
+## Full Chromium run on aaacf14
+
+`aaacf14` changes only browser tests and documentation after `d5454cc`, so
+the backend gate above covers its product source. A full Chromium run from
+the repository root with a thread-dump plugin for slow test-server shutdowns
+took 61 min: 762 passed and 1 failed of 763. The language-save teardown did
+not recur, so no dump was taken.
+
+The failure is the 1299 px breakpoint check in
+`test_language_and_transcribe_controls_fit_wide_view`. It is intermittent and
+predates rc3: in six isolated runs each it failed 4 times on main `021d576`
+and 2 times on `aaacf14`.
