@@ -52,3 +52,15 @@ Seven focused Chromium cases passed in the MVP profile and 20 provider/catalog
 backend cases passed. These checks qualify the local source follow-up. The
 already-loaded pilot and its wheel are the earlier build. Recompilation is held
 for further testing.
+
+### Revised fresh model selection
+
+The final requested defaults enable Large-v3-turbo and NVIDIA Parakeet v3.
+Turbo is selected initially. Large-v3 is unchecked and remains available in
+Settings. Saved connections retain their choices.
+
+Forty-nine backend cases passed. Four Chromium scenario assertions passed.
+One test server exceeded its teardown limit after the first-use case. Waiting
+for setup readiness exposed an obsolete hidden-form expectation after clearing
+the key. The test now verifies the documented reminder and passed a clean
+isolated rerun. The running pilot still serves the earlier wheel.

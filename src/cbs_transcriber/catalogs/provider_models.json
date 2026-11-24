@@ -50,7 +50,7 @@
     ]
   },
   "ucloud_transcriber": {
-    "default": "large-v3",
+    "default": "large-v3-turbo",
     "source": "https://docs.cloud.sdu.dk/Apps/transcriber.html#settings",
     "verified_date": "2026-10-21",
     "models": [
@@ -81,7 +81,7 @@
       {
         "model": "large-v3",
         "name": "UCloud whisper/large-v3 (Transcriber)",
-        "default_enabled": true,
+        "default_enabled": false,
         "capability": "words_speakers",
         "memory_gb": 10,
         "aliases": ["whisper/large-v3"]

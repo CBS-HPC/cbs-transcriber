@@ -47,7 +47,6 @@ def test_builtin_visibility_defaults_are_explicit_and_danish_models_are_identifi
     cloud = ucloud_models()
     assert {m["model"] for m in openai if m.get("default_enabled")} == {"gpt-transcribe"}
     assert {m["model"] for m in cloud if m.get("default_enabled")} == {
-        "large-v3",
         "large-v3-turbo",
         "nvidia/parakeet-tdt-0.6b-v3",
     }

@@ -31,8 +31,8 @@ API clients without the optional delta fields keep their previous bulk-selection
 
 ## 24 November amendment
 
-Fresh native UCloud connections enable Large-v3, Large-v3-turbo and NVIDIA Parakeet v3.
-Large-v3 remains the initial model. First-use Save submits the same native catalog defaults
+Fresh native UCloud connections enable Large-v3-turbo and NVIDIA Parakeet v3. Turbo is
+initially selected. Large-v3 is unchecked. First-use Save submits the same native catalog defaults
 as Settings, with the existing profile-version checks. Saved model choices and frozen jobs
 are preserved. CBS Runtime defaults remain governed by ADR 0130.
 

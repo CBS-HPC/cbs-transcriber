@@ -1051,8 +1051,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   inline download-capable Check call. Implementation/source review are complete on the
   isolated morning branch; complete backend coverage and 67 relevant browser cases pass,
   with no installed update. Activation and real-user acceptance remain open.
-  The tested local rc3 follow-up (B589) applies native catalog defaults on first-use
-  Save. The wheel rebuild is held while pilot testing continues.
+  The tested local rc3 follow-up (B589) enables Turbo and Parakeet on first-use Save.
+  Turbo is initially selected and Large-v3 is unchecked. The wheel rebuild is held
+  while pilot testing continues.
 
 - [x] **HF access and configured-model preparation in Activity.** **Active in MVP v2** (checked
   23 November): saving a token returns 202 and starts the check in Activity; the user's preview

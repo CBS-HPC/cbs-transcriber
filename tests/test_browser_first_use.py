@@ -178,11 +178,12 @@ def test_first_use_connect_saves_exact_checked_mig_without_hf(page, local_app, n
     assert (
         app.state.credentials.get("ucloud-control:https://cloud.sdu.dk") == "synthetic-ucloud-key"
     )
-    assert native_account == ["large-v3"]
+    assert native_account == ["large-v3-turbo"]
     saved = next(body for url, body in writes if url.endswith("/api/providers"))
     assert saved["native_allocation_choice"] == "mig1g"
     assert saved["ucloud_transcriber"]["product"] == MIG_PRODUCT
     assert saved["connection_check"]
+    assert saved["model"] == "large-v3-turbo"
     providers = [
         json.loads(row["value"]) for row in app.state.store.all("SELECT value FROM providers")
     ]
@@ -190,17 +191,19 @@ def test_first_use_connect_saves_exact_checked_mig_without_hf(page, local_app, n
         provider["model"]
         for provider in providers
         if provider["provider_type"] == "ucloud" and provider["enabled"]
-    } == {"large-v3", "large-v3-turbo", "nvidia/parakeet-tdt-0.6b-v3"}
+    } == {"large-v3-turbo", "nvidia/parakeet-tdt-0.6b-v3"}
     assert not app.state.store.all("SELECT id FROM jobs")
     assert not any("huggingface-settings" in url for url, _ in writes)
     assert page.evaluate("key => localStorage.getItem(key)", MARKER) == "1"
     storage = page.evaluate("() => JSON.stringify({...localStorage})")
     assert "synthetic-ucloud-key" not in storage
     page.reload()
+    page.wait_for_function("() => firstUse.ready")
     expect(page.locator("#first-use-setup")).to_be_hidden()
     app.state.credentials.set("ucloud-control:https://cloud.sdu.dk", "", False)
     page.reload()
-    expect(page.locator("#first-use-setup")).to_be_hidden()
+    page.wait_for_function("() => firstUse.ready")
+    expect(page.locator("#first-use-setup")).to_be_visible()
 
 
 @pytest.mark.parametrize("cancel", ["skip", "navigate", "another-tab"])
@@ -315,7 +318,7 @@ def test_first_use_partial_hf_failure_keeps_saved_native_and_retries_hf_only(
     page.locator("#first-use-save").click()
     expect(page.locator("#first-use-setup")).to_be_hidden()
     expect(page.locator("#toast")).to_contain_text("checks/preparation appear in Activity")
-    assert native_account == ["large-v3"]
+    assert native_account == ["large-v3-turbo"]
     assert len([url for url in writes if url.endswith("/api/providers")]) == 1
     assert not any(url.endswith("/huggingface-settings/check") for url in writes)
     assert not any("prepare" in url or "transcriptions" in url for url in writes)
@@ -566,7 +569,7 @@ def test_first_use_lost_save_reply_requires_settings_before_retry(page, local_ap
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator("#first-use-ucloud-key")).to_have_value("")
-    assert native_account == ["large-v3"]
+    assert native_account == ["large-v3-turbo"]
 
 
 def test_held_openai_keeps_existing_result_and_activity_evidence(page, local_app):
