@@ -1,8 +1,9 @@
 # CBS Transcriber
 
-CBS Transcriber helps you turn Danish/English research recordings into transcripts, review
-text while listening, and export your work to Word, NVivo and other formats. It runs on your
-computer in a browser; transcription can use OpenAI or UCloud.
+CBS Transcriber helps you transcribe research recordings, review the text while listening,
+and export your work to Word, NVivo and other formats. The app runs on your computer and opens
+in a browser. Supported languages depend on the transcription model. The CBS pilot focuses on
+Danish and English.
 
 The current release is **MVP 0.1.0**. Some unfinished features are hidden. Windows startup
 and selected workflows have been exercised on the development PC; clean-device Windows and
