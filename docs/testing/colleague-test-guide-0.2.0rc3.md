@@ -51,8 +51,8 @@ Once startup works, you can create a Desktop shortcut with the same settings. Ru
 1. **Transcribe.** Connect UCloud in the setup dialog or Settings. Create a project and add a recording. Start transcription and follow the file in **Activity** through to its result.
 2. **Edit and review.** Double-click a word. Save or cancel a correction. On a timed passage, place the cursor inside a word and check **Start (s)** and **End (s)**.
    Try a small valid time change, save the passage and undo it. Split between words,
-   merge passages and undo a change. In the next pilot build, also save two separate text
-   edits to one passage and an edit to another. Open **Undo / Redo** on the first passage,
+   merge passages and undo a change. Also save two separate text edits to one passage
+   and an edit to another. Open **Undo / Redo** on the first passage,
    undo twice and redo twice. The edit to the other passage should stay saved throughout.
    Play the recording and check word following. Mark passages and try **Show** and **Next to review**.
 3. **Export.** Export readable text or Word, plus a project ZIP. Close Export Settings while the ZIP prepares, then download it from **Activity**. Check that the ZIP contains the selected formats and includes original files only if you selected them.
