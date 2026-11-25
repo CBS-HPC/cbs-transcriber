@@ -184,3 +184,30 @@ The failure is the 1299 px breakpoint check in
 `test_language_and_transcribe_controls_fit_wide_view`. It is intermittent and
 predates rc3: in six isolated runs each it failed 4 times on main `021d576`
 and 2 times on `aaacf14`.
+
+## Rebuilt wheel and main merge, 25 November
+
+The rc3 wheel was rebuilt from `d535f8f`. It has the same product source as
+`ea7f077` plus the pilot guide change that makes passage Undo/Redo a regular
+step. The offline build validated all 165 archive entries against the wheel
+RECORD. Every packaged product file matches `ea7f077` byte for byte.
+
+- Wheel SHA-256
+  `042b13dec8ba6a1af2cafa3daa72662fbaec63f93ea5b9820cb3443bf1b7fd0d`.
+  Matching constraints SHA-256
+  `0780a90e1434e9257e368a55ac6024783cfe2276de7aaf37a427c1e653f9ca81`.
+  The constraints pin the same packages as the first rc3 build. Only the
+  generated header differs.
+- The fresh install from the guide's own block downloaded managed Python
+  3.13.11, then stopped with a disk-full error while downloading packages.
+  The first rc3 installation was then stopped and removed to free space. The
+  fresh install of the rebuilt wheel remains open.
+- The pilot library now runs from the branch source on port 8765 using the
+  development interpreter. It serves the rebuilt wheel's JavaScript byte for
+  byte and keeps its earlier jobs and pending UCloud cleanups.
+
+The verified candidate was merged into main as `7c0341e`. The merged tree
+equals the candidate except `release.json`, `pyproject.toml`, `__init__.py`
+and `uv.lock`, which keep main's full profile and version 0.1.0. On the merge,
+release-profile and version-sensitive tests passed: 372 passed, 4 symlink
+skips. The main-only full-profile case and ruff also passed. Nothing is pushed.

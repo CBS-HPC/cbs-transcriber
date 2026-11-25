@@ -341,8 +341,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   - [x] Attribute the exact-wheel broad gate (5 backend, 9 Chromium failures, 1 teardown
     error): load timing, the B588 fixture, two intermittent cases that also fail on main,
     and rc3 regressions B596/B597 (plus stale B598), fixed in source. All 25 nodes pass.
-  - [ ] Rebuild the rc3 wheel from the fixed candidate, repeat the fresh isolated install
-    and update the pilot guide's "next pilot build" wording; held until the user agrees.
+  - [x] Rebuild the rc3 wheel from the verified candidate (`d535f8f`, product source
+    `ea7f077`) with the pilot guide's Undo/Redo step no longer deferred. Every packaged
+    file matches the gated source; constraints pin the same packages.
+  - [ ] Repeat the fresh isolated install of the rebuilt wheel. The 25 November attempt
+    stopped when the development PC's disk was full; the user will install it manually.
+    Until then the pilot library runs from the branch source on port 8765.
+  - [x] Merge the verified rc3 candidate into main (`7c0341e`). Main keeps its full
+    release profile and version 0.1.0; release-profile tests and ruff pass on the merge.
   - [x] Root-cause the intermittent "Working authority differs from its admission" failure
     in speaker-label follow-ups: a test-only native batch mock imported a file still being
     admitted (B600). Real batches wait for sealing; the mock now does too.
@@ -834,7 +840,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   The row controls walk saved text, word-time and eligible speaker-assignment changes while
   preserving edits in other passages. Split, merge and deletion bound that history. Labels
   match the recording toolbar. Restore original stays available as a separate action. Include
-  this in the next colleague build after the held rebuild and fresh-install checks.
+  this in the next colleague build. The rebuilt rc3 wheel includes it; its fresh-install
+  check remains open.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
@@ -1076,8 +1083,8 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   isolated morning branch; complete backend coverage and 67 relevant browser cases pass,
   with no installed update. Activation and real-user acceptance remain open.
   The tested local rc3 follow-up (B589) enables Turbo and Parakeet on first-use Save.
-  Turbo is initially selected and Large-v3 is unchecked. The wheel rebuild is held
-  while pilot testing continues.
+  Turbo is initially selected and Large-v3 is unchecked. The rebuilt rc3 wheel
+  (`d535f8f`) includes this.
 
 - [x] **HF access and configured-model preparation in Activity.** **Active in MVP v2** (checked
   23 November): saving a token returns 202 and starts the check in Activity; the user's preview
