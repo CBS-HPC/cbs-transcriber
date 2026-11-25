@@ -374,7 +374,7 @@ def test_first_use_native_and_hf_save_create_one_inert_activity_owner(
     assert (
         app.state.credentials.get("ucloud-control:https://cloud.sdu.dk") == "synthetic-ucloud-key"
     )
-    assert native_account == ["large-v3"]
+    assert native_account == ["large-v3-turbo"]
     assert writes == [
         inert_app.url + "/api/providers/discover-ucloud",
         inert_app.url + "/api/providers",

@@ -140,9 +140,10 @@ def version(db, recording_id, version_id, *, live=True):
     if live and row["trashed"]:
         raise ValueError("Restore this result from Trash before marking a Working version.")
     validate_version_observation(row["sequence"], row["observed_at"])
-    if len(row["payload"].encode("utf-8")) > MAX_TRANSCRIPT_BYTES:
+    encoded = row["payload"].encode("utf-8")
+    if len(encoded) > MAX_TRANSCRIPT_BYTES:
         raise ValueError("The saved Working version exceeds the supported size.")
-    verify_payload(row["payload"], row["payload_sha256"])
+    verify_payload(row["payload"], row["payload_sha256"], encoded=encoded)
     return row
 
 

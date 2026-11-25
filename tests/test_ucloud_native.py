@@ -2,13 +2,19 @@
 
 import copy
 import json
+import socket
 import struct
 import threading
 from contextlib import ExitStack
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from admission_support import inspect_and_materialize
+from websockets.datastructures import Headers
+from websockets.exceptions import InvalidStatus
+from websockets.http11 import Response
+from websockets.sync import client as websocket_client
 
 from cbs_transcriber import ucloud_native as native
 from cbs_transcriber.media import Cancelled
@@ -620,6 +626,129 @@ def test_v27_websocket_binary_file_transfer(tmp_path, monkeypatch):
     assert b"".join(frame[5:] for frame in sent[1:-1]) == data
     assert all(struct.unpack(">Bi", frame[:5]) == (2, 0) for frame in sent[1:-1])
     assert sent[-1] == bytes([6])
+
+
+@pytest.mark.parametrize(
+    ("status_code", "location", "message"),
+    [
+        (None, None, None),
+        (307, "wss://other.invalid/redirect?session=LOCATION_CANARY", "redirected"),
+        (308, "/different-path?session=LOCATION_CANARY", "redirected"),
+        (403, None, "interrupted"),
+        (302, None, "interrupted"),
+    ],
+)
+def test_websocket_upload_connection_is_direct(
+    tmp_path, monkeypatch, status_code, location, message
+):
+    """Exercise pinned connect's real control path with an entirely synthetic wire."""
+    path = tmp_path / "source.wav"
+    path.write_bytes(b"synthetic audio")
+    sockets, handshakes, frames, events = [], [], [], []
+    answers = iter([struct.pack(">Bi", 0, 0), struct.pack(">Bi", 5, 1)])
+    transfer_origin = "files.invalid"
+    endpoint = f"wss://{transfer_origin}/upload?session=synthetic-session"
+    real_connect = native.connect
+
+    def open_socket(address, **_):
+        assert not sockets, "A second socket was requested for one upload session"
+        assert address == (transfer_origin, 443)
+        sockets.append(address)
+        events.append("socket")
+        return SimpleNamespace(
+            family=socket.AF_INET,
+            settimeout=lambda _: None,
+            setsockopt=lambda *_: None,
+            close=lambda: events.append("close"),
+        )
+
+    def initialize(connection, transport, protocol, **_):
+        # No live sockets or I/O workers are created by the test connection.
+        assert isinstance(connection, native._DirectUploadConnection)
+        connection.socket = transport
+        connection.protocol = protocol
+        connection.recv_events_thread = SimpleNamespace(join=lambda: events.append("drain"))
+
+    def handshake(connection, additional_headers, *_):
+        assert additional_headers is None
+        assert connection.protocol.uri.host == transfer_origin
+        handshakes.append(connection.protocol.uri.host)
+        events.append("handshake")
+        if status_code is not None:
+            headers = Headers({"Location": location}) if location is not None else Headers()
+            raise InvalidStatus(Response(status_code, "RESPONSE_CANARY", headers))
+
+    def connect(url, **kwargs):
+        tls = SimpleNamespace(wrap_socket=lambda transport, **_: transport)
+        return real_connect(url, proxy=None, ssl=tls, **kwargs)
+
+    monkeypatch.setattr(websocket_client.socket, "create_connection", open_socket)
+    monkeypatch.setattr(websocket_client.ClientConnection, "__init__", initialize)
+    monkeypatch.setattr(websocket_client.ClientConnection, "handshake", handshake)
+    monkeypatch.setattr(websocket_client.ClientConnection, "start_keepalive", lambda _: None)
+    monkeypatch.setattr(
+        websocket_client.ClientConnection,
+        "close_socket",
+        lambda connection: connection.socket.close(),
+    )
+    monkeypatch.setattr(
+        websocket_client.ClientConnection,
+        "close",
+        lambda connection, **_: connection.socket.close(),
+    )
+    monkeypatch.setattr(
+        websocket_client.ClientConnection, "send", lambda _, frame: frames.append(frame)
+    )
+    monkeypatch.setattr(websocket_client.ClientConnection, "recv", lambda *_, **__: next(answers))
+    monkeypatch.setattr(native, "connect", connect)
+
+    class Client:
+        def request(self, method, url, **_):
+            assert (method, url) == ("POST", "/api/files/upload")
+            events.append("session")
+            return httpx.Response(
+                200, json={"responses": [{"protocol": "WEBSOCKET_V2", "endpoint": endpoint}]}
+            )
+
+        def retrieve_file(self, remote):
+            assert remote == "/drive/file"
+            events.append("verify")
+            return {"status": {"sizeInBytes": path.stat().st_size}}
+
+    def approved_origin(url):
+        assert url == endpoint.replace("wss://", "https://", 1)
+        events.append("origin")
+
+    def upload():
+        native.upload(
+            Client(),
+            "https://cloud.invalid",
+            path,
+            "/drive/file",
+            lambda: events.append("guard"),
+            lambda **_: None,
+            endpoint_guard=approved_origin,
+        )
+
+    if message is None:
+        upload()
+        assert struct.unpack(">BiqqI", frames[0])[0:3] == (4, 0, path.stat().st_size)
+        assert b"".join(frame[5:] for frame in frames[1:-1]) == path.read_bytes()
+        assert frames[-1] == bytes([6])
+        assert "verify" in events
+    else:
+        with pytest.raises(ValueError) as exc:
+            upload()
+        phrase = "was redirected" if message == "redirected" else "interrupted"
+        assert str(exc.value) == f"UCloud upload {phrase}. No job was started; retry explicitly."
+        assert "CANARY" not in str(exc.value)
+        assert not frames and "verify" not in events
+        assert events[-2:] == ["close", "drain"]
+
+    assert sockets == [(transfer_origin, 443)]
+    assert handshakes == [transfer_origin]
+    assert events.count("session") == events.count("origin") == events.count("close") == 1
+    assert events.index("origin") < events.index("socket") < events.index("handshake")
 
 
 def test_upload_revoked_during_session_does_not_start_websocket(tmp_path, monkeypatch):

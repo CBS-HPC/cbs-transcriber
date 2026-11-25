@@ -74,10 +74,12 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   published, current versioned MVP installation commands remain the available route.
 - UI: manual review progress, Next to review and the uncertainty controls share a row when space
   permits, wrapping on narrow screens. Uncertainty controls follow Next to review.
-- UI: Text / Word and timing editor dropdown defaults to Text; audio/video switch retains position.
+- UI: the passage editor is the Text editor with Start/End boxes for the word at the cursor
+  (V272, ADR 0195); the earlier Text / Word and timing dropdown is retired. The audio/video
+  switch retains position.
 - UI: double-clicking a rendered transcript word opens Text editing with that exact mapped word
   selected, including repeated words and Unicode/newline offsets. Opening does not save or align.
-- UI: Save passage requires a changed text draft. Split at cursor requires unchanged text and
+- UI: Save passage requires a changed text draft or typed word times (V272). Split at cursor requires unchanged text and
   a single caret with non-whitespace text on both sides. Cancel discards only the passage draft;
   ordinary cancellation preserves unrelated transcript nodes, search, review and playback state.
 - UI: continuous Play transcript and Follow playback appear in the transcript header;
@@ -122,10 +124,13 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   GET/PUT /api/local-concurrency reads and partially updates parallel local task limits.
 - I.spelling: GET/PUT /api/spelling/settings (revisioned preferences), GET /api/spelling/
   dictionaries and DELETE /api/spelling/dictionaries/{language} (public cache status/removal),
-  GET/PUT /api/spelling/vocabulary and /api/projects/{id}/spelling/vocabulary (independently
-  revisioned private words); POST /api/recordings/{id}/spelling/check|suggest derive the
-  effective language and return UTF-16 draft ranges; POST /api/recordings/{id}/spelling/
-  dictionary is the separate explicit retrieval and carries no transcript text (ADR 0185).
+  GET/PUT /api/spelling/vocabulary, /api/projects/{id}/spelling/vocabulary and
+  /api/recordings/{id}/spelling/vocabulary (independently revisioned private words; the
+  recording GET adds its inherited project words, ADR 0186); POST /api/recordings/{id}/spelling/
+  check|suggest derive the effective language and return UTF-16 draft ranges; GET/POST
+  /api/spelling/dictionary-tasks, POST .../{id}/retry and DELETE .../{id} manage Activity
+  dictionary downloads (ADR 0187); POST /api/recordings/{id}/spelling/dictionary remains the
+  earlier synchronous explicit retrieval. Retrieval carries no transcript text (ADR 0185).
 - I.providers: named provider configurations; bulk and per-recording selection; explicit
   multi-provider queue requests. Legacy /api/settings edits the default configuration.
 - I.results: per-recording saved transcripts, active result selection, independent edits,
@@ -150,9 +155,16 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   A view-local Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing
   word timing) narrows rendered passages, with counts, together with search; Next to review
   visits only shown passages (V223).
+  Each passage view also carries `automatic` (`timing_added`, `word_timing_missing` or null):
+  a derived system Needs review for word timing, never a stored row (V243, ADR 0191).
+  The dropdown also uses display-only Uncertain / Timing missing suggestions (V257);
+  API review states, counts and stored schema remain Not checked / Checked / Needs review.
 - I.passage-delete-undo: the same bounded inverse lookup lists proven deleted passages outside
   the live transcript. POST segments/{id}/restore binds result/revision/delete-version and
   Working choice; restore one exact dictionary at proven anchors, preserving unrelated edits.
+- I.passage-change-steps: GET and POST …/transcripts/{result}/segments/{passage}/change-steps[/undo or /redo]
+  read or apply the next saved step for one passage. Apply requires result, head version, revision
+  and offered version. Reuse the Working edit choice and return the saved recording.
 - I.change-undo: the same merge-undo-options reply carries `head_version_id` plus `undo` and
   `redo` blocks (action, version, counts, confirm, or an unavailable message) when the
   `undo_last_change` feature is on. POST transcripts/{rid}/undo-last and redo-last bind
@@ -294,6 +306,10 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   supplied claims; matched_supplied_database only, no sealed-package/history/restore authority.
 - I.portable-package: internal package_database_claims_only observation derives database
   references from an in-call frozen transport capture; no supplied capture or restore authority.
+- I.backup-tasks: POST /api/library/backup-tasks {operation_id, destination} → 202 task;
+  GET /api/library/backup-tasks[/{id}]; POST …/{id}/stop (signal), /dismiss,
+  /remove-partial, /check. Activity kind `backup`, id `backup:<task>`. Settings → Backup and
+  Library → Backups → Create backup both use it; the synchronous capture route remains.
 - I.portable-payload: pure supplied snapshot-v1 byte/hash and canonical-envelope observation
   with pre-JSON lexical budgets; no passage/history/database/owner/restore authority.
 - I.history: schema-6 immutable result/notes versions, recording-scoped paginated history,
@@ -337,17 +353,221 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   and reported performance provenance/scopes; no provider execution or invented reference data.
 
 ## §V Invariants
+- V276: Explicit discard of unsaved native batch outputs (ADR 0197) requires a fresh exact
+  preview, an owner reservation and a durable confirmation before Trash. Validate the frozen
+  batch folder and new remote ID/name/final-state observation on every cleanup attempt.
+  Preserve local results, originals, and raw artifacts. A confirmed discard fences old Retry.
+  Pending Trash stays visible and replays idempotently. Standard cleanup keeps save-first.
+- V275: A ready recording without a saved transcript shows Failed - See Activity when its
+  latest transcription attempt failed and its Activity entry remains visible. Use each file's
+  outcome in grouped batches. A newer attempt, cancellation, or dismissal clears the old
+  failure badge. The existing Activity poll updates the badge without replacing the card.
+- V274: Passage Undo/Redo walks recent, proven single-passage saves. Other passages and shared
+  speaker names keep their exact current values. A new save of this passage clears its redo.
+  Structural or unproven history bounds the walk. Undo/Redo append revision-fenced versions.
+  Drafts and stale views cannot apply a step. Read scoped history only on demand (ADR 0196).
+- V273: Project recording lists use one request-owned read transaction for the project,
+  the ordered recording rows, export eligibility and source readiness. Use the bounded
+  cache/job decoder and restored-owner exclusion on that same snapshot. Preserve the
+  existing wire fields, invalid-evidence response and single-recording read path (B586).
+- V272: The passage editor shows Start/End boxes for the word at the Text cursor (ADR 0195):
+  a caret strictly inside a word, or beside a one-grapheme word and no other word, or a
+  selection within one word. Between words, on a space or across several words the boxes
+  are empty and disabled. Saved words show saved times; new or changed draft words start
+  empty; nothing is inferred. Typed times are part of the passage draft (dirty, guarded,
+  Cancel discards them) and follow their token through spelling fixes. Deleting, splitting
+  or losing proof of the token drops its draft times with a notice. Bind the draft to the
+  recording, result, revision, passage and saved text so same-revision metadata replies
+  preserve it and newer revisions refuse Save with the draft intact (B583–B584).
+  Reconcile typed times against settled IME composition text. Keep typed intervals
+  through intermediate text and refuse their combined Save until composition ends (B585).
+  Save passage sends text and typed times once
+  (edit-v4): the ADR 0166 text policy first, then each range names exactly one resulting
+  word, all times set, then edit_timed_word's rules checked against the final times; one
+  revision/Working-fenced version (free_rewrite, or word_timing_edit for times alone) that
+  Undo restores. A timing-only edit cannot revive a stale legacy word map (B582).
+  Invalid times are refused before sending with the word named. edit-v4 never realigns;
+  edit-v1/v2/v3 and timed_word/mapped_word stay unchanged for older clients.
+- V271: A completed timing capture can retain an empty passage map as evidence. It is not
+  ready to add and it does not reserve the passages against a new request (B551, ADR 0191).
+- V264: Settings has a Backup tab in every profile: what a complete backup includes, this
+  library, the latest saved receipt, the backup folder with the same default and same-device
+  warning, Make backup, View Activity and Library backups. Restore and UCloud wording follow
+  `restore_ui`/`cloud_backup`; UCloud transfer is unchanged and never run by tests. Library →
+  Backups → Create backup hands off to the same task and loads its receipt while that dialog
+  stays open. A 409 admission refusal never resets UCloud backup choices. No schedules
+  (B520, ADR0192).
+- V263: Backup notes in the library's `backup-tasks/` folder are observational. Startup
+  settles a running note from fresh observations only: before the boundary → interrupted,
+  naming its staging folder if present; after it → needs attention. Nothing is recaptured,
+  resumed, verified at startup or deleted because of a note; an exact replay after restart
+  returns the old task. Check again finishes only the task's own remaining moves without
+  replacing anything, then runs full receipt verification; a missing reference or mismatch
+  is failed with the kept folders named. Captures never copy these notes; unreadable notes
+  are inert dismissible cards; at most 32 notes (ADR0192).
+- V262: A backup is Ready (verified) only when capture returned and the intended final folder
+  matches its creator reference (marker/manifest digests, object names and sizes, no pending
+  folder), after the full transport/contained database checks on the sealed bytes. Progress
+  is unknown before inventory, counts every file read including deduplicated duplicates, is
+  shown only while copying and never reaches 100% before Ready. Activity carries counts and
+  the user's own folders, never recording names, transcript text, keys or tokens (ADR0192).
+- V261: Before publication a stopped, failed or interrupted backup removes only its own
+  staging folder, and only when its recorded identity matches, it is a real folder and it
+  holds only expected staging names; otherwise the card names it as incomplete, not a
+  backup, and offers Remove incomplete copy under the same checks. Originals and any other
+  folder are never touched. Dismiss is refused while an owned folder remains or publication
+  is unresolved; Clear finished keeps such cards (B522, ADR0192).
+- V260: Stop is an exact signal outside capture and local-recovery admission, with host,
+  origin and request-header checks intact; it also wakes a backup still waiting for earlier
+  changes. It wins until the publication latch, written to the note under the task lock
+  immediately before the creator reference; a failed latch write refuses publication. After
+  the latch Stop returns 409 backup_publishing. Exactly one of Stop and the latch wins.
+  Graceful shutdown stops an unpublished backup, cleans up and joins it under the lease
+  (B523, ADR0192).
+- V259: Making a local backup is a server-owned Activity task (one per library). Before its
+  202 it passes the existing capture refusals, freezes the destination and a host capture id,
+  enters the reciprocal deletion/HF/export guard and takes a nonblocking capture-gate
+  reservation, so later mutations wait while earlier ones drain; it then writes its note.
+  Exact replays return the same task; changed or retyped bodies are refused. A refusal
+  creates no note, folder or reservation. The synchronous route refuses while a task runs.
+  All admission is released exactly once when the capture exits (B521, B522, V254, ADR0192).
+- V258: Global project-task shutdown immediately prevents every not-yet-claimed Stop,
+  queued task execution and Delete commit even before per-task closing flags are set. Waiting
+  for one task's in-flight COMMIT cannot let the executor advance another queued deletion.
+  A previously claimed COMMIT retains its actual outcome; later queued projects are kept
+  with interrupted notes and their controls unchanged (B518, V253, ADR0190).
+- V257: The passage review dropdown displays derived Uncertain at the current visible
+  model-hint threshold, otherwise Timing missing for automatic missing timing. Uncertain
+  wins that display overlap; an exact-content manual row always wins both. Derived options
+  are disabled/display-only and never stored as marks. Choosing an explicit manual status,
+  including Not checked when the underlying unstored default is already Not checked, writes
+  only through the existing revision/hash-bound API. Timing added keeps Needs review and its
+  reason. Remove the separate Review suggested tag while retaining uncertainty decoration,
+  Show/Next semantics, drafts, caret, native keyboard access and late-reply fences (ADR0191).
+- V256: A project task checks Keep/shutdown again after claiming the queue and before each
+  reserved inspection/input-intent or unsubmitted-native Stop dispatch. Keep that wins before
+  the first claim leaves every captured control unchanged; already accepted Stops stay
+  stopped. Legacy cancellation without a task predicate is unchanged (B515, ADR 0190).
+- V255: Keep overlapping the final Delete writer waits for its actual COMMIT outcome without
+  holding the task-manager lock. A final deletion response requires observed committed rows;
+  rollback permits keeping the live project, and unreadable outcome facts disable Keep with
+  deletion_unresolved. The decision guard spans the closed Store connection, including lost
+  replies, and shutdown never waits for it while holding the manager lock (B514, V252).
+- V254: Existing complete-backup capture and project-deletion admission reserve one another
+  before any Stop or capture copy, including a deletion still draining before its file journal
+  exists. A short shared admission boundary decides the winner; the reservation is released
+  on every capture exit. Keep and a task's own staging are not blocked by this fence. No new
+  capture/deletion authority is stored in backup packages (B513, ADR 0190).
+- V253: Graceful shutdown keeps every project not yet past its point of no return (Activity
+  *interrupted*) and drains the deletion executor under the serving lease before other
+  managers close. Receipts in the library's `project-deletions/` folder are observational:
+  startup settles a running receipt only from the project row (present → interrupted and
+  kept, absent → deleted) and never stops, deletes or releases anything; unreadable notes are
+  inert dismissible cards; at most 64 notes, oldest deleted/kept pruned first. Backups and
+  portable captures carry no deletion state (ADR 0190).
+- V252: The SQLite commit that removes the project's rows is the point of no return. Batch
+  owners' release decisions and deleted-member receipts are written in that same writer
+  transaction; the UCloud stop/terminal check/Trash runs once afterwards under the retained
+  owner reservations, with failures left to Activity Retry and automatic release. Keep
+  project signals only, is exempt only from the capture and file-recovery admission gates,
+  and is serialized with the commit by the task's decision lock: before it the transaction
+  rolls back and staged files are restored from fresh facts with no receipt left; after it
+  Keep is refused (`deletion_committed`). Keep never undoes an accepted Stop or restarts work.
+  A raised COMMIT is classified from fresh database facts (ADR 0190).
+- V251: While its deletion runs only that project is inactive: the project list marks it
+  `deleting`, the sidebar shows it greyed "Deleting…" without a link, its project/recording
+  addresses return to the project list, and a page inside it leaves on the next poll (asking
+  once if a draft is unsaved). Mutations addressed to it, its recordings, collections, jobs,
+  input intents/inspections, uploads and new transcriptions return 409 `project_deleting`
+  outside the capture gate; reads and other projects stay usable. A late write or producer
+  result that changes the capture makes the deletion refuse and keep the project.
+- V250: Confirmed project Delete is server-owned (ADR 0190). The unchanged read-only preview
+  and the existing shared-cancellation and UCloud Trash confirmations precede a 202 hand-off;
+  the dialog then closes at once and Activity's "Deleting project …" card shows stopping
+  jobs, removing from the library and removing files. Closing the dialog, navigating or
+  reloading never abandons it; status reads only observe. One executor runs accepted tasks in
+  order (at most eight); an exact replay returns the same task and a changed or retyped body
+  is refused without writes; single-job UCloud blockers known at preview refuse before any
+  Stop. Recording deletes keep the legacy dialog continuation (V148).
+- V244: Finished word-timing jobs stay in Activity until Clear finished, outcome first:
+  added (passage number when the recording is open, otherwise a count; changed and still
+  incomplete passages named), ready (added when the recording is next open, or when no
+  passage is being edited), not added because the passage changed, or not added with the
+  worker's own reason; failures keep their cards. Local word timing keeps its worker outcome
+  message on completion. Passages already queued, aligning or ready leave the Repair all
+  count at once, with the number already being timed in its tooltip (B510–B512, ADR 0191).
+- V243: Automatic Needs review for word timing is derived when review progress is read and
+  never stored as a review row (schema 19 unchanged); the passage view names the system
+  reason (`timing_added` / `word_timing_missing`). A row bound to the exact current passage
+  hash always wins, so a researcher's Checked or Not checked stays until the content changes
+  and a removed automatic mark is not invented again. Without such a row: "timing added" when
+  the current fingerprint equals one a real timing_realign version recorded for that passage
+  (`timing_added`, written atomically with the version, exact on lost-reply replay, bounded
+  to the newest 1,000 versions/20,000 entries, malformed evidence fails closed, no backfill);
+  otherwise "word timing missing" only in results meant to have word timing (mirroring
+  expectsWordTiming) for passages with lexical text. Speakers-only/untimed-by-design results
+  are never flagged. Review rows, revisions, deletion fingerprints, backups and portable
+  restore are unchanged and restore reproduces the same marks; marks stay outside Undo, and
+  Undo/Redo of timing return the content's own mark (ADR 0191).
+- V242: Contention on advisory progress.json or progress.pending never fails inference.
+  Progress retries are bounded; failed cleanup retains the pending file for a later write
+  and preserves the last readable stage. Mandatory JSON/output failures still propagate
+  (B468/B481; real Windows held-reader regression).
+- V241: Passage word timing aligns a window only when its characters (interior spaces counted)
+  fit the pinned 20 ms aligner frames. A fresh single request is refused with its window length
+  and character count; Repair all leaves such passages out and names them; frozen or retried
+  units that cannot fit are skipped without a worker and the job says so. The editor shows those
+  passages as "Too short to time", never routed to whole-result enhancement. Windows are never
+  widened. Counts use Unicode code points and the exact Python str.split whitespace set;
+  the browser preserves literal BOM and mirrors that calculation. Advisory Windows sharing
+  contention follows V242 (ADR 0189).
+- V240: Text-draft uncertainty decoration is a separate pointer-free amber dotted layer,
+  controlled by Show uncertainty, independent of red spelling and valid word timing.
+  Map only unchanged saved-to-draft spans using Unicode code points; preserve native
+  textarea value, focus, selection, caret, undo, IME and scroll. Hint/toggle changes
+  repaint decoration without replacing the textarea; clear observers on close. No
+  duplicate saved-text panel, new timing or persistence (ADR0188/T157).
+- V239: Possible spelling issues are coloured in a layer behind the transparent Text textarea
+  (red wavy line below the amber dotted uncertainty position, so both can mark one word),
+  never in a fixed panel or visible status line; the layer never writes the textarea's value,
+  selection, focus or scroll. Double-click on a coloured word in the open editor (the
+  browser's own word selection and focus are kept) or Alt+Enter inside it opens a popover with
+  the suggestion, Add to recording/project vocabulary and Ignore once; the coloured word comes
+  from the textarea's selection without surrounding whitespace, and a double-click on any
+  other word, with a modifier or opening the editor from a read-only passage opens nothing.
+  Ctrl+click is not a trigger. Escape returns to the unchanged caret. A chosen suggestion
+  replaces exactly the flagged range (never a selected trailing space) through the browser's
+  editing command, so native Undo restores it, after all V234 checks. The editor toolbar's Spelling checkbox is the remembered library preference. Settings
+  → Spelling owns spelling settings and dictionaries; Local Processing does not (ADR 0187).
+- V238: Public dictionary downloads run as server-lifetime Activity tasks, one at a time
+  through the existing pinned install path and cache lock, with ready, failed/Retry and Dismiss
+  and no persistence; shutdown interrupts them without publishing partial files. Automatic
+  downloads need checking and automatic downloads on and cover languages chosen as project
+  defaults or recording overrides; triggers are a settings save, a project or recording
+  language save (single or bulk), project creation with a language and the editor's first use,
+  never startup. Turning either preference off stops unpublished automatic downloads; a failed
+  language waits for Retry or explicit consent. With automatic downloads off, only an explicit
+  Download or Retry downloads. Nothing runs in MVP (ADR 0187).
+- V237: A recording's spelling words inherit, and never remove, its project's words; checking
+  uses personal ∪ project ∪ recording words. Row 13 stays schema 1 until a recording has words,
+  then schema 2 with a non-empty recordings map, and returns to schema 1 when the last entry
+  goes. Recording scopes have their own CAS revision checked with the live recording in the same
+  writer transaction and in the check/suggest context. Recording and project Delete fence each
+  deleted recording's revision and remove its entry before the owner rows in the same writer
+  transaction; restore validates schema 2 against captured recordings (ADR 0186).
 - V236: The `spelling` release-profile feature is on in full and hidden in MVP. MVP refuses
-  spelling preference saves, Check, Suggest and public dictionary retrieval with 403
+  spelling preference saves, Check, Suggest and public dictionary retrieval (including Activity
+  dictionary tasks and their Retry) with 403
   feature_disabled before their handlers and hides every entry point (static data-feature
   markup, featureOn in spelling.js), so MVP pages make no spelling requests. Existing private
   data stays available: reads, dictionary removal, vocabulary saves that only remove words
   (additions refused in the revision-checked writer), project-Delete cleanup and backup/restore
   retention. catalogs/release.json is unchanged (user decision 19 November; ADR 0185).
-- V235: Private personal/project spelling vocabulary lives in settings row 13 and operational
-  preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions and live
-  project ownership; project Delete fences only that project's revision and removes its entry
-  in the same transaction. Vocabulary stays out of transcript exports and research reports.
+- V235: Private personal/project/recording spelling vocabulary lives in settings row 13 and
+  operational preferences in row 12, never in rows 10/11. Scopes use independent CAS revisions
+  and live project or recording ownership; Delete fences only the deleted owners' revisions and
+  removes their entries in the same transaction. Vocabulary stays out of transcript exports and
+  research reports.
   Backups keep it; isolated restore retains only strictly validated data-only row 13 with live
   owners and never operational preferences. Malformed vocabulary refuses before promotion.
 - V234: Spelling suggestions change only the current open Text draft after exact recording/
@@ -357,8 +577,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   pinned public retrieval carries no text/credentials, preserves opt-out and needs consent when
   automatic retrieval is off. The bounded, credential-free engine child is killed/reaped on any
   deadline, including partial startup; one preferred suggestion is requested. Busy Check
-  retries only its exact current draft with bounded backoff; Suggest/install never retry
-  automatically. Dictionary removal preserves replaced/linked targets and refuses after
+  retries only its exact current draft with bounded backoff; Suggest never retries and only an
+  explicit Retry restarts a failed download. Dictionary removal preserves replaced/linked targets and refuses after
   shutdown. Vendor spellcheck stays disabled. Not a hostile-filesystem claim (ADR 0185).
 - V233: Proposed, not implemented. A native MIG owner asks about a full B200 only when two
   products reads agree the exact MIG is FULL and the full GPU AVAILABLE/BUSY, with verified
@@ -507,7 +727,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Host checks API-reported kinds/explicit link flags, not physical lstat proof; shell requires
   a regular non-link stamp. Unknown reads never grant readiness/preparation. New singleton/
   shared/standalone PREPARE=1 submissions refuse retained locks and known legacy readers
-  independently of stamp validity before uploads/job-submission POST. Read-only ticket POSTs
+  independently of stamp validity before uploads/job-submission POST. A known matching legacy
+  job observed as SUSPENDED can resume and still blocks preparation (B581). Read-only ticket POSTs
   remain observations. PREPARE=0 cached readers and same-allocation recovery
   retain authority. Preflight absence is not ownership; shell locks and legacy-reader fences
   remain. No lock stealing, cache deletion, frozen-job rewrite or disabled generation activation.
@@ -518,6 +739,7 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   complete local raw/chunk finalization; accepted requests drain. Never infer cache completeness
   from the fresh-only audio-plan helper alone. ADR 0170; mocked no-outbound checks.
 - V213: First-use home setup reuses exact UCloud discovery/save proofs and credential storage;
+  fresh native Save includes the catalog's default selection and rejects stale model-group choices.
   presentation is a separate accessible dialog; accepted saves cannot be dismissed while
   pending, and leaving/Skip cannot allow late checks to write. Keep the existing completion
   marker and existing-profile Settings handoff. Missing-key decoration uses only presence
@@ -651,8 +873,8 @@ advanced qualitative interpretation and research reporting remain in NVivo.
   Keep strict input refusal before writes, canonical fallback for legacy mirrors, authoritative
   history encoding and synchronous snapshots. Supported native-JSON mutations preserve legacy
   wire/error/header behavior, including _sa-key omission; no global/GET shortcut (ADR 0159).
-- V190: Word-and-timing editing uses one lazy word dropdown labelled with ordinal and literal
-  saved word text. Edit word reveals correction within that column; start/end remain separate.
+- V190 (superseded for the editor by V272, ADR 0195, 23 November): Word-and-timing editing
+  used one lazy word dropdown labelled with ordinal and literal saved word text. Edit word reveals correction within that column; start/end remain separate.
   Preserve text/timing/CAS/Working guards, unsaved-switch protection, keyboard access and exact
   Unicode. Ordinary text-editor opening does not allocate every word option; opening timing does.
   Double-clicking a rendered word opens Text editing, including current partial playback maps;
@@ -1017,7 +1239,9 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V18: protected projects use only explicitly approved configurations at selection, enqueue,
   retry, and before each upload; approval revocation/deletion or endpoint/model changes block
   pending work. Existing in-flight requests cannot be recalled.
-  Transcription/model-check clients do not follow endpoint redirects; configure the final URL explicitly.
+  Transcription/model-check clients and UCloud file transfers refuse endpoint redirects.
+  WebSocket uploads refuse a redirect during the opening handshake, before sending any
+  file frames or opening a second connection (B587).
 - V19: project folder choices create dedicated app-owned subfolders; media/export access stays
   ID based; existing storage and transcripts survive migration. Saved outputs retain original text.
 - V20: UCloud vLLM remains distinct from UCloud Transcriber; control/HF tokens never reach
@@ -1583,9 +1807,11 @@ advanced qualitative interpretation and research reporting remain in NVivo.
 - V137: portable transport inspection requires a caller-trusted commit SHA and a caller-owned
   quiescent staging tree. Bound bytes/depth before JSON parsing; validate canonical form,
   types/counts before opening objects; exact marker→manifest→closed object hashes/sizes never
-  use v1 mtime shortcuts. Fixed-depth
-  regular nonlinked reads retain identity/size/drift checks, bounded streams, guard calls and
-  final inventory checks; no input mutation, SQLite/Store, runtime, credential or network access.
+  use v1 mtime shortcuts. Fixed-depth regular nonlinked reads retain identity/size/drift checks,
+  bounded streams, guard calls and final inventory checks. Directory observations require the
+  same type, device, inode and timestamps across enumeration. Directory size alone is ignored
+  because enumeration can change Windows metadata without changing directory contents (B580).
+  No input mutation, SQLite/Store, runtime, credential or network access.
   Retain raw descriptor ownership through closefd=false stream construction and one finalizer;
   curate iterator I/O errors separately from caller guard exceptions, which propagate unchanged
   with handles closed.
@@ -2061,26 +2287,28 @@ T132|x|Audit seventeen hidden work areas, explicit missing-only native rerun/own
 T133|x|Isolated versioned timing-hint invalidation, sealed fresh authority and exact legacy local/cloud/merge/conflict dispatch; complete child backend 5574 passed/26 skipped, independent Go; unmerged/uninstalled, cloud history not_checked|V89,V200,V211,I.history,I.transcript,ADR0169
 T134|x|Branch-only direct OpenAI retirement preserves compatible transport, evidence and cache-only finalization; scoped and assembled synthetic gates pass; installed MVP unchanged|V212,V209,I.providers,ADR0170
 T135|x|Branch-only first-use UCloud/optional HF setup reuses checks/storage and Activity workflow; 67 relevant browser cases pass; no installed update|V213,V212,V215,I.providers,ADR0171,ADR0173
-T136|x|Exact Runtime host/shell stamps and retained-lock/reader preflight verified offline; no reclaim, historical recovery or real Runtime acceptance implied|V214,V116,I.enhance-api,ADR0172
+T136|x|Exact Runtime host/shell stamps and retained-lock/reader preflight verified offline, including B581 for suspended legacy readers; real Runtime and historical recovery remain separate|V214,V116,I.enhance-api,ADR0172
 T137|x|Branch-only Activity HF access/configured-model preparation, pinned plans and credential/ownership fences verified with mocked providers; parent server-lifetime and child durable|V215,V213,V214,I.enhance-api,ADR0173
 T138|x|Latest-release bootstrap verifies matching versioned wheel/constraints and digests; synthetic installer/assembled gates pass; stable script asset remains unpublished|V216,V49,V58,I.cli
 T139|x|Local App/.venv guides with exact managed Python and retained data; private released-wheel Windows install/help/core/COM/repair checks pass; full removal blocked, real device/Mac acceptance separate|V8,V169,I.cli
 T140|x|Modest passage/editor/timing fonts and guarded Follow reveal; user-refined passage/editor 15px, actions 12px, sidebar 13/14px qualify 23 focused browser passes; earlier 56 browser/8 native/23 backend gate retained separately; no public release|V41,V188,V210,I.transcript
-T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop and no-submit worker fences; final76 focused passes/independentGo, earlier444pass+1skip source-qualified; real acceptance/not loaded separate|V217,V6,V9,I.native-batch,ADR0174
+T141|x|Automatic exact-ID native singleton/batch startup reconnect, durable Stop and no-submit worker fences; final76 focused passes/independentGo, earlier444pass+1skip source-qualified; Windows H7-H9 actual cases passed on 9575be8; live missing-output recovery remains open|V217,V6,V9,I.native-batch,ADR0174
 T142|x|Independent first-use dialog, truthful missing-key colour and retained Settings profile identity served;39freshMVP/9freshfullpasses,74MVP/10fullqualifiedobservations with exact overlap/limits recorded|V213,V215,I.providers
 T145|.|Funding-based CPU fallback for native Transcriber and CBS Runtime; direction agreed, wallet units/affordability policy and exact8CPU model/recipe/generation proof pending; currentMIG unchanged|V220,V76,V112,ADR0177
 T143|x|Runtime preparation typed same-owner observation recovery, bounded terminal settling and atomic Stop/Ready writer fence;117distinctimmutablefocusedpasses and independentGo; localchildnotloaded, historical lock unchanged|V218,V214,V215,I.enhance-api
-T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2 owner/folder/promotion slice implemented disabled e9dd23d, independent Go 229865a, D1-D3 fix 600141f (67 adversarial/84 builder/285 legacy Runtime passes); disabled settled-candidate supersession added 19 November (claude/runtime-supersession, synthetic only, review pending); strict normalised-specification comparison designed (proposal), needs real UCloud replies; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
+T144|~|DisabledStage1 registry/selection/path/candidateCAS verified46distinctcases/independentGo; Stage2 owner/folder/promotion slice implemented disabled e9dd23d, independent Go 229865a, D1-D3 fix 600141f (67 adversarial/84 builder/285 legacy Runtime passes); disabled settled-candidate supersession reviewed 20 November with B484/B485 fixes; final 452 passes/3 skips across 13 synthetic modules and independent implementation Go; all switches remain off; strict normalised-specification comparison designed (proposal), needs real UCloud replies; no activation, latercarry/HF/CPU/capture/restore/live gates remain|V219,V218,V214,V215,ADR0176
 T146|x|Standalone bounded project-funding observer: unit pin verified vs upstream 2c23d295, watchdog deadline, Project/Authorization check; builder 8698d4c and independent Go dccf2f6 (259 tests); 19Nov cross-platform wake-up (shutdown via duplicate descriptor, then close; 272 tests, Windows-verified, Linux stdlib probe only, macOS pending); unwired, no routing/CPU activation|V221,V220,I.providers,ADR0178
 T147|x|Existing sole-result Working schema19 with untouched marks and bounded negative native-recovery fence; builder 1b4d566 (57 cases) and independent Go f484571 (114 adversarial, 171 combined); not loaded|V222,V149,V182,I.history,ADR0179
 T148|x|Show review filter with counts, search combination, filtered Next to review and draft-safe in-place hiding; focused browser checks pass (claude/editor-review-v2)|V223,V192,I.passage-review,ADR0148
 T149|x|Default-on Text highlighting with prefix/suffix draft mapping and typing-pause Follow; prototype gate removed; Chromium/Windows browser checks only|V210,V188,I.transcript
 T150|~|Undo last change/Redo slice 1: exact predecessor step discovery, proven structural agreement, Working fence, presence rows, toolbar labels/confirmations/late-reply fences; 30 backend and 5 browser checks pass (claude/undo-last-change); shown in MVP v2 by the user's 20 November decision (with T151/T152); per-passage controls stay the fallback where the feature is hidden; slices 2 and 3 in T151/T152|V224,V185,V186,I.change-undo,ADR0180
-T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions replacing the per-passage controls when the feature is on; 8 backend and 4 browser checks pass, per-passage browser tests pinned to a profile hiding the feature (claude/undo-last-change); shown in MVP v2 (20 November)|V225,V224,V185,V186,I.change-list,ADR0181
+T151|~|History change list: bounded list metadata, word-level What changed, undone/redone tags and Revert this change for proven older merges/splits/deletions alongside the per-passage controls, which stay (user, 20 November, amending the original replacement); 8 backend and 4 browser checks pass, per-passage browser tests pinned to a profile hiding the feature (claude/undo-last-change); shown in MVP v2 (20 November)|V225,V224,V185,V186,I.change-list,ADR0181
 T152|~|Branch view: bounded text-free version graph, verified branch points and merge/wording edges, collapsed runs, Working/undo markers, keyboard nodes, What changed and existing review/compare/Working actions; 3 backend and 2 browser checks pass (claude/undo-last-change); shown in MVP v2 (20 November)|V226,V225,I.version-graph,ADR0182
 T153|~|Native batches: plain Activity status, Settings → UCloud upload/batch limits and per-file early uploads with sealed single-owner submission; synthetic mocked checks pass (claude/native-batch); live UCloud timing/throughput and the full-GPU choice remain|V229,V230,V231,V232,V22,V142,V187,I.native-batch,ADR0183
 T155|~|Local DA checking and en-GB checking/one preferred suggestion ported from the private preview into v2 (claude/spelling-hidden) with private vocabulary, bounded worker/cache and draft/timing guards; settings rows moved to 12/13; on in full, hidden/refused in MVP with reads and removals kept; scoped backend/browser/MVP checks pass; real-user, licence and platform acceptance remain|V234,V235,V236,I.spelling,ADR0185
-T154|.|Proposed only: per-batch full-GPU ask when no native 1g MIG is free; design ADR0184 with the user's 19 November decisions, no code, review or live evidence; read-only live reads permitted once implemented|V233,V76,V217,V220,ADR0184
+T156|~|Spelling redesign (claude/spelling-redesign, 20 November): recording vocabulary inheriting project words in File Settings; automatic dictionary downloads as Activity tasks; coloured words with a double-click/Alt+Enter suggestion popover replacing the fixed panel (claude/spelling-trigger: double-click keeps the native word selection, Ctrl+click removed); remembered toolbar toggle; Settings → Spelling tab; synthetic unit/Chromium browser/MVP checks pass; macOS/Firefox/Safari double-click selection and Undo, screen readers and real users unverified; still hidden in MVP|V237,V238,V239,V236,I.spelling,ADR0186,ADR0187
+T157|x|Dotted uncertainty in the actual Text editor (11f9b2f), independent from red spelling with native draft/caret/focus/undo/IME/Unicode/scroll retained; seven new browser cases and final 58-case editor/spelling browser gate pass; not loaded or published, real-user/platform acceptance separate|V240,V239,V41,ADR0188
+T154|~|Full-GPU ask remains unintegrated; bounded supplied-data capacity and never-started helpers implemented and synthetically reviewed (2caa3b6,13e2027), with no submission/Stop/consent authority or live evidence; ADR0184 activation and end-to-end owner/control proofs remain open|V233,V76,V217,V220,ADR0184
 
 T43i|x|explicit immutable Working-version designations, exact default project exports and role/event validation verified and activated on schema15|V149,I.history,I.results
 T43j|x|explicit preview-bound conflict/restoration decisions with atomic history and guarded browser controls|V150,I.history,I.results
@@ -2096,6 +2324,20 @@ T80b|~|approved cancelled five-file Runtime folder moved to Trash through main; 
 
 T87f|x|fresh whole Runtime format-aware original transport, pinned remote materialization and exact PCM/preparation receipts verified offline; cost/codec/live acceptance remains|V156,V157,I.enhance-api
 T90f|x|older-recording selected-source byte/epoch proof and absolute bounded timeline repair admission verified offline; no whole original upload|V158,V159,I.repair-bundle
+
+T158|x|MVP v2 rc2 timing reliability: advisory Windows progress-file retries, truthful errors/alignment stage and impossible-window admission/skip (ADR0189); 377 backend and final 22 browser cases pass with independent review and exact Unicode parity; isolated local rc2 wheel/constraints and 155 helper/profile cases verified (6ff03df); no installation/publication/reload, real H15a pending|V241,V242,V3,V5,V8,ADR0189
+T159|~|Separate cursor-word timing interaction prototype f140a34 from4574083: OFF by default, native Text retained, start/end drafts in memory only, no save/API/CAS changes; 15 browser cases and independent limited-scope Go; boundary/selection/one-character and production save UX remain undecided; unmerged|V239,V240,V201,I.transcript
+T160|x|Project deletion in Activity implemented on claude/deletion-activity and independently hardened on codex/night-deletion-fixes-20261120: reciprocal existing-backup admission, actual COMMIT-bound Keep, Keep-before-Stop and R5 lost-Trash-reply recovery; corrected staged backend inventory 376 passes/two skips and final22 relevant browser passes on fixed source with exact before/after hashes; whole-browser and realH24 notclaimed, recording deletes unchanged, no loaded-app/main claim|V250,V251,V252,V253,V254,V255,V256,V148,ADR0092,ADR0101,ADR0102,ADR0190
+T161|~|Backup in Settings with Activity (local rc3 candidate): server-owned local backup task with reserved admission before 202, cancellable waiting, phases/counts, Stop until a durable publication latch, identity-bound staging cleanup, file notes across restart, Check again finish-only verification; Settings → Backup tab and Library Create hand-off; synthetic backend and Chromium checks pass; 12-original Windows local capture and separate restore checked in H21; large/removable/cloud-synced destinations, crash recovery, macOS and approved UCloud transfer remain open|V259,V260,V261,V262,V263,V264,V254,V3,V5,V8,ADR0096,ADR0158,ADR0192
+T162|x|Word timing in review and Activity (post-v2, branch claude/timing-review, unmerged): derived automatic Needs review for missing/added timing with reasons, Activity outcomes for finished word timing, worker outcome message kept, Repair all count without in-flight passages; synthetic checks pass (239 focused backend and 77 browser cases; a broader 670-case backend run had one failure, the base branch's packaged mvp profile); real-library acceptance H15c pending|V243,V244,V186,V223,V103,I.passage-review,ADR0191
+T163|x|Derived Uncertain/Timing missing review dropdown on codex/night-review-dropdown-20261120 (9b56e20): separate Review suggested tag retired; current-content manual marks win, no derived writes, native controls and existing filters retained;58 focused browser passes with exact source hashes and explicitly qualified cached Spylls host/child imports; local integration only, final composition gates separate, no app reload|V257,V243,V223,V192,ADR0191
+T164|x|Word-timing editor (07d9bbd and B585, local rc3 composition): Start/End boxes for the word at the Text cursor replace the word dropdown; typed times are part of the passage draft and save with the text through edit-v4 as one version that Undo restores; Cancel discards both; conservative caret/selection/one-grapheme rules; synthetic backend and Chromium browser checks pass; real IME, screen reader, Mac/Firefox and real-user acceptance pending|V272,V190,V59,V149,ADR0166,ADR0180,ADR0195
+T165|x|Project recording-list readiness uses one read-only SQLite snapshot. Mixed-state wire parity and connection-count gate pass. On 1,204 synthetic recordings, HTTP API calls took 0.41–0.60 s versus 10.91–12.63 s with the same canonical response. Matched Chromium verification at the same scale took a median 1.38 s to enabled controls and every card, versus 8.59 s earlier. Real-device and larger-library acceptance remain open|V273,V138,B586
+T166|x|Add multi-step passage Undo/Redo to the local colleague candidate. Prove scoped steps, concurrent refusals, structure boundaries and recording-toolbar coexistence in backend and Chromium checks|V274,V224,V185,V186,I.passage-change-steps,ADR0196
+
+T167|x|Show an actionable transcription failure on the project recording card and clear it when Activity resolves it|V275,V105,V162
+
+T168|x|Allow Retry remote cleanup to prompt before discarding unsaved native batch outputs on a known ended allocation|V276,V275,V105,V86,ADR0197
 
 ## §B Bug memory
 
@@ -2206,4 +2448,66 @@ B463|2026-11-19|Early-selection hazards (B462): batch-wide claim/finish writes i
 B464|2026-11-19|Porting the 9 November spelling preview into v2 found its settings rows 10/11 already owned by checked-provider receipts and runtime generations; unchanged, saving spelling preferences would overwrite the provider receipts, and a library with runtime generations would fail the vocabulary validator, refusing project Delete and restore|V235,ADR0185; move spelling to rows 12/13 in the service, Delete fence and repinned restore validator; regression that a vocabulary-shaped row 11 is never restored as spelling data
 B465|2026-11-19|The funding observer's watchdog woke a stalled worker only by closing the SDK client, and its wake-up was claimed for Windows alone: a stdlib loopback probe showed a close from another thread does not wake a blocked read on Linux (WSL2), shutdown does not wake it on Windows, and closing the client never reached a TLS handshake on any platform because httpcore returns the TLS socket only afterwards|V221,T146; shut down a duplicate descriptor taken at TCP connect, then close the client; shut down connections completing after the deadline at once; per-platform loopback tests run everywhere and a no-shutdown mutation fails them; macOS and a full Linux run unverified
 B466|2026-11-20|With spelling suggestions on, Cancel on a passage editor scrolled through a long transcript moved it by about 76 px: removing the spelling panel and editor above the focused Cancel button let the browser's scroll anchoring re-anchor the view before the editor closed|Cancel pauses scroll anchoring on the transcript while it clears the draft and closes the editor in place, keeps the earlier scroll (the browser may only clamp it) and resumes anchoring next frame; the 600-passage Cancel regression now waits for the spelling panel and asserts the clamped position
+B480|2026-11-20|Stopping the MVP v2 preview with Ctrl+C left the server running for minutes with its port closed, all workers idle and the user's browser tab still open; even a second Ctrl+C did not end it and the process had to be ended (nothing was running and the database was fully written). Ordinary Ctrl+C had no graceful-shutdown bound, unlike library switches; uvicorn waits for open connections and, on Python 3.12+, asyncio's Server.wait_closed|The launcher gives every server a 10-second graceful-shutdown bound (SHUTDOWN_DRAIN_SECONDS), after which uvicorn cancels remaining requests and the app's lifespan shutdown still drains workers and releases the library; tests pin the bound and check shutdown completes with lifespan under a paused large file download. The exact browser connection was not reproduced synthetically (number chosen to avoid parallel branches' B468–B479)
 B467|2026-11-20|Project Export Settings could open before the project's recording list had loaded (for example right after returning from a recording opened directly), so the dialog listed too few recordings; the full v2 browser suite caught it intermittently|The project export button stays disabled, and its handler refuses, until the shown project's own list is loaded, like Transcribe selected; a regression holds back the list request and checks the button and the complete dialog list
+B468|2026-11-20|"Repair all" for 60 passages failed after 6 units with "Local file operation failed. Check free space…" (12 GB free): on Windows the app's poll of progress.json raced the worker's atomic replace and the open was refused (a scratch probe saw 184 PermissionErrors in 5,222 reads against 414 replaces, and the writer refused 228 times); the error stopped the warm worker and failed the whole job. Replaying the real job's six unit folders offline through the same post-processing raised nothing, so the suspected KeyError on untimed words was not the cause|V242; the monitor treats a refused or partial progress read as "not yet" and reads it again on the next poll; the worker retries a refused progress replace briefly, then keeps the previous stage and removes its pending file when possible, retaining it if a reader holds it; outputs still propagate every error; monitor and real held-handle regressions, plus a unit whose words all come back untimed continuing the job
+B469|2026-11-20|Every OSError or KeyError in a job was shown as "Local file operation failed. Check free space and that files still exist.", so a busy file or a missing key looked like a full disk|jobs.failure_message: curated ValueError text unchanged; PermissionError says a file was busy or could not be opened; other OSError keeps the disk/file message; KeyError is an unexpected processing error; no paths, keys or text; worker-loop regressions per exception kind
+B470|2026-11-20|Word timing for passages whose saved interval is far too short for their text (1.0 s for 51–101 characters from a UCloud large-v3 result) loaded models and aligned a 1 s clip that WhisperX can never fit (CTC needs a 20 ms frame per character; its backtrack fails and returns no words), then finished "Complete" without timing; Activity showed "Loading local models…" throughout because short alignment reported its stage only after aligning|V241, ADR 0189; fresh requests refuse windows with more characters than aligner frames (single: reason with length and count; Repair all: left out and named), frozen/retried units are skipped without a worker with a truthful message, the editor shows "Too short to time" and counts them separately; the worker reports "Aligning words…" before the first window; regressions for the frame rule, enqueue refusals, frozen skips, stage order and the browser mirror
+B481|2026-11-20|Independent review of the Windows progress fix reproduced a second sharing violation: with progress.json and progress.pending both held by readers, the refused replace was handled but fallback unlink raised PermissionError and failed the worker|V242,T158; cleanup catches only PermissionError and retains the advisory pending file for a later write; real-held-reader red/green regression also proves mandatory write_json still raises under the same lock
+B486|2026-11-20|The synthetic process-tree cancellation worker published descendant.pid before its contents were complete; its parent could parse an empty PID and exit before started.json, mimicking a startup timeout before cancellation was tested|T158; publish the fixture PID through pending-file replacement without changing production code, five-second deadlines or process-tree assertions; an isolated widened-race probe captured the empty-PID ValueError and its atomic counterpart passed; not every earlier startup failure was causally attributed
+B487|2026-11-20|Independent timing review found the new browser admission mirror used JavaScript trim/whitespace semantics while the server used Python str.split: NEL could disable a valid 49-frame window and BOM could enable an impossible one|V241,T158; normalize the exact Unicode White_Space plus U+001C-U+001F set, preserve literal BOM and code-point counts, and check boundary UI/API parity without changing text or timing
+B488|2026-11-20|Spelling redesign (before commit): opening the suggestion popover with Alt+Enter dropped keyboard focus to the page body, because the popover re-rendered with every button disabled while its suggestion loaded and focus could not stay on a disabled button|V239,ADR0187; the popover is itself focusable, keyboard-opened popovers keep focus inside across re-rendering and move it to the suggestion when it arrives; browser regression asserts the suggestion is focused and Escape returns to the unchanged caret
+B491|2026-11-20|Spelling redesign (before commit): moving the spelling settings into a Settings tab panel and adding File Settings vocabulary buttons left those elements without their own data-feature mark, so MVP code that un-hid them made them display again (only their wrappers were hidden); the moved dictionary list also inherited the global right-floating 9 px field-note style|V236,ADR0187; every spelling entry point carries data-feature="spelling" itself and the MVP browser check un-hides each new one; the Spelling panel, popover and vocabulary dialog set readable non-floating notes
+B489|2026-11-20|Spelling redesign review: the user asked for word suggestions "by double clicking on a word", but the redesign used Ctrl+click (⌘+click on macOS) on the assumption that double-click had to stay plain word selection; the popover never needs to change that selection, so both fit|V239,ADR0187; double-click on a coloured word inside the open editor opens the popover beside the browser's own selection, other words and modifier double-clicks do nothing extra, the editor-opening double-click is untouched, Alt+Enter stays and Ctrl+click was removed; browser regressions cover each case. Lesson: keep the interaction the user named unless they choose another, and check whether the assumed conflict is real
+B490|2026-11-20|Spelling redesign review: Alt+Enter after double-clicking a coloured word in a Windows browser opened nothing, because the browser also selects the following space and the caret lookup required the whole selection inside the coloured word|V239,ADR0187; one selection lookup ignores surrounding whitespace for both routes, finds nothing for whitespace-only or multi-word selections and accepts a bare caret only for Alt+Enter; a chosen suggestion still replaces only the coloured word, so the space stays; browser regression covers the trimmed and refused selections
+B492|2026-11-20|The composed editor keyboard-replay test assumed Replay was immediately before the textarea in tab order; after the spelling redesign a real enabled Spelling checkbox occupies that position, but asynchronous preference readiness made the old assertion pass or fail by timing|V239,V210,T156; wait for the intended checkbox to be enabled, traverse it and Replay with native Shift+Tab, and retain Enter, draft, caret, focus and passage-boundary assertions; production focus behavior is unchanged
+B484|2026-11-20|Independent review of disabled Runtime supersession reproduced a SUSPENDED remote preparation being treated as settled through the legacy broad terminal classifier, permitting a replacement although the pinned UCloud lifecycle can resume it|V219,T144,ADR0176; use a private positively-final SUCCESS/FAILURE/EXPIRED predicate for candidate settlement and permanent retired-owner decoding; preserve legacy classification elsewhere and keep every generation switch off
+B485|2026-11-20|The disabled supersession lost-reply path compared a caller-supplied digest string with the recorded receipt before validating the whole supplied body, accepting substituted evidence while returning the same successor|V219,T144,ADR0176; validate policy and canonical type-strict whole-body digest before deduplication; changed/null/retyped bodies refuse without writes while exact replay remains idempotent
+B482|2026-11-20|Independent review of the unintegrated full-GPU evidence helper found that bool GPU counts could compare equal to integers in supplied product metadata|V233,T154; require exact integer GPU metadata for both products; three adversarial cases failed before 2caa3b6 and passed after strict type checks
+B483|2026-11-20|The unintegrated full-GPU helper ignored unknown or contradictory job-update fields and treated resumable SUSPENDED as terminal|V233,T154; follow the pinned UCloud JobUpdate allowlist and strict nullable scalar/int64 types, reject unsupported resource evidence and admit only SUCCESS,FAILURE,EXPIRED as observed-final; 21 adversarial red cases before 13e2027; existing production state handling is unchanged
+B500|2026-11-20|Codex's deletion review: Delete recorded each batch owner's UCloud release decision (and could move its folder to Trash) before local staging and the SQLite Delete commit, so a deletion that then failed or was abandoned kept a project whose owner was already released and recovery-fenced; a Keep before the commit could not have been truthful|V252,ADR0190,ADR0101; transaction-aware confirm_release_in/record_deleted_members_in write the same receipts inside the Delete writer and the remote steps run after the commit, under the same owner reservations; the legacy recording DELETE continuation keeps its ordering; R1/K3 regressions prove a failed or kept deletion leaves no receipt and no Trash
+B501|2026-11-20|Project deletion in Activity (before commit): a settled task wrote its receipt before lifting the project fence, so a status read could show the deletion kept while the project still refused edits|V251,ADR0190; the terminal state and the fence change together under the task lock, then the receipt is written; K1 asserts the kept card already reports the project active
+B502|2026-11-20|Project deletion in Activity (before commit): a page inside a project deleted from another tab stayed open, because the ordinary poll's own project refresh superseded the deletion module's refresh and the next poll then saw nothing new|V251,ADR0190; every poll re-checks whether the open project is inactive and leaves once per deletion (no repeated unsaved-draft prompt); browser regression covers the other-tab case
+B503|2026-11-20|Project deletion in Activity (before commit): the start body accepted "yes" for confirm_shared through lax coercion, turning a retyped lost-reply replay into a different confirmation instead of a refused body|V250,ADR0190; the start request model is strict, so a retyped body is refused (422) without writes and only an exact replay returns the same task
+B510|2026-11-20|Testing MVP v2: a per-passage "Add word timing" job vanished from Activity when it finished, because finished realignments were hidden as routine; the user could not tell whether timing had been added, was waiting for the recording to be opened, had been skipped because the passage changed, or had found nothing|V244, ADR 0191; finished word-timing jobs stay listed until Clear finished, with the outcome first (added with passage number or count, ready, not added: changed, not added: reason); end-to-end and routed browser regressions
+B511|2026-11-20|While implementing B510: the local job runner overwrote every finished job's message with "Complete", so the word-timing worker's own outcome ("Complete word timing for N of M passages", "Word timing could not be found…", ADR 0189's too-short skips) never reached Activity or the passage tag's tooltip; tests called queue.process directly and never saw the runner's final write|V244; completed local realign jobs keep the worker's message (others still say Complete); a unit test of the completion message and an end-to-end browser check through the real runner. Older jobs keep "Complete" and Activity names a generic reason
+B512|2026-11-20|Testing MVP v2: after "Add word timing" on one passage, "Repair all N incomplete passages" kept N while that passage was queued, aligning or ready (the timing is added only once no passage is being edited, and model loading took minutes), so the count looked stuck|V244; in-flight passages leave the count at once and the tooltip names them; the count re-renders when timing is applied; a passage whose words could not all be timed still counts as incomplete and Activity says so; end-to-end browser regression with a held aligner
+B513|2026-11-20|Independent deletion review reproduced both admission orders: an existing portable-backup capture returned 201 while a project deletion was still stopping before any file journal, and direct deletion admission could start while capture held its copy guard|V254,ADR0190; a counter reserved under the task admission/state locks fences both directions through capture exit, including exceptions; only backup capture uses it so Keep and deletion staging remain reachable; deterministic red/green tests, no schema or restore authority change
+B514|2026-11-20|The task set committing before Store.connection exited, so Keep returned deletion_committed while SQLite COMMIT was still pending and could subsequently roll back; the old K4 test explicitly expected that false early claim|V255,V252,ADR0190; hold the task decision through connection exit and fresh classification of raised COMMIT, move Keep/shutdown waits outside the manager lock, disable unknown-outcome Keep, and require a real outcome before a final response; independent late-Keep rollback/success and unknown-outcome tests retain both winner oracles
+B515|2026-11-20|Keep won after stop_for_task checked its flag but before _cancel claimed the queue; reserved source inspection and input-intent cancellation still ran, although no Stop had been accepted before Keep|V256,ADR0190; recheck the predicate at queue claim and each reserved/native dispatch, preserve the legacy None predicate, and assert exact frozen jobs/inspection cache remain unchanged when Keep wins
+B516|2026-11-20|The expanded night regression used a deeper generated Windows basetemp than the earlier focused gate; ten successful portable-route scenarios hit the unchanged staging/destination path-budget guard or its secondary wait symptom|Harness-only correction: rerun the complete 30-case portable_routes module from a fresh short synthetic base with identical source, tests and assertions; all 30 pass. Reconcile exact case identities into the 378-case inventory (376 passes, two skips), retaining the original 366-pass/two-skip/ten-failure receipt. No new product invariant or guard relaxation is needed
+B517|2026-11-20|The night dropdown browser runner exposed cached Spylls only to the isolated worker; the unchanged host availability guard could not find the package, so the spelling/uncertainty overlay test failed on both candidate and untouched base|Harness-only correction: expose the actual existing Spylls0.1.7 cache to the test host as well as the isolated child, preserving find_spec and all isolation guards; the corrected58-case gate passes without changing source, assertions or installed environments. Normal installed-worker acceptance remains open
+B518|2026-11-20|Final adversarial review paused close() while it waited for the first task decision; the executor advanced and deleted a second queued project after global closed was already true, because its per-task closing flag had not yet been set|V258,V253,ADR0190; include global closed in the shared Keep/shutdown predicate and use it at both final decision/commit boundaries. Independent deterministic queued-project and two direct-boundary regressions; prior in-flight COMMIT outcome remains authoritative, with no new Stop for the queued project
+B520|2026-11-21|Implementing T161: Library → Backups used the shared action wrapper, which treats every 409 as a UCloud storage conflict and clears the saved destination approval in the dialog; the new backup admission answers refusals (queued jobs, a running backup, a deleting project) with 409, so Create backup would have silently reset UCloud choices|V264,ADR0192; Create backup rethrows a plain error for admission refusals, so only real storage replies reset UCloud state; the existing Library browser test still sees the refusal text
+B521|2026-11-21|Implementing T161: the early admission check called the local-deletion journal reader without the library lease in a no-worker app, raising instead of answering|V259,ADR0192; the check borrows the serving lease, or takes its own only in no-worker apps, as other handlers do; covered by every backend task test
+B522|2026-11-21|TODO and Codex's proposal: a complete backup ran inside one HTTP request, so a closed dialog or lost reply left a `.portable-<id>.partial` folder with no explanation and no Stop|V259,V261,ADR0192; the server-owned task survives dialogs, removes its own identity-bound staging on stop/failure or names it, and a restart reports it as interrupted with Remove incomplete copy
+B523|2026-11-21|Implementing T161: CaptureGate.capture left waiting mutations asleep when a capture ended its admission wait without becoming active, which a cancellable reservation can now do|V260,ADR0192; the capture admission always notifies on exit; a deterministic gate-level regression fails without that notification and passes with it (the HTTP stop-while-waiting test alone passed either way because Stop's own wake-up usually wins the race)
+B524|2026-11-23|Related browser gate for T161: five isolated portable.js harness tests replied only to the synchronous POST /library/portable-backups, and the Library dialog test expected the refused capture to log 400; the first loaded-module version of the hand-off also called a Settings-module helper the harness does not load|V264,ADR0192; Create backup uses only the shared api function (exact-replay start, then a 500 ms status follow while the dialog stays open), the harness answers the task POST and status GET, and the console expectation is 409 for the refused admission; assertions otherwise unchanged
+B551|2026-11-23|A sealed empty timing map was truthy, so Activity offered Apply and a new request stayed blocked after the worker found no complete timing|V271; keep the capture and derive readiness and requested-target reservation from the output map
+B552|2026-11-23|Building ADR0195: tracking typed times with the playback rule's letter-based separation left them on "β" when "β-rettet" was typed, so the token Save pairs and the word the boxes showed differed|V272,ADR0195; typed times follow their whitespace-separated token, as the server's token pairing does; browser spelling-fix tests
+B553|2026-11-23|Codex's prototype rule (caret strictly inside a word) made one-character words unreachable by caret and treated an emoji's surrogate halves as positions|V272,ADR0195; beside a one-grapheme word the caret selects it unless it touches another word; surrogate-splitting carets select nothing; Unicode/emoji browser test
+B554|2026-11-23|Placing the boxes in the editor toolbar would put two tab stops between the textarea and Spelling/Replay, changing the existing Shift+Tab route|V272; the boxes sit just below the textarea: Tab goes from the text to Start, Shift+Tab still reaches Replay
+B555|2026-11-23|Rewriting existing CRLF test files through LF-only tools produced mixed line endings|Harness-only: edit with an explicit line-ending-preserving helper and check `git ls-files --eol`; no product change
+B556|2026-11-23|Building ADR0195: adding the combined helper to transcripts.py changed the source the portable semantic checker pins (and pushed it past its 64 KiB bound), so three contained capture/restore tests refused the trusted resource|V272,ADR0195; the helper lives in word_times.py and only composes transcripts.py's unchanged functions; transcripts.py stays byte-identical, so no repin
+B557|2026-11-23|Building ADR0195: validating each typed time one at a time with edit_timed_word refused valid multi-word moves (moving two neighbours later fails if the first is checked while the second still has its old time)|V272,ADR0195; set every typed time first, then check each changed word with the unchanged single-word rules against the final times; test_order_of_typed_edits_does_not_matter
+B580|2026-11-23|Live UCloud backup test on Windows: the initial attempts to back up the test library failed in "Listing recordings and evidence files" with "filesystem witness is invalid or changed", because NTFS reports a recording folder that has not been listed recently as size 0 and as 4096 after os.scandir, and the portable witness compared directory sizes; each failed attempt only warmed the folders it reached|V137,V259,ADR0081,ADR0192; directory witnesses compare device, inode, mtime and ctime but not size; files keep their size; regression tests simulate a cold folder
+B581|2026-11-23|PREPARE=1 checked the general terminal set and could start setup beside a suspended matching legacy reader whose supervisor lacks the shared lock|V214,T136,ADR0172; keep SUSPENDED blocking for preparation only; five red-to-green cases exercise singleton, shared batch and standalone callers before setup side effects
+B582|2026-11-23|A timing-only passage save could mark a stale legacy word map current through its manual timing flag|V272,ADR0195. Require a current map before assigning typed times. The stale edit-v4 test keeps the result unchanged.
+B583|2026-11-23|An edit beside repeated text could transfer typed times to the wrong occurrence|V272,ADR0195. Validate the native replacement range or retain times only when the fallback positions agree. Chromium insertion and deletion reproduce the issue.
+B584|2026-11-23|A recording Rename reply replaced segment objects at the same revision and could omit the editor's typed times on Save passage|V272,ADR0195. Use recording, result, passage, text and revision as the draft fence. Keep the draft on a newer revision and refuse Save until reopened.
+B585|2026-11-23|A transient word split during IME composition discarded typed times even when the original word returned|V272,ADR0195. Track the settled value and defer combined Save while typed intervals are composing. Reproduced and verified in Chromium.
+B586|2026-11-23|A project list opened a new SQLite connection for each recording's source-readiness lookup|V273. Borrow its read snapshot for the verified decoder and restored-owner check. Assert exact mixed readiness and one connection per request.
+B587|2026-11-24|The pinned synchronous WebSocket connector could follow redirects after the original provider transfer endpoint check|V18. Refuse redirects at the individual upload handshake. The mock gate on the pinned connector verifies a single connection, zero frames on refusal and successful direct transfers.
+B588|2026-11-24|The isolated Library dialog browser fixture treated the old backup listing request as a pending capture and lacked the UUID API used by Activity task creation|V259,V264,ADR0192. Provide a synthetic UUID and require the pending task POST before checking ownership of the disabled controls. Existing refusal assertions still run.
+B589|2026-11-24|First-use UCloud Save skipped the Settings model selection and enabled every native preset|V213,ADR0126. Save the native catalog defaults through the existing version-checked selection API. Verify the saved flags in the first-use browser test.
+B590|2026-11-24|The first-use browser test checked the hidden form immediately after reload and expected it to stay hidden after clearing the key|V213,ADR0171. Wait for setup readiness and verify the reminder returns after key removal.
+B591|2026-11-24|The first saved passage Undo closed its row controls. The continuation checked the editor token from before its own successful save, which had already advanced|V274,ADR0196. Capture the committed view after the accepted save. The Chromium regression walks two Undo and two Redo steps without closing the controls or reverting an edit elsewhere.
+B592|2026-11-24|Project recording cards fell back to media readiness after a transcription failed, even though Activity showed the failure|V275. Use the latest visible per-file failure from the accepted Activity poll. The synthetic batch test proves cancellation and dismissal restore readiness without reopening the project.
+B593|2026-11-24|The retained Activity browser check matched each nested job Details summary as well as the group summary|V105. Scope the check and click to the group summary and retain the cleanup action assertions.
+B594|2026-11-24|A native batch with two persistently unreadable outputs stayed pending because Retry remote cleanup always required saved transcripts|V276,ADR0197. Offer a separate loss warning inside the cleanup action, bind explicit confirmation to the exact ended owner and keep existing local artifacts.
+B595|2026-11-24|The discard-prompt browser case asserted its captured message before the asynchronous cleanup response could dispatch the dialog|Wait for the dialog event before asserting its text. Keep the decline/accept and settled Activity assertions.
+B596|2026-11-24|A text-only Save passage was refused with "This passage changed while you were editing" after any refresh of the recording, for example trashing another result or a timing job finishing on another passage. The ADR 0195 word-time snapshot also fenced saves that carried no typed times; the broad rc3 gate's result-trash case caught it|V272,ADR0195. Fence only an open timing draft: without typed times Save sends the text with its server-side revision check and the boxes follow the refreshed passage. The Chromium regression saves text after a newer revision elsewhere; the typed-times stale case still refuses.
+B597|2026-11-24|At 390 px the Settings tab row became wider than its dialog once the Backup tab was added, so the dialog scrolled sideways|V264. Let the tab row wrap onto another line; wide windows are unchanged.
+B598|2026-11-24|The first-use Hugging Face Activity browser case still expected large-v3 after fresh UCloud connections began selecting Turbo|Assert large-v3-turbo, as the first-use module already does.
+B599|2026-11-24|Two provider browser journeys still asserted the earlier fresh-connection defaults (only Large-v3 checked and listed first, its Protected denial taken from the selected model) after B589's Turbo/Parakeet amendment; the full d5454cc gate failed them|ADR0126. Assert Turbo and Parakeet checked, Turbo listed first and selected, and deny Protected for Large-v3 explicitly so the journey keeps its scenario.
+B600|2026-11-24|The speaker-label follow-up browser case intermittently failed with "The Working authority differs from its admission." Its native batch mock imported every listed member of an early batch, including a file whose admission had not finished, so the result guard correctly refused it. The real coordinator waits for the sealed batch and imports admitted members only; the failure also occurred on main|ADR0183. The mock now waits for sealing and imports surviving members only. A forced delay of the second inspection reproduces the failure without the fix.

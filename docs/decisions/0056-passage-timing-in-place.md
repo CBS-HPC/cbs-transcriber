@@ -1,7 +1,9 @@
 # 0056 — Passage word timing added in place, several passages at once
 
 Accepted 23 October 2026. Amends ADR 0052 and the passage repair part of ADR 0049.
-Amended by ADR 0058 (one tag for every untimed passage; no static tag).
+Amended by ADR 0058 (one tag for every untimed passage; no static tag) and ADR 0189
+(windows too short for their text are named "Too short to time", not aligned) and ADR 0191
+(passages already being timed leave the Repair all count; finished jobs stay in Activity).
 
 The researcher tested "Add word timing" on single passages of a 1,313-passage interview. Three
 problems showed up:

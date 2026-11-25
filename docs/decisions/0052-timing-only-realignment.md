@@ -1,6 +1,8 @@
 # 0052 — Opt-in realignment of edited passages as timing-only versions
 
 Accepted 23 October 2026. Amends ADR 0016 for this one case.
+Amended by ADR 0191: finished realignments stay in Activity with their outcome until
+cleared, and the passages they time become Needs review.
 
 A free-text edit clears the passage's word timing, because the old word map no longer fits the
 text. Until now, word timing came back only through **Add word timing**, which creates a separate

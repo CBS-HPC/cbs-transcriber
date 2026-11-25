@@ -27,7 +27,10 @@
     <script src="/static/library.js" defer></script>
     <script src="/static/app.js" defer></script>
     <script src="/static/spelling.js" defer></script>
+    <script src="/static/word_times.js" defer></script>
     <script src="/static/background_exports.js" defer></script>
+    <script src="/static/project_deletions.js" defer></script>
+    <script src="/static/backup_tasks.js" defer></script>
     <script src="/static/manual_review.js" defer></script>
     <script src="/static/deleted_passages.js" defer></script>
     <script src="/static/change_steps.js" defer></script>
@@ -312,25 +315,6 @@
                   Versions
                 </button>
               </div>
-              <!-- Undo last change / Redo (ADR 0180), directly under Versions. -->
-              <div class="change-steps" data-feature="undo_last_change">
-                <button
-                  id="undo-last"
-                  class="button change-step"
-                  type="button"
-                  disabled
-                >
-                  ↶ Undo
-                </button>
-                <button
-                  id="redo-last"
-                  class="button change-step"
-                  type="button"
-                  disabled
-                >
-                  ↷ Redo
-                </button>
-              </div>
               <p id="working-version-status" class="field-note"></p>
             </div>
           </div>
@@ -466,6 +450,27 @@
                   role="status"
                   hidden
                 ></span>
+                <!-- Undo last change / Redo (ADR 0180) in the transcript panel, above the
+                     scrolling passages, so they stay visible (user, 20 November). Last in the
+                     row, so review progress, Show and Next to review stay together on the left. -->
+                <div class="change-steps" data-feature="undo_last_change">
+                  <button
+                    id="undo-last"
+                    class="button change-step"
+                    type="button"
+                    disabled
+                  >
+                    ↶ Undo
+                  </button>
+                  <button
+                    id="redo-last"
+                    class="button change-step"
+                    type="button"
+                    disabled
+                  >
+                    ↷ Redo
+                  </button>
+                </div>
                 <div
                   id="uncertainty-controls"
                   class="uncertainty-controls"
@@ -485,7 +490,7 @@
                   <span
                     id="uncertainty-note"
                     class="field-note"
-                    title="Model signals compared within this transcript. They are not calibrated probabilities of being correct; alignment fit is not transcription accuracy."
+                    title="Marks what the model was least sure of in this transcript. A guide for review, not a measure of accuracy."
                   ></span>
                 </div>
               </div>
@@ -686,14 +691,13 @@
         </div>
       </div>
       <p class="drawer-description">
-        Your conversion and transcription jobs. Completed parts are kept when
-        you retry. Clear finished hides settled activity. Cleanup and recovery
-        remain under Needs attention until resolved.
+        Follow running work here. Retry keeps completed parts. Clear finished
+        hides settled work. Cleanup and recovery stay under Needs attention.
       </p>
       <div id="jobs"></div>
       <p class="drawer-note">
-        Retries use the job’s original provider settings. A request already
-        accepted by a provider may still incur charges.
+        Retry uses the job’s original settings. Work a provider has already
+        accepted may still be charged.
       </p>
     </aside>
 
@@ -776,10 +780,9 @@
           </button>
         </div>
         <p class="settings-note">
-          A library contains your projects, transcripts and history. Finish or
-          cancel jobs before switching; opening another library restarts the app
-          and is remembered next time. Delete permanently shows a preview and
-          asks you to confirm before removing anything.
+          Finish or cancel jobs before switching libraries. Switching restarts
+          the app and remembers your choice. Delete permanently shows what will
+          be removed and asks you to confirm.
         </p>
         <ul class="library-list" data-library-list></ul>
         <section
@@ -800,9 +803,9 @@
         <h3 class="settings-subhead">Backups</h3>
         <section id="portable-panel" aria-label="Complete library backups">
           <p class="settings-note">
-            A complete backup copies all originals, saved results, history and
-            available processing evidence. Finish or stop processing first. Keys
-            and tokens are excluded.
+            A backup includes originals, saved results, notes, history and
+            available processing evidence. Keys and tokens stay out. Finish or
+            stop processing first.
           </p>
           <button id="portable-create" type="button" class="button primary">
             Create backup
@@ -829,11 +832,9 @@
               volume.
             </p>
             <p id="portable-destination-help" class="settings-note">
-              Leave the location blank to use the backups folder inside the
-              library. A different folder on that device does not protect
-              against device failure. For an independent copy, choose a
-              different physical device; the folder choice alone cannot verify
-              independence.
+              Leave the folder blank to use the default. To protect against
+              device failure, choose a folder on another physical device, such
+              as an external drive.
             </p>
           </details>
           <button id="portable-receipt" type="button" class="button" disabled>
@@ -1179,8 +1180,8 @@
       </form>
       <div class="project-danger">
         <p class="settings-note">
-          Deleting the collection keeps its recordings in the project, as
-          Unsorted. Files on disk never move.
+          Deleting this collection lists its recordings under Unsorted. Their
+          files stay in place.
         </p>
         <button id="collection-delete" type="button" class="button danger">
           Delete Collection
@@ -1210,8 +1211,30 @@
         </button>
       </div>
       <p class="settings-note">
-        Import adds a UCloud JSON or CSV transcript as a new result; the
-        existing results are kept.
+        Import a UCloud JSON or CSV as a new result. Existing results are kept.
+      </p>
+      <!-- Private spelling vocabulary (ADR 0186): hidden in the MVP profile. -->
+      <div class="file-settings-actions" data-feature="spelling">
+        <button
+          type="button"
+          class="button subtle"
+          id="spelling-file-project-vocabulary"
+          data-feature="spelling"
+        >
+          Project vocabulary
+        </button>
+        <button
+          type="button"
+          class="button subtle"
+          id="spelling-recording-vocabulary"
+          data-feature="spelling"
+        >
+          Recording vocabulary
+        </button>
+      </div>
+      <p class="settings-note" data-feature="spelling">
+        Spelling accepts the words in your personal, project and recording
+        vocabularies. A recording inherits its project's words.
       </p>
       <div class="project-danger">
         <p class="settings-note">
@@ -1360,13 +1383,26 @@
         One word or name per line. These entries stay private in this library.
       </p>
       <label
-        >Vocabulary<textarea
+        ><span id="spelling-vocabulary-label">Vocabulary</span
+        ><textarea
           id="spelling-vocabulary-text"
           spellcheck="false"
           maxlength="200000"
           rows="10"
+          aria-labelledby="spelling-vocabulary-label"
         ></textarea>
       </label>
+      <div id="spelling-vocabulary-inherited" hidden>
+        <label
+          >Inherited from the project (read-only; edit them in Project
+          vocabulary)<textarea
+            id="spelling-vocabulary-project-words"
+            spellcheck="false"
+            rows="4"
+            readonly
+          ></textarea>
+        </label>
+      </div>
       <p id="spelling-vocabulary-status" class="field-note" role="status"></p>
       <div class="dialog-actions">
         <button type="button" class="button" id="spelling-vocabulary-cancel">
@@ -1397,8 +1433,9 @@
         <p class="settings-note">
           This permanently removes the project's recordings, transcripts,
           results, notes and history from this app, including its managed folder
-          copies. It cannot be undone. Running jobs will be cancelled before
-          files are removed.
+          copies. It cannot be undone once the project is removed from the
+          library. The deletion continues in Activity, where Keep project stops
+          it until then; running jobs are stopped first.
         </p>
         <label
           >Type the project name <strong id="delete-project-name"></strong> to
@@ -2116,8 +2153,8 @@
         ></label
       >
       <p class="field-note">
-        Copies the selected original audio/video files into their recording
-        folders in the ZIP. Leave formats unchecked for originals only.
+        Each selected original goes in its recording folder in the ZIP. Clear
+        all formats to export originals only.
       </p>
       <fieldset class="export-choices">
         <legend>Recordings</legend>
@@ -2139,10 +2176,8 @@
         </select></label
       >
       <p id="export-batch-note" class="settings-note" hidden>
-        Downloads a ZIP with the selected formats for each result, plus a report
-        identifying exported or skipped recordings and formats. Original
-        recordings are included only when Include original recordings is
-        checked.
+        The ZIP contains the selected formats and a report of what was exported
+        or skipped. Check Include original recordings to add the source files.
       </p>
       <fieldset id="export-formats" class="export-choices">
         <legend>Formats</legend>
@@ -2304,8 +2339,8 @@
           </button>
         </div>
         <p class="dialog-intro">
-          Adds word timing or speaker labels as a new result; the reviewed
-          wording and the selected result stay unchanged.
+          Adds word timing or speaker labels as a new result. Your current
+          result and its wording are kept.
         </p>
         <div id="batch-settings" hidden>
           <p id="batch-summary" class="settings-note"></p>
@@ -2318,10 +2353,9 @@
             </select></label
           >
           <p class="settings-note">
-            Starts immediately and runs unattended. Keep this app and computer
-            running. Each original transcription is kept; missing features
-            create a separate result. Review failures and retry them in
-            Activity.
+            Keep this app and computer running. The original transcription is
+            kept. Missing word timing or speakers are added as a separate
+            result. Retry failures in Activity.
           </p>
         </div>
         <p
@@ -2403,10 +2437,9 @@
               /></label>
             </div>
             <p class="field-note">
-              New jobs retain valid timing estimates. Review hints flag
-              uncertainty; scores are not calibrated timing accuracy. Without
-              word timing, speaker detection labels passages and marks mixed
-              passages explicitly.
+              Timing scores suggest where to review. Without word timing,
+              speakers are labelled per passage, and passages with several
+              speakers are marked.
             </p>
           </details>
         </fieldset>
@@ -2559,8 +2592,8 @@
           />
         </label>
         <p class="field-note">
-          Saving the optional token checks access and prepares configured models
-          when allowed in Settings. Follow progress in Activity.
+          A token lets the app download the speaker model. Saving checks access
+          and prepares allowed models. Follow progress in Activity.
         </p>
         <label class="checkbox-label"
           ><input id="first-use-remember" type="checkbox" checked />Remember
@@ -2654,6 +2687,29 @@
           >
             Local Processing
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-spelling"
+            data-provider-tab="spelling"
+            data-feature="spelling"
+            aria-controls="spelling-panel"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Spelling
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-backup"
+            data-provider-tab="backup"
+            aria-controls="backup-panel"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Backup
+          </button>
         </div>
         <fieldset
           id="hf-panel"
@@ -2663,12 +2719,11 @@
           disabled
         >
           <p class="settings-note">
-            WhisperX word timing uses public alignment models and needs no
-            token. Speaker labels use the gated pyannote model: a read token and
-            accepted model terms are needed only to download it. Cached models
-            run offline. Saving checks access and prepares configured models
-            when allowed in Settings; follow progress in Activity. The token is
-            never sent with recordings.
+            Word timing needs no token. To download the speaker model, accept
+            its terms on Hugging Face and paste a read token here. Once cached,
+            the model works offline. Saving checks access and prepares allowed
+            models. Follow progress in Activity. The token never goes with
+            recordings.
           </p>
           <label
             >Hugging Face read token<span
@@ -2724,8 +2779,8 @@
             How word timing<span data-feature="retranscribe"
               >, WhisperX transcription</span
             >
-            and speaker labels run. Checks happen by themselves; changes save
-            automatically and apply to new jobs.
+            and speaker labels run. Device and download choices save at once and
+            apply to new jobs.
           </p>
           <h3 class="settings-subhead">This computer</h3>
           <p
@@ -2747,9 +2802,8 @@
             local models when a job needs them</label
           >
           <p class="field-note">
-            Pinned public models for word timing and WhisperX. The speaker model
-            is prepared under Hugging Face → Check token. Audio and transcript
-            text stay on this computer.
+            Word timing uses public models. Prepare the speaker model in the
+            Hugging Face tab. Local jobs keep audio and text on this computer.
           </p>
           <label data-feature="runtime_python"
             >Python executable for WhisperX<input
@@ -2764,38 +2818,6 @@
           <button id="enhance-check" class="button" type="button">
             Check this computer again
           </button>
-          <!-- Local spelling (ADR 0185): hidden in the MVP profile. -->
-          <section id="spelling-settings" data-feature="spelling">
-            <h3 class="settings-subhead">Local spelling</h3>
-            <p class="field-note">
-              Only the open passage is checked. Text and private vocabulary stay
-              on this computer. Browser spellcheck stays off.
-            </p>
-            <label class="checkbox-label"
-              ><input type="checkbox" id="spelling-enabled" />Check spelling in
-              passage edits</label
-            >
-            <label class="checkbox-label"
-              ><input type="checkbox" id="spelling-auto-download" />Download
-              public spelling dictionaries when needed</label
-            >
-            <button type="button" class="button" id="spelling-settings-save">
-              Save spelling settings
-            </button>
-            <button
-              type="button"
-              class="button subtle"
-              id="spelling-personal-vocabulary"
-            >
-              Personal vocabulary
-            </button>
-            <p
-              id="spelling-settings-status"
-              class="field-note"
-              role="status"
-            ></p>
-            <ul id="spelling-installed" class="spelling-dictionaries"></ul>
-          </section>
           <details id="local-concurrency" class="enhance-rules">
             <summary>Parallel local tasks</summary>
             <p class="settings-note">
@@ -2928,6 +2950,135 @@
           <div class="dialog-actions">
             <button type="button" class="button" data-close="settings-dialog">
               Close
+            </button>
+          </div>
+        </fieldset>
+        <!-- Local spelling (ADR 0185/0187): its own tab, hidden in the MVP profile. -->
+        <fieldset
+          id="spelling-panel"
+          role="tabpanel"
+          aria-labelledby="tab-spelling"
+          data-feature="spelling"
+          hidden
+          disabled
+        >
+          <section id="spelling-settings" data-feature="spelling">
+            <p class="settings-note">
+              Spelling checks the open passage on this computer. Its text and
+              your vocabulary are never sent anywhere. Coloured underlines mark
+              possible issues; double-click an underlined word, or press
+              Alt+Enter (Option+Enter on a Mac) inside it, for a suggestion.
+            </p>
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-enabled" />Check spelling in
+              passage edits</label
+            >
+            <label class="checkbox-label"
+              ><input type="checkbox" id="spelling-auto-download" />Download
+              public dictionaries automatically for the languages chosen in
+              projects and recordings</label
+            >
+            <button type="button" class="button" id="spelling-settings-save">
+              Save spelling settings
+            </button>
+            <button
+              type="button"
+              class="button subtle"
+              id="spelling-personal-vocabulary"
+            >
+              Personal vocabulary
+            </button>
+            <p
+              id="spelling-settings-status"
+              class="field-note"
+              role="status"
+            ></p>
+            <h3 class="settings-subhead">Dictionaries</h3>
+            <p class="field-note">
+              Dictionary files are public downloads and contain no transcript
+              text. Downloads run in Activity.
+            </p>
+            <ul id="spelling-installed" class="spelling-dictionaries"></ul>
+          </section>
+          <div class="dialog-actions">
+            <button type="button" class="button" data-close="settings-dialog">
+              Close
+            </button>
+          </div>
+        </fieldset>
+        <!-- Settings → Backup (ADR 0192): local backups run as server-owned Activity tasks. -->
+        <fieldset
+          id="backup-panel"
+          role="tabpanel"
+          aria-labelledby="tab-backup"
+          hidden
+          disabled
+        >
+          <p class="settings-note">
+            A backup includes originals, saved results, notes, history and
+            available processing evidence, including Protected projects and
+            Trash. Keys and tokens stay out. Finish or stop processing first.
+          </p>
+          <p class="settings-note">
+            Follow the backup in Activity, even after closing Settings. Stop is
+            available until saving starts. You can read while files are copied.
+            Edits and new work wait. Backups start when you choose Make backup.
+          </p>
+          <p id="backup-settings-current" class="field-note"></p>
+          <p id="backup-settings-last" class="field-note" role="status"></p>
+          <label for="backup-settings-destination">Backup folder</label>
+          <input
+            id="backup-settings-destination"
+            placeholder="Use the default location"
+            maxlength="4000"
+            autocomplete="off"
+          />
+          <p id="backup-settings-default" class="settings-note">
+            Default: the backups folder inside this library.
+          </p>
+          <p class="settings-note">
+            Use a folder on another physical device, such as an external drive,
+            for protection against device failure.
+          </p>
+          <p
+            id="backup-settings-running"
+            class="settings-note"
+            role="status"
+          ></p>
+          <p
+            id="backup-settings-status"
+            class="settings-note"
+            role="status"
+          ></p>
+          <p class="settings-note">
+            Saved receipts<span data-feature="restore_ui">, restoring</span
+            ><span data-feature="cloud_backup"> and UCloud backup</span> are in
+            Library → Backups.
+          </p>
+          <div class="dialog-actions">
+            <button type="button" id="backup-settings-library" class="button">
+              Library backups
+            </button>
+            <button type="button" id="backup-settings-choose" class="button">
+              Choose folder
+            </button>
+            <button
+              type="button"
+              id="backup-settings-activity"
+              class="button"
+              hidden
+            >
+              View Activity
+            </button>
+            <button type="button" class="button" data-close="settings-dialog">
+              Close
+            </button>
+            <button
+              type="button"
+              id="backup-settings-start"
+              class="button primary"
+            >
+              Make backup
             </button>
           </div>
         </fieldset>
@@ -3091,8 +3242,8 @@
               ></select
             ></label>
             <p class="settings-note">
-              Connect your token to find your project and storage. Native models
-              use 1g MIG for new requests. No transcription starts during setup.
+              Connect UCloud to find your project and storage. Setup starts no
+              transcription. New UCloud runs use a B200 1g MIG slice.
             </p>
             <button id="connect-ucloud" type="button" class="button">
               Connect UCloud
@@ -3166,8 +3317,8 @@
                 Check UCloud setup
               </button>
               <p class="settings-note">
-                This check reads template/storage metadata. It uploads no audio
-                and starts no job.
+                Checks your UCloud app and storage. It uploads no audio and
+                starts no job.
               </p>
             </fieldset>
             <div
@@ -3286,8 +3437,9 @@
           <fieldset class="provider-approvals">
             <legend>Protected projects</legend>
             <p class="settings-note">
-              Your provider eligibility choice, not institutional certification.
-              Standard projects can use any configured provider.
+              Tick only if your data rules allow Protected data with this
+              provider. Confirm institutional approval separately. Standard
+              projects can use any configured provider.
             </p>
             <label class="checkbox-label"
               ><input
@@ -3336,9 +3488,8 @@
                 /></label>
               </div>
               <p id="native-limits-note" class="field-note">
-                Upload speed depends on your network, not this computer's
-                processors. A single-file run counts as one batch. Changes apply
-                to new batches; running batches keep their limits and continue.
+                Upload speed depends on your network. A single file counts as
+                one batch. Running batches keep their original limits.
               </p>
               <p id="native-limits-status" class="field-note" role="status"></p>
             </div>
@@ -3368,8 +3519,8 @@
               ></p>
             </div>
             <p class="settings-note">
-              Configurations using the same endpoint share its saved key. Blank
-              key fields retain saved credentials.
+              Configurations with the same address share one saved key. Leave a
+              key field blank to keep the saved key.
             </p>
           </details>
           <div class="dialog-actions">

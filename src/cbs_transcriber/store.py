@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import secrets
 import sqlite3
 import stat
 import threading
@@ -36,6 +37,55 @@ from .transcripts import (
 
 def now():
     return datetime.now(UTC).isoformat()
+
+
+def indented_json(document, shared=()):
+    """json.dumps(document, ensure_ascii=False, indent=2), encoding each shared value once.
+
+    `shared` lists (container, key) places that may hold one identical object, such as an
+    active result's passages and its recording mirror (ADR 0193). Indented JSON nests a value
+    by prefixing each of its lines with its place's indentation, and JSON text has no raw line
+    breaks inside strings, so one standalone encoding spliced into every place reproduces the
+    plain output byte for byte. An unexpected layout falls back to the plain encoding.
+    """
+    groups = {}
+    for container, key in shared:
+        groups.setdefault(id(container[key]), (container[key], []))[1].append((container, key))
+    groups = [group for group in groups.values() if len(group[1]) > 1]
+    if not groups:
+        return json.dumps(document, ensure_ascii=False, indent=2)
+    salt = secrets.token_hex(16)
+    tokens, replaced = [], []
+    try:
+        for number, (value, places) in enumerate(groups):
+            token = f"cbs-snapshot-{salt}-{number}"
+            for container, key in places:
+                replaced.append((container, key, container[key]))
+                container[key] = token
+            tokens.append((json.dumps(token), value, len(places)))
+        text = json.dumps(document, ensure_ascii=False, indent=2)
+    finally:
+        for container, key, value in reversed(replaced):
+            container[key] = value
+    places = []
+    for quoted, value, count in tokens:
+        if text.count(quoted) != count:
+            return json.dumps(document, ensure_ascii=False, indent=2)
+        start = -1
+        for _ in range(count):
+            start = text.index(quoted, start + 1)
+            places.append((start, quoted, value))
+    parts, cursor, fragments = [], 0, {}
+    for start, quoted, value in sorted(places, key=lambda place: place[0]):
+        line = indent = text.rfind("\n", 0, start) + 1
+        while text[indent] == " ":
+            indent += 1
+        if id(value) not in fragments:
+            fragments[id(value)] = json.dumps(value, ensure_ascii=False, indent=2)
+        parts += (text[cursor:start], fragments[id(value)].replace("\n", "\n" + text[line:indent]))
+        cursor = start + len(quoted)
+    parts.append(text[cursor:])
+    return "".join(parts)
 
 
 def new_id():
@@ -1093,9 +1143,21 @@ class Store:
                 "snapshot_error": self.snapshot_errors.get(identifier),
             }
 
-    def snapshot_project(self, identifier):
-        """Portable, readable outputs in the chosen folder; SQLite stays authoritative."""
+    def snapshot_project(self, identifier, *, decoded=None):
+        """Portable, readable outputs in the chosen folder; SQLite stays authoritative.
+
+        `decoded` may carry (recording_id, {key: (raw, value)}) mirrors that the caller's
+        fresh projection decoded within the same request. They are reused only for exactly
+        equal raw JSON and are serialized read-only (ADR 0193).
+        """
         from .transcripts import export_nvivo
+
+        def parse(recording_id, key, raw):
+            if decoded is not None and decoded[0] == recording_id and key in decoded[1]:
+                known_raw, value = decoded[1][key]
+                if known_raw == raw:
+                    return value
+            return json.loads(raw)
 
         with self.snapshot_lock:
             with self.connection() as db:
@@ -1126,7 +1188,11 @@ class Store:
                     is_active = active_ids[result["recording_id"]] == result["id"]
                     raw_mirrors = (result["segments"], result["speakers"]) if is_active else None
                     for key in ("segments", "speakers", "source"):
-                        result[key] = json.loads(result[key])
+                        result[key] = (
+                            parse(result["recording_id"], key, result[key])
+                            if is_active and key != "source"
+                            else json.loads(result[key])
+                        )
                     if is_active:
                         active_mirrors[result["recording_id"]] = (
                             raw_mirrors,
@@ -1144,7 +1210,7 @@ class Store:
                             # Both views remain read-only during snapshot serialization.
                             recording[key] = mirror[1][index]
                         else:
-                            recording[key] = json.loads(recording[key])
+                            recording[key] = parse(recording["id"], key, recording[key])
                     recording["transcripts"] = results.get(recording["id"], [])
                 collections = [
                     dict(row)
@@ -1167,16 +1233,23 @@ class Store:
                         )
                         pending.replace(target)
                 pending = folder / "project.pending"
+                # An active result's passages and its recording mirror are one object here;
+                # encode it once for both places (byte-identical output, ADR 0193).
+                shared = [
+                    place
+                    for recording in recordings
+                    for place in [(recording, "segments")]
+                    + [(result, "segments") for result in recording["transcripts"]]
+                ]
                 pending.write_text(
-                    json.dumps(
+                    indented_json(
                         {
                             "format_version": 1,
                             "project": project,
                             "collections": collections,
                             "recordings": recordings,
                         },
-                        ensure_ascii=False,
-                        indent=2,
+                        shared,
                     ),
                     encoding="utf-8",
                 )
@@ -1189,6 +1262,29 @@ class Store:
                 )
 
     def recording(self, identifier):
+        return self._recording(identifier)[0]
+
+    def saved_recording(self, identifier):
+        """A committed change's fresh projection, then its synchronous project snapshot.
+
+        The snapshot reuses this projection's freshly decoded mirrors when its own read sees
+        exactly the same raw JSON; nothing mutates them before the response is encoded.
+        """
+        recording, raw = self._recording(identifier)
+        self.snapshot_project(
+            recording["project_id"],
+            decoded=(
+                identifier,
+                {
+                    "segments": (raw[0], recording["segments"]),
+                    "speakers": (raw[1], recording["speakers"]),
+                },
+            ),
+        )
+        recording["snapshot_error"] = self.snapshot_errors.get(recording["project_id"])
+        return recording
+
+    def _recording(self, identifier):
         from . import result_roles
 
         with self.connection() as db:
@@ -1223,9 +1319,9 @@ class Store:
                     )
                 row["active_version"] = dict(head)
                 active = dict(active)
-        raw_segments = row["segments"]
+        raw_segments, raw_speakers = row["segments"], row["speakers"]
         row["segments"] = json.loads(raw_segments)
-        row["speakers"] = json.loads(row["speakers"])
+        row["speakers"] = json.loads(raw_speakers)
         if active:
             # The owned active row was read in this snapshot. Replay derivation only reads
             # its passages, so identical mirror bytes need one decode within this call.
@@ -1238,7 +1334,7 @@ class Store:
         row["replay_windows"] = self._legacy_replay_windows(active) if active else {}
         row["snapshot_error"] = self.snapshot_errors.get(row["project_id"])
         row["speaker_defaults"] = default_speaker_names(row["segments"], row["speakers"])
-        return row
+        return row, (raw_segments, raw_speakers)
 
     def results(self, identifier, *, trashed=False):
         with self.connection() as db:
@@ -1549,10 +1645,7 @@ class Store:
                 reason,
             )
             working_manual.apply(db, self, identifier, version, working)
-        recording = self.recording(identifier)
-        self.snapshot_project(recording["project_id"])
-        recording["snapshot_error"] = self.snapshot_errors.get(recording["project_id"])
-        return recording
+        return self.saved_recording(identifier)
 
     def apply_local_timing(self, recording_id, result_id, job_id, revision, *, working_choice=None):
         from . import local_timing
@@ -1678,6 +1771,10 @@ class Store:
                     segments, frozen, outputs, apply_policy=apply_policy
                 )
                 if applied:
+                    from . import passage_review
+
+                    # ADR 0191: which passages this timing changed, for automatic review.
+                    review = passage_review.timing_added(segments, applied)
                     version = append_edit(
                         self,
                         db,
@@ -1688,7 +1785,8 @@ class Store:
                         speakers,
                         action="timing_realign",
                         context={"job_id": job_id}
-                        | ({local_timing.POLICY_KEY: apply_policy} if apply_policy else {}),
+                        | ({local_timing.POLICY_KEY: apply_policy} if apply_policy else {})
+                        | {passage_review.TIMING_KEY: review},
                         reason=None,
                         **(
                             {"working_choice": working_choice} if working_choice is not None else {}

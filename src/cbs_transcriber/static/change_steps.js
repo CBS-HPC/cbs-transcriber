@@ -9,6 +9,8 @@ const changeStepNouns = {
   manual_save: "text edit",
   word_timing_edit: "word timing edit",
   original_restore: "Restore original",
+  passage_change_undo: "passage undo",
+  passage_change_redo: "passage redo",
   passage_speaker: "speaker change",
   speaker_rename: "speaker rename",
   passage_merge: "merge",
@@ -23,7 +25,8 @@ const changeStepNouns = {
   wording_adopt: "wording adoption",
   version_restore: "version restore",
 };
-let changeStepPending = false;
+let changeStepPending = false,
+  passageSteps = null;
 
 function changeStepLabel(kind, block) {
   const noun = Object.hasOwn(changeStepNouns, block?.action)
@@ -109,7 +112,122 @@ function renderChangeSteps() {
             ? "Save or cancel your passage correction first."
             : changeStepTitle(kind, block);
   }
+  renderPassageChangeSteps();
 }
+
+function currentPassageSteps(entry) {
+  return (
+    passageSteps === entry &&
+    entry.panel.isConnected &&
+    sameRecordingView(entry.context) &&
+    entry.revision === state.recording.revision &&
+    entry.head === state.recording.active_version?.id
+  );
+}
+
+function renderPassageChangeSteps() {
+  const entry = passageSteps;
+  if (!entry?.panel.isConnected) return;
+  const current = currentPassageSteps(entry);
+  const response = current ? entry.response : null;
+  let available = false;
+  for (const kind of ["undo", "redo"]) {
+    const button = entry.buttons[kind],
+      block = changeStepBlock(response, kind);
+    button.textContent = block
+      ? changeStepLabel(kind, block)
+      : kind === "undo"
+        ? "Undo"
+        : "Redo";
+    button.disabled = !block || state.dirty || changeStepBusy();
+    button.title = response?.[kind]?.message || "";
+    available ||= !!block;
+  }
+  entry.status.textContent = !current
+    ? "The passage changed. Reopen Undo and Redo."
+    : entry.error ||
+      (!response
+        ? "Checking saved edits…"
+        : available
+          ? ""
+          : response.undo.message || "No saved steps for this passage.");
+}
+
+async function openPassageChangeSteps(segmentId, restoreFocus = null) {
+  if (!featureOn("undo_last_change") || changeStepBusy()) return;
+  const row = document.getElementById(`passage-${segmentId}`);
+  const trigger = row?.querySelector('[data-action="passage-steps"]');
+  if (!trigger) return;
+  const closing =
+    passageSteps?.panel.isConnected &&
+    passageSteps.segmentId === segmentId &&
+    restoreFocus === null;
+  if (passageSteps?.panel.isConnected) {
+    passageSteps.trigger.setAttribute("aria-expanded", "false");
+    passageSteps.panel.remove();
+  }
+  passageSteps = null;
+  if (closing) return;
+
+  const context = recordingContext(),
+    panel = document.createElement("div");
+  panel.className = "passage-actions";
+  panel.setAttribute("role", "group");
+  panel.setAttribute("aria-label", "Saved edits for this passage");
+  const status = document.createElement("span");
+  status.className = "field-note";
+  status.setAttribute("role", "status");
+  const entry = {
+    segmentId,
+    context,
+    panel,
+    trigger,
+    status,
+    buttons: {},
+    revision: state.recording.revision,
+    head: state.recording.active_version?.id,
+    path: `/recordings/${context.id}/transcripts/${context.result}/segments/${encodeURIComponent(segmentId)}/change-steps`,
+  };
+  for (const kind of ["undo", "redo"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.passageStep = kind;
+    button.addEventListener(
+      "click",
+      handle(() => runChangeStep(kind, entry)),
+    );
+    entry.buttons[kind] = button;
+    panel.append(button);
+  }
+  panel.append(status);
+  passageSteps = entry;
+  row.querySelector(".passage-heading").after(panel);
+  trigger.setAttribute("aria-expanded", "true");
+  renderPassageChangeSteps();
+  try {
+    const response = await api(entry.path, { background: true });
+    if (!currentPassageSteps(entry)) return;
+    if (
+      response.result_id !== context.result ||
+      response.segment_id !== segmentId ||
+      response.revision !== entry.revision ||
+      response.head_version_id !== entry.head
+    ) {
+      entry.error = "The passage changed. Reopen Undo and Redo.";
+    } else {
+      entry.response = response;
+    }
+  } catch (error) {
+    if (!currentPassageSteps(entry)) return;
+    entry.error = error.message;
+  }
+  renderPassageChangeSteps();
+  if (restoreFocus && document.activeElement === document.body) {
+    const next = entry.buttons[restoreFocus];
+    (next.disabled ? trigger : next).focus();
+  }
+}
+
 async function reloadAfterStaleStep(context) {
   // Another window or a background timing Apply saved first: show its newest change.
   const latest = await api(`/recordings/${context.id}`, { background: true });
@@ -127,8 +245,12 @@ async function reloadAfterStaleStep(context) {
   renderComparison();
   return true;
 }
-async function runChangeStep(kind) {
-  const response = changeStepView(),
+async function runChangeStep(kind, entry = null) {
+  const response = entry
+      ? currentPassageSteps(entry)
+        ? entry.response
+        : null
+      : changeStepView(),
     block = changeStepBlock(response, kind);
   if (!block || state.dirty || changeStepBusy()) return;
   const context = recordingContext(),
@@ -144,7 +266,9 @@ async function runChangeStep(kind) {
     )
       return;
   }
-  const path = `/recordings/${context.id}/transcripts/${context.result}/${kind}-last`,
+  const path = entry
+      ? `${entry.path}/${kind}`
+      : `/recordings/${context.id}/transcripts/${context.result}/${kind}-last`,
     body = {
       revision,
       head_version_id: response.head_version_id,
@@ -158,7 +282,8 @@ async function runChangeStep(kind) {
     refreshDeletedPassageControls();
   // Same lock as a passage structure change: nothing else edits this result meanwhile.
   let controls = [],
-    disabled = [];
+    disabled = [],
+    committedView = null;
   try {
     if (!(await workingEditChoice(manualEditTarget(path, "POST", body), true)))
       return;
@@ -170,7 +295,7 @@ async function runChangeStep(kind) {
       return;
     controls = [
       ...document.querySelectorAll(
-        "#transcript textarea, #transcript [data-action], #transcript [data-review-status], #transcript [data-review-retry], [data-deleted-restore], #passage-merge-form button, #passage-merge-speaker",
+        "#transcript textarea, #transcript [data-action], #transcript [data-passage-step], #transcript [data-review-status], #transcript [data-review-retry], [data-deleted-restore], #passage-merge-form button, #passage-merge-speaker",
       ),
     ];
     disabled = controls.map((element) => element.disabled);
@@ -185,6 +310,7 @@ async function runChangeStep(kind) {
     renderEditorDetails();
     renderTranscript();
     renderComparison();
+    committedView = recordingContext();
   } catch (error) {
     if (sameRecordingView(context)) {
       saved(`${label} was not saved — transcript unchanged`);
@@ -219,6 +345,14 @@ async function runChangeStep(kind) {
       if (typeof renderManualReviews === "function") renderManualReviews();
     }
     renderChangeSteps();
+  }
+  if (
+    committedView &&
+    entry &&
+    passageSteps === entry &&
+    sameRecordingView(committedView)
+  ) {
+    await openPassageChangeSteps(entry.segmentId, kind);
   }
 }
 document.getElementById("undo-last").addEventListener(

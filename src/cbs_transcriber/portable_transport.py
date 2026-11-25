@@ -166,8 +166,22 @@ def _signature(info):
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
 
 
+def _directory(info):
+    return stat.S_ISDIR(getattr(info, "st_mode", 0))
+
+
 def _same_path(before, after):
-    if _signature(before) != _signature(after) or before.st_ctime_ns != after.st_ctime_ns:
+    # NTFS reports a directory not listed recently as size 0 and as 4096 once it has been
+    # listed, so a directory's size is no witness: its identity and mtime are (B580).
+    if _directory(before) and _directory(after):
+        changed = (before.st_dev, before.st_ino, before.st_mtime_ns) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_mtime_ns,
+        )
+    else:
+        changed = _signature(before) != _signature(after)
+    if changed or before.st_ctime_ns != after.st_ctime_ns:
         _invalid("filesystem witness")
 
 

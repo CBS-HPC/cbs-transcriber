@@ -33,6 +33,80 @@ def source(tmp_path):
     return store, store.recording(recording["id"]), directory
 
 
+def test_recording_list_uses_one_snapshot_for_mixed_source_readiness(
+    client, wav_bytes, monkeypatch
+):
+    store = client.app.state.store
+    project = store.create_project("Mixed synthetic inspection")
+    states = (
+        "ready",
+        "failed",
+        "pending",
+        "running",
+        "uninspected",
+        "bad-cache",
+        "bad-job",
+        "restored",
+    )
+    ids = {key: store.create_recording(project["id"], f"{key}.wav")["id"] for key in states}
+    other = store.create_project("Other project")
+    store.create_recording(other["id"], "excluded.wav")
+    directory = store.directory(ids["ready"])
+    directory.mkdir(parents=True)
+    (directory / "original.wav").write_bytes(wav_bytes)
+    with store.library_lock():
+        jobs = {
+            key: inspection.ensure(store, rid)["inspection_job_id"]
+            for key, rid in ids.items()
+            if key != "uninspected"
+        }
+        inspection.run(store, inspection.claim(store, jobs["ready"]))
+        inspection.fail(store, inspection.claim(store, jobs["failed"]))
+        inspection.claim(store, jobs["running"])
+    store.execute(
+        "UPDATE recordings SET original_input=? WHERE id=?",
+        ('{"version":1,"version":1}', ids["bad-cache"]),
+    )
+    store.execute("UPDATE jobs SET params='{}' WHERE id=?", (jobs["bad-job"],))
+    store.execute(
+        "INSERT INTO restored_owners VALUES ('job',?,?,?)",
+        (jobs["restored"], "a" * 32, "b" * 32),
+    )
+    details = {
+        key: client.get(f"/api/recordings/{rid}").json()["source_readiness"]
+        for key, rid in ids.items()
+    }
+    assert details == {
+        "ready": {"state": "ready", "duration": 3.0, "error_code": None},
+        "failed": {"state": "error", "duration": None, "error_code": "decode_failed"},
+        "pending": {"state": "pending", "duration": None, "error_code": None},
+        "running": {"state": "running", "duration": None, "error_code": None},
+        "uninspected": {"state": "uninspected", "duration": None, "error_code": None},
+        "bad-cache": {"state": "error", "duration": None, "error_code": "invalid_evidence"},
+        "bad-job": {"state": "error", "duration": None, "error_code": "invalid_evidence"},
+        "restored": {"state": "uninspected", "duration": None, "error_code": "restored_history"},
+    }
+
+    connected = store.connection
+    opened = 0
+
+    @contextmanager
+    def count_open():
+        nonlocal opened
+        opened += 1
+        with connected() as db:
+            yield db
+
+    monkeypatch.setattr(store, "connection", count_open)
+    listed = client.get(f"/api/projects/{project['id']}/recordings")
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()
+    assert [row["id"] for row in rows] == list(ids.values())
+    assert [row["source_readiness"] for row in rows] == list(details.values())
+    assert all("original_input" not in row for row in rows)
+    assert opened == 1
+
+
 def test_v138_null_cache_and_reserved_generic_boundaries(source):
     store, recording, _ = source
     assert inspection.read(store, recording["id"]) is None

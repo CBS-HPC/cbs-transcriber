@@ -235,14 +235,19 @@ def _spelling_vocabulary(semantic):
         return None
     raw = semantic.text("settings", "value", "id", SPELLING_VOCABULARY, maximum=4 * 1024**2)
     value = semantic.json(raw)
+    # Schema 2 adds a non-empty map of recording words (ADR 0186); schema 1 has none.
+    schema = value.get("schema") if type(value) is dict else None
+    keys = {"schema", "personal", "projects"}
     if (
-        type(value) is not dict
-        or set(value) != {"schema", "personal", "projects"}
-        or type(value["schema"]) is not int
-        or value["schema"] != 1
+        type(schema) is not int
+        or schema not in {1, 2}
+        or set(value) != (keys if schema == 1 else keys | {"recordings"})
         or type(value["projects"]) is not dict
         or len(value["projects"]) > 1024
     ):
+        fail()
+    recordings = value.get("recordings", {})
+    if type(recordings) is not dict or (schema == 2 and not recordings) or len(recordings) > 4096:
         fail()
 
     def scope(item):
@@ -287,6 +292,11 @@ def _spelling_vocabulary(semantic):
     for project_id, words in value["projects"].items():
         identifier(project_id)
         if semantic.one("SELECT id FROM projects WHERE id=?", (project_id,)) is None:
+            fail()
+        scope(words)
+    for recording_id, words in recordings.items():
+        identifier(recording_id)
+        if semantic.one("SELECT id FROM recordings WHERE id=?", (recording_id,)) is None:
             fail()
         scope(words)
     return SPELLING_VOCABULARY, raw

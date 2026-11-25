@@ -116,6 +116,11 @@ Future public commits must descend only from the clean public main history.
   remote preparation task owns only its frozen public files/models; it cannot fetch with a
   replacement HF token. Optional Runtime model plans and bounded journal/cache observations
   preserve absent-plan legacy behavior. First-use setup must retain existing provider policy.
+- `word_times.js`/`word_times.py` (ADR 0195) show Start/End boxes for the word at the Text
+  cursor; typed times are part of the passage draft and Save passage sends them with the text
+  to edit-v4 (one version; ADR 0166 text policy first, then edit_timed_word rules on the final
+  times). Only read the textarea; never infer times; keep edit-v1/v2/v3 and timed_word/
+  mapped_word unchanged. Keep this logic out of the portable-pinned transcripts.py.
 - Manual edit hot paths (ADR 0159) may reuse canonical-format validation only with a fresh
   hash and fresh parsed objects; live ownership/context/CAS and inverse checks stay current.
   Targeted merge/split Apply can stop after its exact proof; advisory and Delete restoration
@@ -363,6 +368,10 @@ Future public commits must descend only from the clean public main history.
   uncertain outcomes and the durable browser-local warning until explicit acknowledgement;
   an immediate refresh is not proof that an unconfirmed request has finished.
 - `jobs.py` owns the durable local queue. No external queue service is required.
+- The review dropdown's Uncertain/Timing missing suggestions are derived display only
+  (ADR0191/V257). Exact-content researcher marks win; keep the three stored review states,
+  hash/revision fences, hint/filter semantics and native editor state. Explicit Not checked
+  can replace a displayed suggestion even when the unstored underlying default matches.
 - `passage_review.py` owns schema19 manual review metadata, separate from text/history/Working.
   Bind marks to the exact saved passage hash and independent row revision; stale Checked becomes
   Needs review. Keep review changes in deletion fingerprints and complete backup/restore, and
@@ -387,6 +396,13 @@ Future public commits must descend only from the clean public main history.
   Local staging promotes the existing HTTP mutation slot before taking queue/snapshot locks,
   drains earlier mutators and rechecks recovery after waits. Admission waits use a separate
   one-thread limiter so earlier endpoints can finish; recursive cleanup releases exclusivity.
+- `project_deletion_tasks.py` (ADR 0190) owns project Delete in Activity. Keep is a signal;
+  it overlaps COMMIT only through an outcome-bound decision guard, never a false early final
+  response. Keep/shutdown wait without the manager lock. Existing backup capture reserves
+  reciprocal admission before Stop/copy; never use that guard for the task's own staging.
+  Global shutdown immediately fences queued execution and commit before per-task flags drain.
+  Recheck Keep at every control claim; accepted Stops stay stopped. Startup receipts are
+  observational only, never permission to resume Delete. Recording deletes remain legacy.
 - `deletion_files.py` (ADR0102) journals exact local targets before exclusive same-volume
   staging. Never recursively unlink before SQLite Delete commits. Re-read database ownership
   after uncertain commits: live means file-only rollback, absent means cleanup, mixed remains

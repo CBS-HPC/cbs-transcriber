@@ -54,6 +54,10 @@ Reject managed symlinks/junctions/reparse entries, nonregular files and regular 
 Check bounded reads after stat as well as before; bind path/descriptor identity and compare
 before/after metadata. Following B168, ctime comparisons stay within the same stat API.
 Rescan fixed inventories and recheck observed identities before success. Close all handles.
+On Windows, enumeration can change the reported size of a cold directory (B580). Require
+both observations to be directories before excluding size from their comparison. Keep
+type, identity, timestamps, reparse-point refusal and closed inventory checks. Regular
+files retain size, timestamps and exact hash verification.
 Keep raw descriptor ownership through `fdopen(closefd=False)` and one outer finalizer on every
 outcome. A failed owning stream constructor may already have closed/reused its descriptor;
 blind exception cleanup can close unrelated I/O. Curate directory iterator-advance I/O errors

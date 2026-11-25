@@ -36,6 +36,25 @@ class JobControlConflict(ValueError):
     """An earlier Stop/Retry still owns its local or remote control request."""
 
 
+def failure_message(exc):
+    """Curated Activity text for a failed job; never paths, keys or transcript bodies (B469).
+
+    Only a curated ValueError carries its own text. A busy file is not a disk problem, and a
+    missing key is a processing fault, not a missing file."""
+    if isinstance(exc, ValueError):
+        return str(exc)
+    if isinstance(exc, PermissionError):
+        return (
+            "A local file was busy or could not be opened (another program may have had it "
+            "open). Retry this job."
+        )
+    if isinstance(exc, OSError):
+        return "Local file operation failed. Check free space and that files still exist."
+    return (
+        "Unexpected processing error: expected job or recording data was missing. Retry this job."
+    )
+
+
 @contextmanager
 def preparation_slot(gate, guard):
     """Waiting for another file's local I/O must remain cancellable."""
@@ -1065,6 +1084,17 @@ class JobQueue:
             terminate_owned(settings, self.credentials, remote_id)
         self.store.mark_job_termination_requested(identifier, remote_id)
 
+    def _completion_message(self, identifier):
+        """Local word timing ends with its own outcome message (B511); others say Complete."""
+        rows = self.store.all(
+            "SELECT message FROM jobs WHERE id=? AND kind='enhance' AND json_valid(params) "
+            "AND json_extract(params,'$.realign')=1 "
+            "AND json_extract(params,'$.enhancement.execution')='local'",
+            (identifier,),
+        )
+        message = rows[0]["message"] if rows else None
+        return message if isinstance(message, str) and message else "Complete"
+
     def run(self):
         if self.kind == "runtime-prepare":
             return self.run_runtime_preparation()
@@ -1109,7 +1139,7 @@ class JobQueue:
                 if self.cancel_event.is_set():
                     raise media.Cancelled()
                 if not self.active_batch_id:
-                    finish("completed", "Complete", progress=1)
+                    finish("completed", self._completion_message(identifier), progress=1)
             except media.Cancelled:
                 finish(
                     "interrupted" if self.stopping.is_set() else "cancelled",
@@ -1127,14 +1157,7 @@ class JobQueue:
             except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
                 from .native_batch import MonitoringInterrupted
 
-                # Known errors have curated messages; filesystem paths are not sent to the UI.
-                message = (
-                    str(exc)
-                    if isinstance(exc, ValueError)
-                    else (
-                        "Local file operation failed. Check free space and that files still exist."
-                    )
-                )
+                message = failure_message(exc)
                 finish(
                     "interrupted"
                     if self.active_batch_id and isinstance(exc, MonitoringInterrupted)

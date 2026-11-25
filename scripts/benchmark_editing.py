@@ -33,6 +33,19 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _browser_cache():
+    """Playwright's default browser folder, resolved before the home folder is replaced."""
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
+    if sys.platform == "darwin":
+        return Path.home() / "Library/Caches"
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+
+
+# The disposable home below would otherwise hide the already installed Chromium.
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_browser_cache() / "ms-playwright"))
 # The app resolves its visible app folder from the home directory (ADR 0050). Point it at a
 # disposable folder before importing the package so nothing outside the run is read or written.
 _HOME = Path(tempfile.mkdtemp(prefix="cbs-edit-bench-home-"))
@@ -70,14 +83,18 @@ class MemoryCredentials:
         self.keys[base_url] = value
 
 
-def synthetic_rows(passages, words=15, speakers=3, seed=11):
-    """Timed Danish-like passages with review signals, like a native WhisperX result."""
+def synthetic_rows(passages, words=15, speakers=3, seed=11, long_words=0):
+    """Timed Danish-like passages with review signals, like a native WhisperX result.
+
+    With long_words, the middle passage has that many words (a long monologue passage).
+    """
     rng = random.Random(seed)
     rows, clock, speaker = [], 0.0, 0
     for index in range(passages):
         if index and rng.random() < 0.45:
             speaker = (speaker + 1 + rng.randrange(speakers - 1)) % speakers
-        tokens = [rng.choice(WORDS) for _ in range(words)]
+        count = long_words if long_words and index == passages // 2 else words
+        tokens = [rng.choice(WORDS) for _ in range(count)]
         if index % 7 == 3:
             tokens[2] = "café"  # Combining mark: exact code-point offsets matter.
         if index % 11 == 5:
@@ -343,12 +360,17 @@ MEASURE = r"""async () => {
   const b = window.__bench;
   const r0 = b.requests.length, l0 = b.longtasks.length, d0 = b.renders.length;
   const t0 = performance.now();
+  let tReady = null;
   __ACTION__
   const tAction = performance.now();
   const deadline = t0 + __TIMEOUT__;
   await new Promise((resolve, reject) => {
     const check = () => {
       let ok = false;
+      // Controls-ready: the first frame in which the editing controls are usable again,
+      // regardless of background follow-up requests that are still in flight.
+      try { if (tReady === null && !!(__READY__)) tReady = performance.now(); }
+      catch (error) { /* not ready */ }
       try { ok = b.inflight === 0 && !!(__SETTLED__); } catch (error) { ok = false; }
       if (ok) resolve();
       else if (performance.now() > deadline)
@@ -375,6 +397,7 @@ MEASURE = r"""async () => {
   const renders = b.renders.slice(d0);
   return {
     total_ms: tPaint - t0, sync_ms: tAction - t0, settled_ms: tSettled - t0,
+    ready_ms: (tReady ?? tSettled) - t0,
     requests, renders_ms: renders.map((r) => r.duration),
     longest_task_ms: long.reduce((m, e) => Math.max(m, e.duration), 0),
     long_task_ms: long.reduce((s, e) => s + e.duration, 0),
@@ -382,9 +405,18 @@ MEASURE = r"""async () => {
 }"""
 
 
-def measure(page, action, settled, label, timeout=240000):
+# Editing controls are usable: no save or structural change is pending, the editor is
+# closed and the transcript's Edit buttons are enabled again.
+EDIT_READY = (
+    "!passageTextSaving && !timedWordSaving && !structureLocked() && !state.editing && "
+    "!!document.querySelector('#transcript [data-action=edit]:not([disabled])')"
+)
+
+
+def measure(page, action, settled, label, timeout=240000, ready=None):
     script = (
         MEASURE.replace("__ACTION__", action)
+        .replace("__READY__", ready or settled)
         .replace("__SETTLED__", settled)
         .replace("__TIMEOUT__", str(timeout))
         .replace("__LABEL__", label)
@@ -475,9 +507,9 @@ def trace_breakdown(data):
 # --- Benchmark -------------------------------------------------------------------------------
 
 
-def seed_recording(store, project_id, passages, words, speakers, seed):
+def seed_recording(store, project_id, passages, words, speakers, seed, long_words=0):
     recording = store.create_recording(project_id, f"synthetic-{passages}.wav")
-    segments = normalize_segments(synthetic_rows(passages, words, speakers, seed))
+    segments = normalize_segments(synthetic_rows(passages, words, speakers, seed, long_words))
     store.add_result(
         recording["id"],
         segments,
@@ -520,28 +552,37 @@ class Bench:
     def revision(self):
         return self.page.evaluate("state.recording.revision")
 
-    def run_action(self, label, size, samples, prepare, action, settled, request_methods):
+    def run_action(
+        self, label, size, samples, prepare, action, settled, request_methods, ready=None
+    ):
         results, breakdown = [], None
         for index in range(samples):
             context = prepare(index)
             if context is None:
                 continue
             act, done = action(context), settled(context)
+            usable = ready(context) if ready else None
             since = len(REQUESTS)
 
-            def run(act=act, done=done):
-                return measure(self.page, act, done, label)
+            def run(act=act, done=done, usable=usable):
+                return measure(self.page, act, done, label, ready=usable)
 
             if index == 0:
                 sample, breakdown = self.traced(f"{label}-{size}", run)
             else:
                 sample = run()
-            served = [
-                row
-                for row in server_requests(since)
-                if row["method"] in request_methods and "/api/recordings/" in row["path"]
-            ]
+            recorded = [row for row in server_requests(since) if "/api/recordings/" in row["path"]]
+            served = [row for row in recorded if row["method"] in request_methods]
             sample["server"] = served[0] if served else None
+            # Background follow-ups (hints, undo eligibility, reviews) after the main request.
+            sample["follow_up_server"] = {}
+            for row in recorded:
+                if row is not sample["server"]:
+                    name = row["path"].rstrip("/").rsplit("/", 1)[-1]
+                    if len(name) == 32:  # A bare recording or result identifier.
+                        name = row["method"] + " recording"
+                    sample["follow_up_server"].setdefault(name, 0.0)
+                    sample["follow_up_server"][name] += row["ms"]
             results.append(sample)
         return self.summarize(results, breakdown)
 
@@ -559,7 +600,12 @@ class Bench:
             for name, value in totals.items():
                 spans.setdefault(name, []).append(value)
         renders = [sum(sample["renders_ms"]) for sample in results]
+        follow_ups = {}
+        for sample in results:
+            for name, value in sample.get("follow_up_server", {}).items():
+                follow_ups.setdefault(name, []).append(value)
         return {
+            "controls_ready_ms": summary([s.get("ready_ms") for s in results]),
             "browser_total_ms": summary([s["total_ms"] for s in results]),
             "input_handler_sync_ms": summary([s["sync_ms"] for s in results]),
             "longest_task_ms": summary([s["longest_task_ms"] for s in results]),
@@ -573,6 +619,9 @@ class Bench:
             "server_request_ms": summary([row["ms"] for row in server]),
             "server_response_bytes": summary([row["bytes"] for row in server]),
             "server_spans_ms": {name: summary(values) for name, values in sorted(spans.items())},
+            "follow_up_server_ms": {
+                name: summary(values) for name, values in sorted(follow_ups.items())
+            },
             "trace_self_ms": breakdown,
         }
 
@@ -636,14 +685,15 @@ class Bench:
         self.cancel_editor()
         return result
 
-    def typing(self, size, samples):
-        passage = self.pick(9, 0)
+    def typing(self, size, samples, passage=None):
+        passage = passage or self.pick(9, 0)
         self.open_editor(passage)
         page = self.page
         page.locator(f"#passage-{passage} textarea").focus()
         page.evaluate("window.__bench.events.length = 0; window.__bench.longtasks.length = 0")
+        repeats = max(3, samples // 12)
         started = time.perf_counter()
-        page.keyboard.type(" og så videre" * max(1, samples // 12), delay=15)
+        page.keyboard.type(" og så videre" * repeats, delay=15)
         elapsed = (time.perf_counter() - started) * 1000
         page.wait_for_timeout(200)
         data = page.evaluate(
@@ -653,12 +703,41 @@ class Bench:
         page.evaluate("state.dirty = false")
         self.cancel_editor()
         return {
-            "typed_characters": len(" og så videre") * max(1, samples // 12),
+            "typed_characters": len(" og så videre") * repeats,
             "wall_ms": round(elapsed, 1),
             "slow_key_events": len(data["events"]),
             "event_duration_ms": summary([e["duration"] for e in data["events"]]),
             "longest_task_ms": round(max([e["duration"] for e in data["long"]] or [0]), 1),
         }
+
+    def long_passage(self, size, samples):
+        """Open and type in the long middle passage created with --long-words."""
+        passage = self.page.evaluate(
+            "state.recording.segments[Math.floor(state.recording.segments.length / 2)].id"
+        )
+
+        def prepare(index):
+            if index:
+                self.cancel_editor()
+            return passage
+
+        out = {
+            "words": self.page.evaluate(
+                f"state.recording.segments.find((s) => s.id === '{passage}').words.length"
+            ),
+            "open_long_editor": self.run_action(
+                "open_long_editor",
+                size,
+                samples,
+                prepare,
+                lambda p: f"document.querySelector('#passage-{p} [data-action=edit]').click();",
+                lambda p: f"document.querySelector('#passage-{p} textarea')",
+                ("GET",),
+            ),
+        }
+        self.cancel_editor()
+        out["typing_long"] = self.typing(size, samples, passage)
+        return out
 
     def scrolling(self, size):
         result = self.page.evaluate(r"""async () => {
@@ -706,6 +785,7 @@ class Bench:
                 "document.querySelector('#save-status').textContent !== 'Saving…'"
             ),
             ("PATCH",),
+            ready=lambda c: f"state.recording.revision > {c[1]} && {EDIT_READY}",
         )
 
     def assign_speaker(self, size, samples):
@@ -799,14 +879,30 @@ class Bench:
                 "!document.querySelector('#passage-merge-dialog').open"
             ),
             ("POST",),
+            ready=lambda c: f"state.recording.revision > {c[1]} && {EDIT_READY}",
         )
         out["open_merge_dialog_ms"] = summary(opens)
+
+        unavailable = []
 
         def prepare_undo(index):
             if index >= len(merged):
                 return None
             passage = merged[-1 - index]
-            wait(page, f"document.querySelector('#passage-{passage} [data-action=undo-merge]')")
+            # Wait for this revision's eligibility check; the bounded history scan may not
+            # reach older merges in long transcripts (history_limited), so no button appears.
+            wait(
+                page,
+                "mergeUndoOptions?.ids && mergeUndoOptions.key.endsWith("
+                "':' + state.recording.revision)",
+            )
+            if not page.evaluate(
+                f"!!document.querySelector('#passage-{passage} [data-action=undo-merge]')"
+            ):
+                unavailable.append(
+                    page.evaluate("mergeUndoOptions.response?.history_limited === true")
+                )
+                return None
             return (passage, self.revision())
 
         out["undo_merge"] = self.run_action(
@@ -819,7 +915,12 @@ class Bench:
             ),
             lambda c: f"state.recording.revision > {c[1]} && !structureLocked()",
             ("POST",),
+            ready=lambda c: f"state.recording.revision > {c[1]} && {EDIT_READY}",
         )
+        out["undo_merge_unavailable"] = {
+            "count": len(unavailable),
+            "history_limited": sum(unavailable),
+        }
 
         def prepare_split(index):
             passage = self.pick(13, index, 31)
@@ -841,6 +942,7 @@ class Bench:
             lambda c: f"document.querySelector('#passage-{c[0]} [data-action=split]').click();",
             lambda c: f"state.recording.revision > {c[1]} && !structureLocked() && !state.editing",
             ("POST",),
+            ready=lambda c: f"state.recording.revision > {c[1]} && {EDIT_READY}",
         )
 
         def prepare_delete(index):
@@ -854,6 +956,7 @@ class Bench:
             lambda c: f"document.querySelector('#passage-{c[0]} [data-action=delete]').click();",
             lambda c: f"state.recording.revision > {c[1]} && !structureLocked()",
             ("POST",),
+            ready=lambda c: f"state.recording.revision > {c[1]} && {EDIT_READY}",
         )
         return out
 
@@ -992,7 +1095,9 @@ class Bench:
 
 def run_size(args, server, browser, project, size, report):
     store = server.store
-    recording = seed_recording(store, project["id"], size, args.words, args.speakers, args.seed)
+    recording = seed_recording(
+        store, project["id"], size, args.words, args.speakers, args.seed, args.long_words
+    )
     first_request = len(REQUESTS)
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     page.add_init_script(INIT_SCRIPT)
@@ -1017,6 +1122,9 @@ def run_size(args, server, browser, project, size, report):
         run["typing"] = bench.typing(size, args.samples)
         run["scrolling"] = bench.scrolling(size)
         print(f"[{size}] editor/typing/scroll done", flush=True)
+    if "long" in actions and args.long_words:
+        run["long_passage"] = bench.long_passage(size, max(1, args.samples // 2))
+        print(f"[{size}] long passage done", flush=True)
     if "save" in actions:
         run["save_passage"] = bench.save_edit(size, args.samples)
         print(f"[{size}] save done", flush=True)
@@ -1061,9 +1169,22 @@ def main():
     parser.add_argument("--speakers", type=int, default=3)
     parser.add_argument("--seed", type=int, default=11)
     parser.add_argument(
+        "--long-words", type=int, default=0, help="Words in one long middle passage (0: none)"
+    )
+    parser.add_argument(
         "--actions",
         nargs="+",
-        default=["open", "editor", "save", "speakers", "structure", "history", "follow", "export"],
+        default=[
+            "open",
+            "editor",
+            "long",
+            "save",
+            "speakers",
+            "structure",
+            "history",
+            "follow",
+            "export",
+        ],
     )
     parser.add_argument("--label", default="")
     parser.add_argument("--out")
@@ -1075,6 +1196,8 @@ def main():
         parser.error("samples 1..200, structural samples 1..50")
     if not 4 <= args.words <= 40 or not 2 <= args.speakers <= 6:
         parser.error("words 4..40, speakers 2..6")
+    if args.long_words and not 41 <= args.long_words <= 2000:
+        parser.error("long words 41..2000")
     if args.trace_dir:
         Path(args.trace_dir).mkdir(parents=True, exist_ok=True)
 

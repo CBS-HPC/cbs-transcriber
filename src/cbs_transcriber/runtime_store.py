@@ -369,39 +369,51 @@ def confirm_release(store, identifier, *, target, deleted_job_ids):
     restored_owners.require_owner(store, "runtime_batch", identifier)
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        batch = _get(db, identifier)
-        if batch["state"] in {"queued", "running"}:
-            raise ValueError("Stop the CBS Runtime batch before releasing its UCloud folder.")
-        if batch["journal"].get("recovery_requested"):
-            raise ValueError("Stop pending recovery before releasing its UCloud folder.")
-        if not set(deleted_job_ids) <= {member["job_id"] for member in batch["members"]}:
-            raise ValueError("The deleted files do not belong to this CBS Runtime batch.")
-        journal, stamp = batch["journal"], now()
-        decision = journal.get("release_decision") or {
-            "kind": "deletion",
-            "decided_at": stamp,
-            "target": target,
-        }
-        journal.update(
-            # The same monotonic fence as ADR 0066: no recovery, retry or producer commit.
-            discard_confirmed=True,
-            stop_intent=True,
-            stop_requested_at=journal.get("stop_requested_at", stamp),
-            release_decision=decision,
-            deleted_members=_deleted_list(journal, deleted_job_ids),
-            recovery_requested=False,
-        )
-        if journal.get("cleanup_state") not in {"trashed", "deleted"} and (
-            journal.get("owned_folder") or journal.get("folder_created")
-        ):
-            journal.update(cleanup_state="pending", cleanup_stage="release_confirmed")
-        _settle_members(db, batch, set(deleted_job_ids))
-        db.execute(
-            "UPDATE runtime_batch_runs SET journal=?,admission='closed',coordinator_epoch="
-            "coordinator_epoch+1,updated=? WHERE id=?",
-            (canonical(journal), stamp, identifier),
-        )
-        return _get(db, identifier)
+        return confirm_release_in(db, identifier, target=target, deleted_job_ids=deleted_job_ids)
+
+
+def confirm_release_in(db, identifier, *, target, deleted_job_ids):
+    """The same receipt inside the caller's open writer transaction (ADR 0190).
+
+    A project deletion task commits it together with the logical Delete, so a kept or failed
+    deletion leaves no release decision behind. No network or other connection is used here.
+    """
+    from . import restored_owners
+
+    restored_owners.require_owned(db, "runtime_batch", identifier)
+    batch = _get(db, identifier)
+    if batch["state"] in {"queued", "running"}:
+        raise ValueError("Stop the CBS Runtime batch before releasing its UCloud folder.")
+    if batch["journal"].get("recovery_requested"):
+        raise ValueError("Stop pending recovery before releasing its UCloud folder.")
+    if not set(deleted_job_ids) <= {member["job_id"] for member in batch["members"]}:
+        raise ValueError("The deleted files do not belong to this CBS Runtime batch.")
+    journal, stamp = batch["journal"], now()
+    decision = journal.get("release_decision") or {
+        "kind": "deletion",
+        "decided_at": stamp,
+        "target": target,
+    }
+    journal.update(
+        # The same monotonic fence as ADR 0066: no recovery, retry or producer commit.
+        discard_confirmed=True,
+        stop_intent=True,
+        stop_requested_at=journal.get("stop_requested_at", stamp),
+        release_decision=decision,
+        deleted_members=_deleted_list(journal, deleted_job_ids),
+        recovery_requested=False,
+    )
+    if journal.get("cleanup_state") not in {"trashed", "deleted"} and (
+        journal.get("owned_folder") or journal.get("folder_created")
+    ):
+        journal.update(cleanup_state="pending", cleanup_stage="release_confirmed")
+    _settle_members(db, batch, set(deleted_job_ids))
+    db.execute(
+        "UPDATE runtime_batch_runs SET journal=?,admission='closed',coordinator_epoch="
+        "coordinator_epoch+1,updated=? WHERE id=?",
+        (canonical(journal), stamp, identifier),
+    )
+    return _get(db, identifier)
 
 
 def record_deleted_members(store, identifier, job_ids):
@@ -411,20 +423,28 @@ def record_deleted_members(store, identifier, job_ids):
     restored_owners.require_owner(store, "runtime_batch", identifier)
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        batch = _get(db, identifier)
-        if batch["state"] in {"queued", "running"}:
-            raise ValueError("Stop the CBS Runtime batch before deleting its files.")
-        if not set(job_ids) <= {member["job_id"] for member in batch["members"]}:
-            raise ValueError("The deleted files do not belong to this CBS Runtime batch.")
-        journal = batch["journal"]
-        journal["deleted_members"] = _deleted_list(journal, job_ids)
-        _settle_members(db, batch, set(job_ids))
-        db.execute(
-            "UPDATE runtime_batch_runs SET journal=?,coordinator_epoch=coordinator_epoch+1,"
-            "updated=? WHERE id=?",
-            (canonical(journal), now(), identifier),
-        )
-        return _get(db, identifier)
+        return record_deleted_members_in(db, identifier, job_ids)
+
+
+def record_deleted_members_in(db, identifier, job_ids):
+    """The same receipt inside the caller's open writer transaction (ADR 0190)."""
+    from . import restored_owners
+
+    restored_owners.require_owned(db, "runtime_batch", identifier)
+    batch = _get(db, identifier)
+    if batch["state"] in {"queued", "running"}:
+        raise ValueError("Stop the CBS Runtime batch before deleting its files.")
+    if not set(job_ids) <= {member["job_id"] for member in batch["members"]}:
+        raise ValueError("The deleted files do not belong to this CBS Runtime batch.")
+    journal = batch["journal"]
+    journal["deleted_members"] = _deleted_list(journal, job_ids)
+    _settle_members(db, batch, set(job_ids))
+    db.execute(
+        "UPDATE runtime_batch_runs SET journal=?,coordinator_epoch=coordinator_epoch+1,"
+        "updated=? WHERE id=?",
+        (canonical(journal), now(), identifier),
+    )
+    return _get(db, identifier)
 
 
 def migrate(store):

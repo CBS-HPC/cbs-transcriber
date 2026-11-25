@@ -29,6 +29,13 @@ sends only intentionally changed models and their observed profile versions; a c
 group membership rejects the transaction. Untouched duplicates keep independent flags. Existing
 API clients without the optional delta fields keep their previous bulk-selection behavior.
 
+## 24 November amendment
+
+Fresh native UCloud connections enable Large-v3-turbo and NVIDIA Parakeet v3. Turbo is
+initially selected. Large-v3 is unchecked. First-use Save submits the same native catalog defaults
+as Settings, with the existing profile-version checks. Saved model choices and frozen jobs
+are preserved. CBS Runtime defaults remain governed by ADR 0130.
+
 ## Consequences
 
 The initial choices are convenience defaults, not quality rankings; Danish model evaluation,

@@ -46,6 +46,9 @@ SUPERSESSION_FORMAT = "cbs-runtime-generation-supersession-receipt-v1"
 # A candidate owner in one of these states has no worker; "settled" also needs no recorded
 # allocation, uncertain POST or reserved capacity (runtime_store._reserved).
 SETTLED = frozenset({"failed", "cancelled", "interrupted"})
+# UCloud 2c23d295 JobState.IsFinal: SUSPENDED can resume. Legacy terminal aliases
+# remain unchanged elsewhere; a generation candidate needs positively final evidence.
+_FINAL_REMOTE_STATES = frozenset({"SUCCESS", "FAILURE", "EXPIRED"})
 FOLDERS = ("environment", "run")
 OUTCOMES = {"pending", "acknowledged", "conflict", "uncertain"}
 # What a finished PREPARE_ONLY supervisor leaves in a fresh root; anything else (for
@@ -397,6 +400,11 @@ def admit(store, credentials, confirmation, guard):
     }
 
 
+def _unclosed_remote_observation(journal):
+    state = journal.get("remote_state")
+    return state is not None and (type(state) is not str or state not in _FINAL_REMOTE_STATES)
+
+
 def _settled(db, target, candidate):
     """The exact candidate's own owner, provably settled and never promoted.
 
@@ -441,7 +449,7 @@ def _settled(db, target, candidate):
             "The Runtime generation candidate's submission outcome is uncertain. A possibly "
             "running allocation is never superseded; its evidence is retained."
         )
-    if runtime_store._reserved(journal):
+    if _unclosed_remote_observation(journal) or runtime_store._reserved(journal):
         raise Conflict(
             "The Runtime generation candidate still holds a recorded allocation or capacity. "
             "Stop it and wait for UCloud's terminal state before superseding it."
@@ -541,6 +549,20 @@ def supersede(store, credentials, supersession, guard):
         or _HEX32.fullmatch(supersession["superseded"]["owner_id"]) is None
     ):
         raise Conflict("Review and confirm the Runtime generation supersession again.")
+    # Validate the complete type-strict body before the lost-reply deduplication path.
+    # A caller repeating a stored digest cannot substitute different evidence or choices.
+    try:
+        sealed = _digest(
+            {key: item for key, item in supersession.items() if key != "supersession_sha256"}
+        )
+    except (ValueError, TypeError, RecursionError, OverflowError):
+        sealed = None
+    if (
+        supersession["policy"] != SUPERSESSION_POLICY
+        or type(supersession["supersession_sha256"]) is not str
+        or supersession["supersession_sha256"] != sealed
+    ):
+        raise Conflict("The superseded Runtime generation changed. Review it again.")
     confirmation, old = supersession["confirmation"], supersession["superseded"]["owner_id"]
     guard()
     fresh, chosen, model_plan, _ = _freeze(store, credentials)
@@ -832,6 +854,7 @@ def validate_owner(value):
             or not preparation._same(receipt["registry_revision"], generation["expected_revision"])
             or value["state"] not in SETTLED
             or promotion is not None
+            or _unclosed_remote_observation(journal)
             or runtime_store._reserved(journal)
         ):
             _bad()

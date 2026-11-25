@@ -44,7 +44,8 @@ full-run affordability estimates and Runtime CPU preparation still need implemen
    profile languages remain effective; a blank language uses the UCloud application
    or template default; it does not necessarily mean automatic detection. After saving,
    select Provider **UCloud** and a model marked **(Transcriber)** beside **Transcribe selected**
-   or on the recording review page. Large-v3 is the native default. The models marked
+   or on the recording review page. Fresh connections enable Large-v3-turbo and NVIDIA
+   Parakeet v3, with Turbo selected initially. Large-v3 can be enabled here. Models marked
    **(CBS Runtime)** use a separate worker and MIG allocation. Model support depends on the
    actual app version. See [editable model presets](provider-models.md). There is no editable
    custom native model ID; older saved configurations and frozen jobs remain intact.

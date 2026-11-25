@@ -186,3 +186,66 @@ def test_pending_local_cleanup_has_no_header_stop(page, local_app):
     expect(page.locator("#jobs [data-activity-stop], #jobs [data-activity-remove]")).to_have_count(
         0
     )
+
+
+def test_native_cleanup_confirms_unsaved_outputs_before_discard(page, local_app):
+    owner, member, fingerprint = "b" * 32, "a" * 32, "c" * 64
+    job = activity_job(
+        member,
+        "failed",
+        kind="transcribe",
+        ucloud_batch_id=owner,
+        ucloud_batch_count=12,
+        ucloud_batch_state="failed",
+        ucloud_cleanup_state="pending",
+        ucloud_batch_unresolved=True,
+        ucloud_batch_members=[{"job_id": member, "state": "failed", "removed": True}],
+    )
+    route_activity(page, [job])
+    bodies = []
+
+    def cleanup(route):
+        body = route.request.post_data_json
+        bodies.append(body)
+        if not body:
+            route.fulfill(
+                json={
+                    "discard_preview": {
+                        "remote_job_id": "12345",
+                        "saved_count": 10,
+                        "unsaved_count": 2,
+                        "fingerprint": fingerprint,
+                    }
+                }
+            )
+            return
+        job.update(
+            state="cancelled",
+            ucloud_batch_state="cancelled",
+            ucloud_cleanup_state="trashed",
+            ucloud_batch_unresolved=False,
+            remote_release={"kind": "discard", "cleanup_state": "trashed"},
+        )
+        route.fulfill(json={"cleanup_state": "trashed"})
+
+    page.route(f"**/api/jobs/{member}/cleanup-ucloud", cleanup)
+    show_activity(page, local_app)
+    button = page.get_by_role("button", name="Retry remote cleanup", exact=True)
+    prompts = []
+
+    def dismiss(dialog):
+        prompts.append(dialog.message)
+        dialog.dismiss()
+
+    page.once("dialog", dismiss)
+    with page.expect_event("dialog"):
+        button.click()
+    assert bodies == [{}]
+    assert "2 of 12" in prompts[0] and "12345" in prompts[0]
+    expect(button).to_be_visible()
+    page.once("dialog", lambda dialog: dialog.accept())
+    button.click()
+    expect(page.locator("#jobs")).to_contain_text("moved to UCloud Trash")
+    assert bodies == [{}, {}, {"discard_fingerprint": fingerprint}]
+    expect(page.locator("#jobs .activity-attention")).to_have_count(0)
+    expect(page.locator("#jobs").get_by_role("button", name="Retry", exact=True)).to_have_count(0)

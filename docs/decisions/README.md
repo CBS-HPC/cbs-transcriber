@@ -182,11 +182,25 @@ record explicitly rather than rewriting its historical rationale.
 - [0173 — HF access and configured-model preparation in Activity](0173-huggingface-background-preparation.md)
 - [0174 — Native startup reconnection](0174-native-startup-reconnection.md)
 - [0175 — Runtime preparation observation recovery](0175-runtime-preparation-observation-recovery.md)
-- [0179 — Existing sole-result Working on schema 19](0179-existing-working-schema19.md) (design Go; unimplemented)
-- [0180 — Undo last change by exact predecessor restoration](0180-undo-last-change.md) (slice 1 implemented; hidden in the MVP profile)
-- [0181 — History change list and Revert this change](0181-history-change-list.md) (slice 2 implemented; hidden in the MVP profile)
-- [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; hidden in the MVP profile)
+- [0179 — Existing sole-result Working on schema 19](0179-existing-working-schema19.md) (implemented; 171 focused cases and independent Go; real-library acceptance separate)
+- [0180 — Undo last change by exact predecessor restoration](0180-undo-last-change.md) (slice 1 implemented; shown in MVP v2 by the 20 November decision)
+- [0181 — History change list and Revert this change](0181-history-change-list.md) (slice 2 implemented; shown in MVP v2 by the 20 November decision)
+- [0182 — Branch view of results and versions](0182-branch-view.md) (slice 3 implemented; shown in MVP v2 by the 20 November decision)
 - [0183 — Native batch early uploads, limits and plain status](0183-native-batch-early-uploads-limits-status.md)
-- [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile)
+- [0185 — Local spelling assistance for an open passage](0185-local-passage-spelling.md) (ported preview; hidden in the MVP profile; panel replaced by 0187)
+- [0186 — Recording spelling vocabulary that inherits the project's words](0186-recording-spelling-vocabulary.md) (hidden in the MVP profile)
+- [0187 — Spelling: Activity dictionary downloads and on-demand suggestions](0187-spelling-activity-downloads-and-on-demand-suggestions.md) (double-click/Alt+Enter popover; hidden in the MVP profile)
+
+- [0188 — Uncertainty decoration inside native Text drafts](0188-text-editor-uncertainty-decoration.md)
+- [0189 — Passage timing windows too short for their text are not aligned](0189-windows-too-short-for-their-text.md)
+- [0190 — Project deletion in Activity](0190-project-deletion-in-activity.md) (post-v2; implemented on `claude/deletion-activity`; recordings keep the dialog flow)
+- [0191 — Word timing in review and Activity](0191-word-timing-in-review-and-activity.md) (post-v2; derived automatic Needs review, Activity outcomes)
+- [0192 — Backup in Settings with Activity](0192-backup-in-settings-with-activity.md) (post-v2; server-owned local backup task, Stop until saved; UCloud transfer unchanged)
+
+- [0193 — Exact editing performance on long transcripts](0193-exact-editing-performance.md) (rc3 candidate)
+- [0195 — Word times in the passage draft](0195-word-times-in-the-passage-draft.md) (rc3; Start/End boxes for the word at the Text cursor, saved with the text as one version; replaces the word dropdown)
+
+- [0196 — Passage Undo and Redo within saved history](0196-passage-undo-redo.md)
+- [0197 - Confirmed cleanup of a failed native batch](0197-native-batch-cleanup-with-discard.md)
 
 Terminology is defined in [the domain glossary](../../CONTEXT.md).

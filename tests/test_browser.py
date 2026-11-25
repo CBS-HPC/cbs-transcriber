@@ -161,6 +161,14 @@ def provider_advanced(page):
         page.locator("#provider-advanced > summary").click()
 
 
+def settings_tabs(page):
+    """The Settings tab names; Spelling (ADR 0187) only where the profile offers it.
+
+    Backup (ADR 0192) is offered in every profile: local backups are not hidden work."""
+    spelling = ["Spelling"] if page.evaluate("featureOn('spelling')") else []
+    return ["UCloud", "Hugging Face", "Local Processing", *spelling, "Backup"]
+
+
 def select_export_formats(page, *formats):
     """Choose the exact format checkboxes in the export dialog."""
     choices = page.locator("#export-dialog [data-export-format]")
@@ -308,23 +316,25 @@ def test_browser_review_modes_and_restart(page, local_app, wav_bytes):
     expect(page.locator("#timing-badge")).to_have_text("Word timing")
     first = page.locator("#passage-0")
     first.locator("[data-word='0']").dblclick()
-    expect(first.locator("[data-editor-mode]")).to_have_value("text")
-    first.locator("[data-editor-mode]").select_option("timing")
-    first.locator('[data-action="edit-timed-word"]').click()
-    first.locator("[data-timing-text]").fill("Goddag")
-    first.get_by_role("button", name="Save word").click()
-    expect(page.locator("#save-status")).to_have_text("All changes saved")
-    expect(first.locator("[data-timing-text]")).to_have_value("Goddag")
-    first.locator("[data-editor-mode]").select_option("text")
+    # The double-clicked word is selected in Text, so its times show in the boxes (ADR 0195).
+    expect(first.locator('[data-word-time="start"]')).to_have_value("0")
+    expect(first.locator('[data-word-time="end"]')).to_have_value("0.6")
+    first.get_by_role("textbox", name="Edit passage").press_sequentially("Goddag")
+    expect(first.get_by_role("textbox", name="Edit passage")).to_have_value("🙂 Goddag København.")
+    first.get_by_role("button", name="Save passage").click()
+    # A Text save keeps the replaced word's interval; the unmapped emoji token becomes an
+    # untimed word under ADR 0166, so the save names the missing timing.
+    expect(page.locator("#save-status")).to_contain_text("Passage saved.")
+    first.get_by_role("button", name="Edit", exact=True).click()
     first.get_by_role("textbox", name="Edit passage").fill("🙂 Goddag København. Tak.")
     first.get_by_role("button", name="Save passage").click()
+    expect(first.locator(".passage-text")).to_have_text("🙂 Goddag København. Tak.")
     expect(first.locator(".timing-tag button")).to_have_attribute(
         "title", __import__("re").compile("Word timing incomplete")
     )
     first.get_by_role("button", name="Edit", exact=True).click()
-    expect(first.locator("[data-editor-mode] option[value=timing]")).not_to_have_attribute(
-        "disabled", ""
-    )
+    first.locator("textarea").evaluate("e => { e.focus(); e.setSelectionRange(12, 12); }")
+    expect(first.locator('[data-word-time="start"]')).to_have_value("0.6")
     # Fresh Text saves retain proved timing and leave inserted words explicitly untimed,
     # so the current partial mapping remains editable without an alignment job.
     store = local_app.server.config.app.state.store
@@ -345,9 +355,8 @@ def test_browser_review_modes_and_restart(page, local_app, wav_bytes):
     first.get_by_role("button", name="Restore original").click()
     expect(first.locator(".passage-text")).to_have_text("🙂 Hej København.")
     first.get_by_role("button", name="Edit", exact=True).click()
-    expect(first.locator("[data-editor-mode] option[value=timing]")).not_to_have_attribute(
-        "disabled", ""
-    )
+    first.locator("textarea").evaluate("e => { e.focus(); e.setSelectionRange(4, 4); }")
+    expect(first.locator('[data-word-time="start"]')).to_have_value("0")
     first.get_by_role("button", name="Cancel", exact=True).first.click()
     first.locator("[data-word='1']").click()
     expect(first.locator("[data-word='1']")).to_have_class("word current", timeout=5000)
@@ -1107,7 +1116,7 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#bulk-provider-kind")).to_have_value("")
     expect(page.locator("#bulk-provider")).not_to_contain_text("gpt-transcribe")
     page.locator("#settings-open").click()
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.get_by_role("tab", name="UCloud", exact=True)).to_have_attribute(
         "aria-selected", "true"
     )
@@ -1130,9 +1139,13 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(choices).to_have_count(
         len([m for m in ucloud_models() if runtime_offered or m.get("engine") != "whisperx"])
     )
+    # Fresh connections enable Turbo and Parakeet (ADR 0126, 24 November amendment).
+    expect(page.locator('[data-enabled-model="nvidia/parakeet-tdt-0.6b-v3"]')).to_be_checked()
+    expect(page.locator('[data-enabled-model="large-v3"]')).not_to_be_checked()
     for model in ("large-v3", "large-v3-turbo", "small"):
         page.locator(f'[data-enabled-model="{model}"]').check()
-    page.locator('[data-enabled-model="small"]').uncheck()
+    for model in ("small", "nvidia/parakeet-tdt-0.6b-v3"):
+        page.locator(f'[data-enabled-model="{model}"]').uncheck()
     enabled = choices.evaluate_all(
         "items => items.filter(i => i.checked).map(i => i.dataset.enabledModel)"
     )
@@ -1146,8 +1159,9 @@ def test_browser_provider_tabs_project_storage_and_policy(
         "synthetic-ucloud-key"
     )
     expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
+    # The connection's default model (Turbo) is listed first.
     expect(page.locator("#bulk-provider option")).to_have_text(
-        ["whisper/large-v3 (Transcriber)", "whisper/large-v3-turbo (Transcriber)"]
+        ["whisper/large-v3-turbo (Transcriber)", "whisper/large-v3 (Transcriber)"]
     )
     expect(page.locator("#bulk-provider")).not_to_contain_text("whisper/small")
     page.locator("#settings-open").click()
@@ -1159,7 +1173,7 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#base-url")).to_have_value("https://cloud.sdu.dk")
     expect(page.get_by_role("button", name="Save settings")).to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).press("End")
-    expect(page.get_by_role("tab", name="Local Processing", exact=True)).to_be_focused()
+    expect(page.get_by_role("tab", name=settings_tabs(page)[-1], exact=True)).to_be_focused()
     page.keyboard.press("Home")
     expect(page.get_by_role("tab", name="UCloud", exact=True)).to_be_focused()
     expect(page.locator("#provider-fields")).to_be_visible()
@@ -1175,7 +1189,13 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#provider-policy-summary")).to_have_text(
         "Allowed for Standard and Protected projects."
     )
-    deny_protected(app.state.store, page.locator("#settings-provider").input_value())
+    # Deny Protected for Large-v3 only. Turbo, the fresh default, stays allowed.
+    large = next(
+        p
+        for p in public_profiles(app.state.store, app.state.credentials)["providers"]
+        if p["provider_type"] == "ucloud" and p["model"] == "large-v3"
+    )
+    deny_protected(app.state.store, large["id"])
     page.get_by_role("button", name="Close settings").click()
     expect(page.locator("#settings-dialog")).not_to_be_visible()
     page.reload()
@@ -1276,7 +1296,7 @@ def test_browser_provider_tabs_project_storage_and_policy(
     expect(page.locator("#bulk-provider-kind option")).to_have_count(1)
     expect(page.locator("#bulk-provider-kind")).to_have_value("ucloud")
     expect(page.locator("#bulk-provider option")).to_have_text(
-        ["whisper/large-v3 (Transcriber)", "whisper/large-v3-turbo (Transcriber)"]
+        ["whisper/large-v3-turbo (Transcriber)", "whisper/large-v3 (Transcriber)"]
     )
     for kind in ("openai", "custom", "ucloud-vllm"):
         expect(page.locator(f'#bulk-provider-kind option[value="{kind}"]')).to_have_count(0)
@@ -1920,7 +1940,7 @@ def test_browser_deferred_vllm_keeps_saved_results_and_frozen_jobs(page, local_a
     expect(page.locator(f'#file-provider option[value="{saved["id"]}"]')).to_have_count(0)
     page.locator("#settings-open").click()
     # Direct OpenAI is retired (V212); deferred vLLM never gets its own tab back.
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.locator("#ucloud-vllm-setup")).not_to_be_visible()
     page.get_by_role("tab", name="UCloud", exact=True).click()
     expect(page.locator("#ucloud-panel")).to_contain_text("Transcriber Batch")

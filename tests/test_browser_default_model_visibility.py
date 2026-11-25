@@ -22,7 +22,9 @@ def test_first_setup_defaults_and_preserves_existing_flags(page, local_app, monk
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.get_by_role("tab", name="OpenAI API", exact=True)).to_have_count(0)
-    expect(page.locator('[data-enabled-model="large-v3"]')).to_be_checked()
+    expect(page.locator('[data-enabled-model="large-v3"]')).not_to_be_checked()
+    expect(page.locator('[data-enabled-model="large-v3-turbo"]')).to_be_checked()
+    expect(page.locator('[data-enabled-model="nvidia/parakeet-tdt-0.6b-v3"]')).to_be_checked()
     expect(page.locator('[data-enabled-model="medium"]')).not_to_be_checked()
     runtime_offered = page.evaluate("featureOn('cbs_runtime')")
     if runtime_offered:
@@ -36,7 +38,8 @@ def test_first_setup_defaults_and_preserves_existing_flags(page, local_app, monk
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
     expect(page.locator('[data-enabled-model="medium"]')).to_be_checked()
-    expect(page.locator('[data-enabled-model="large-v3"]')).to_be_checked()
+    expect(page.locator('[data-enabled-model="large-v3"]')).not_to_be_checked()
+    expect(page.locator('[data-enabled-model="large-v3-turbo"]')).to_be_checked()
     if runtime_offered:
         expect(page.locator('[data-enabled-model="whisperx/edda-large"]')).not_to_be_checked()
         expect(page.locator('[data-enabled-model="whisperx/roest-v3"]')).not_to_be_checked()

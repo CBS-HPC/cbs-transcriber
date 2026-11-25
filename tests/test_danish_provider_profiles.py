@@ -26,7 +26,7 @@ def test_fixed_danish_profiles_are_offline_exact_runtime_choices(client, monkeyp
     )
     data = client.get("/api/providers/model-presets").json()
     assert data["ucloud_cbs_runtime"]["default"] == "whisperx/large-v3"
-    assert data["ucloud_transcriber"]["default"] == "large-v3"
+    assert data["ucloud_transcriber"]["default"] == "large-v3-turbo"
     assert data["openai"]["default"] == "gpt-transcribe"
     entries = {
         entry["model"]: entry

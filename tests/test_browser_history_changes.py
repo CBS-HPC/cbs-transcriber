@@ -62,7 +62,8 @@ def test_rows_name_changes_and_show_word_level_differences(page, local_app):
 def test_revert_an_older_merge_keeps_later_edits_and_hides_passage_buttons(page, local_app):
     store, rid, source = open_recording(page, local_app, "Synthetic revert merge")
     merge_first_two(page)
-    expect(page.locator('[data-action="undo-merge"]')).to_have_count(0)
+    # The per-passage control stays beside History (user, 20 November; amends ADR 0181).
+    expect(page.locator('[data-action="undo-merge"]')).to_have_count(1)
     edit_text(page, 2, "Third passage, edited later")  # DOM IDs follow passage IDs.
     open_history(page)
     merged = version_row(page, 2)
@@ -87,7 +88,7 @@ def test_revert_an_older_deletion_from_history(page, local_app):
     page.once("dialog", lambda dialog: dialog.accept())
     page.locator('#passage-1 [data-action="delete"]').click()
     expect(page.locator("#transcript .passage")).to_have_count(2)
-    expect(page.locator("#deleted-passages")).to_be_hidden()
+    expect(page.locator("#deleted-passages")).to_be_visible()
     edit_text(page, 0, "First passage, edited later")
     open_history(page)
     deleted = version_row(page, 2)

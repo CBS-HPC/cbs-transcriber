@@ -198,6 +198,6 @@ def test_speaker_rename_loads_current_hints_when_earlier_request_is_pending(page
     page.locator("#name-form").get_by_role("button", name="Save", exact=True).click()
     expect(page.locator("#transcript .speaker-badge")).to_have_text("New name")
     expect(page.locator("#show-uncertainty")).to_be_checked()
-    expect(page.locator("#transcript .review-flag")).to_have_count(1)
+    expect(page.locator("#transcript .passage.review")).to_have_count(1)
     page.evaluate("window.releaseOldHints()")
-    expect(page.locator("#transcript .review-flag")).to_have_count(1)
+    expect(page.locator("#transcript .passage.review")).to_have_count(1)

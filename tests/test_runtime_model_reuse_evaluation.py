@@ -34,6 +34,7 @@ def test_actual_worker_constructor_counts_and_exact_stage_bytes():
             "transcribing",
             "transcribing",
             "aligning",
+            "aligning",
             "speakers",
             "complete",
         ]

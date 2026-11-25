@@ -17,6 +17,7 @@ from .history import validate_reason, validate_revision
 from .passage_undo import (
     MAX_HISTORY_VERSIONS,
     MAX_SNAPSHOT_BYTES,
+    Canonical,
     _delete_proof,
     _ids,
     _merge_inverse,
@@ -205,7 +206,7 @@ def _context(db, identifier):
     return value if isinstance(value, dict) else {}
 
 
-def _structure_agrees(action, context, before, after):
+def _structure_agrees(action, context, before, after, canonical=None):
     """Merge/split/delete undo must agree with the existing proven inverses (ADR 0135/0147/0157)."""
     if action not in STRUCTURAL:
         return True
@@ -213,21 +214,21 @@ def _structure_agrees(action, context, before, after):
     try:
         ids = _ids(segments)
         if action == "passage_merge":
-            inverse = _merge_inverse(before, after, context, segments, ids)
+            inverse = _merge_inverse(before, after, context, segments, ids, canonical)
             if inverse is None:
                 return False
             retained, parts = inverse
             index = ids.index(retained)
             rebuilt = segments[:index] + parts + segments[index + 1 :]
         elif action == "passage_split":
-            inverse = _split_inverse(before, after, context, segments, ids)
+            inverse = _split_inverse(before, after, context, segments, ids, canonical)
             if inverse is None:
                 return False
             selected, parts, _ = inverse
             index = ids.index(selected)
             rebuilt = segments[:index] + parts + segments[index + 2 :]
         else:
-            proof = _delete_proof(before, after, context)
+            proof = _delete_proof(before, after, context, canonical)
             if proof is None:
                 return False
             _, passage, left, right = proof
@@ -237,11 +238,13 @@ def _structure_agrees(action, context, before, after):
             rebuilt = segments[:index] + [passage] + segments[index:]
     except (KeyError, TypeError, ValueError, IndexError, RecursionError):
         return False
-    return _same(rebuilt, before["segments"]) and _same(before["speakers"], after["speakers"])
+    same = _same if canonical is None else canonical.same
+    return same(rebuilt, before["segments"]) and _same(before["speakers"], after["speakers"])
 
 
-def _changes(before, after):
+def _changes(before, after, canonical=None):
     """Passage-level counts and the first affected passage's position, without text."""
+    same = _same if canonical is None else canonical.same
     old = {p.get("id"): p for p in before["segments"] if isinstance(p, dict)}
     new = {p.get("id"): p for p in after["segments"] if isinstance(p, dict)}
     changed = [
@@ -249,7 +252,7 @@ def _changes(before, after):
         for index, passage in enumerate(after["segments"])
         if not isinstance(passage, dict)
         or passage.get("id") not in old
-        or not _same(old[passage.get("id")], passage)
+        or not same(old[passage.get("id")], passage)
     ]
     removed = {identifier for identifier in old if identifier not in new}
     first = changed[0] if changed else None
@@ -267,9 +270,9 @@ def _changes(before, after):
     }
 
 
-def _describe(rows, version, before, after, *, segment_id=None):
+def _describe(rows, version, before, after, *, segment_id=None, canonical=None):
     action = effective_action(rows, version)
-    counts = _changes(before, after)
+    counts = _changes(before, after, canonical)
     return {
         "available": True,
         "version_id": version["id"],
@@ -286,16 +289,21 @@ def _unavailable(message):
     return {"available": False, "message": message}
 
 
-def options(store, db, recording_id, result_id, head, payload):
-    """Undo/Redo blocks for the merge-undo-options response, inside the caller's read."""
+def options(store, db, recording_id, result_id, head, payload, canonical=None):
+    """Undo/Redo blocks for the merge-undo-options response, inside the caller's read.
+
+    With the caller's registry of the head payload's exact passage texts (ADR 0193), each
+    comparison reads verified slices instead of encoding both transcripts passage by passage.
+    """
     rows, limited = _rows(db, result_id, head["sequence"])
     head_row = rows[head["id"]]
     try:
         version, previous = undo_step(rows, head_row, limited)
         row = _full(db, recording_id, result_id, previous["id"])
-        before = _read_payload(row["payload"], row["payload_sha256"])
+        step = Canonical(canonical)
+        before = step.read(row["payload"], row["payload_sha256"])
         segment = _context(db, version["id"]).get("segment_id")
-        undo = _describe(rows, version, payload, before, segment_id=segment)
+        undo = _describe(rows, version, payload, before, segment_id=segment, canonical=step)
     except ValueError as error:
         # Includes integrity refusals of the earlier version; passage undos stay available.
         undo = _unavailable(str(error)[:300])
@@ -306,9 +314,10 @@ def options(store, db, recording_id, result_id, head, payload):
         else:
             target, _ = found
             row = _full(db, recording_id, result_id, target["id"])
-            after = _read_payload(row["payload"], row["payload_sha256"])
+            step = Canonical(canonical)
+            after = step.read(row["payload"], row["payload_sha256"])
             segment = _context(db, target["id"]).get("segment_id")
-            redo = _describe(rows, target, payload, after, segment_id=segment)
+            redo = _describe(rows, target, payload, after, segment_id=segment, canonical=step)
     except ValueError as error:
         redo = _unavailable(str(error)[:300])
     return {"head_version_id": head["id"], "undo": undo, "redo": redo}
@@ -339,7 +348,10 @@ def undo(
     _validate_request(revision, head_version_id, version_id, reason)
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        current, head, payload = _read_current(store, db, recording_id, result_id, revision)
+        canonical = Canonical()
+        current, head, payload = _read_current(
+            store, db, recording_id, result_id, revision, canonical=canonical
+        )
         if head["id"] != head_version_id:
             raise ValueError(STALE)
         rows, limited = _rows(db, result_id, head["sequence"])
@@ -349,11 +361,11 @@ def undo(
         if version["payload_sha256"] != head["payload_sha256"]:
             raise ValueError("The saved versions disagree. Preserve the library.")
         before_row = _full(db, recording_id, result_id, previous["id"])
-        before = _read_payload(before_row["payload"], before_row["payload_sha256"])
+        before = canonical.read(before_row["payload"], before_row["payload_sha256"])
         action = effective_action(rows, version)
         context = _context(db, version["id"])
         if version["action"] in STRUCTURAL and not _structure_agrees(
-            version["action"], context, before, payload
+            version["action"], context, before, payload, canonical
         ):
             raise ValueError(
                 f"This {action.removeprefix('passage_')} cannot be undone safely because its "
@@ -421,7 +433,4 @@ def redo(
 
 
 def _saved(store, recording_id):
-    recording = store.recording(recording_id)
-    store.snapshot_project(recording["project_id"])
-    recording["snapshot_error"] = store.snapshot_errors.get(recording["project_id"])
-    return recording
+    return store.saved_recording(recording_id)

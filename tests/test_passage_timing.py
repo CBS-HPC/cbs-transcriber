@@ -260,6 +260,143 @@ def test_untimed_passages_are_searched_only_between_their_timed_neighbours(clien
     assert retried.status_code < 300, retried.text
 
 
+CRAMMED = "Det her er en lang sætning som ingen kan sige på et enkelt sekund."
+
+
+@pytest.fixture
+def crammed(client, monkeypatch):
+    """B470: a transcriber left whole sentences on 1 s intervals; their words cannot fit."""
+    monkeypatch.setattr(enhancement, "check_runtime", lambda *a, **kw: {"ready": True})
+    store = client.app.state.store
+    project = store.create_project("Crammed")
+    recording = store.create_recording(project["id"], "a.wav")
+    rid = recording["id"]
+    store.execute("UPDATE recordings SET status='ready',duration=30 WHERE id=?", (rid,))
+    rows = [
+        {"text": "Hej.", "start": 0, "end": 1, "words": [{"word": "Hej.", "start": 0, "end": 1}]},
+        {"text": CRAMMED, "start": 1, "end": 2},
+        {"text": "God morgen.", "start": 2, "end": 5},
+        {"text": CRAMMED, "start": 5, "end": 6},
+    ]
+    segments = [normalize_segments([row])[0] | {"id": str(i)} for i, row in enumerate(rows)]
+    result = store.add_result(rid, segments, {}, "Word model", {"capability": "words"})
+    return client, store, rid, result
+
+
+def test_alignable_counts_aligner_frames_against_characters():
+    # 1.0 s gives the pinned 20 ms aligners 49 frames: 49 characters fit, 50 never can.
+    assert enhancement.aligner_frames(1.0) == 49
+    assert enhancement.alignment_characters("  a  b\tc ") == 5
+    assert enhancement.alignable("x" * 49, 10, 11)
+    assert not enhancement.alignable("x" * 50, 10, 11)
+    assert not enhancement.alignable(CRAMMED, 1, 2)
+    assert enhancement.alignable(CRAMMED, 1, 3)
+    assert enhancement.aligner_frames(0.001) == 1
+
+
+def test_windows_too_short_for_their_text_are_refused_not_aligned(crammed, monkeypatch):
+    client, store, rid, result = crammed
+    single = request(client, rid, result, ["1"])
+    assert single.status_code == 400
+    assert "too short for its 66 characters" in single.text and "1.00 s" in single.text
+    # Repair all sends only what can be aligned; the crammed passages stay unchanged.
+    bulk = request(client, rid, result, ["1", "2", "3"])
+    assert bulk.status_code == 202, bulk.text
+    job = store.job(bulk.json()["id"])
+    assert job["params"]["timing_units"] == [{"ids": ["2"], "start": 2, "end": 5}]
+    assert job["params"]["segment_id"] == "2"
+    only_short = request(client, rid, result, ["1", "3"])
+    assert only_short.status_code == 400
+    assert "None of these passages can be timed: the audio each one" in only_short.text
+    assert "whole result" not in only_short.text
+
+
+def test_frozen_units_too_short_for_their_text_finish_without_a_worker(crammed, monkeypatch):
+    """Jobs frozen before ADR 0189 (or retried) skip such units and say why, truthfully."""
+    client, store, rid, result = crammed
+    with monkeypatch.context() as earlier:
+        earlier.setattr(enhancement, "alignable", lambda *a: True)
+        response = request(client, rid, result, ["1", "2", "3"])
+    assert response.status_code == 202, response.text
+    job = store.job(response.json()["id"])
+    assert [unit["ids"] for unit in job["params"]["timing_units"]] == [["1"], ["2"], ["3"]]
+    seen = []
+    process(client, store, job["id"], monkeypatch, seen)
+    assert seen == ["2"]  # No model load or 1 s alignment for the crammed passages.
+    finished = store.job(job["id"])
+    assert finished["message"] == (
+        "Complete word timing for 1 of 3 passages. 2 of 3 passages were not aligned: the audio "
+        "they can be searched in is too short for their text (about 20 ms per character)."
+    )
+    assert set(finished["params"]["realign_output"]["passages"]) == {"2"}
+    saved = client.post(
+        f"/api/recordings/{rid}/realign/{job['id']}",
+        json={"revision": store.recording(rid)["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    current = store.recording(rid)["segments"]
+    assert current[2]["word_timing"] is True
+    assert [current[i]["words"] for i in (1, 3)] == [[], []]  # Crammed passages unchanged.
+    # Only crammed passages: the job finishes, with nothing to add and the reason named.
+    with monkeypatch.context() as earlier:
+        earlier.setattr(enhancement, "alignable", lambda *a: True)
+        response = request(client, rid, result, ["1", "3"])
+    assert response.status_code == 202, response.text
+    seen.clear()
+    process(client, store, response.json()["id"], monkeypatch, seen)
+    assert seen == []
+    finished = store.job(response.json()["id"])
+    assert finished["message"].startswith("Word timing cannot be found in these passages")
+    assert finished["params"]["realign_output"] == {"passages": {}}
+    listed = next(j for j in client.get("/api/jobs").json() if j["id"] == finished["id"])
+    assert not listed["realign_ready"]
+    assert listed["realign_outcome"]["output_count"] == 0
+    # A finished empty capture keeps its proof but does not reserve the target IDs.
+    with monkeypatch.context() as eligible:
+        eligible.setattr(enhancement, "alignable", lambda *a: True)
+        again = request(client, rid, result, ["1", "3"])
+    assert again.status_code == 202, again.text
+
+
+def test_unit_where_alignment_finds_nothing_leaves_passages_and_continues(untimed, monkeypatch):
+    """A unit whose words all come back untimed (as WhisperX reports a failed backtrack) is
+    left unchanged; later units still run and the job completes."""
+    client, store, rid, result = untimed
+    response = request(client, rid, result, ["1", "2"])
+    assert response.status_code == 202, response.text
+    job_id = response.json()["id"]
+
+    def convert(args, cancel):
+        synthetic_wav(args)
+
+    seen = []
+
+    def align(folder, options, token, cancel, progress, **kw):
+        [passage] = json.loads((folder / "request.json").read_text(encoding="utf-8"))["passages"]
+        seen.append(passage["id"])
+        found = passage["id"] == "2"
+        words = [
+            {"word": w, "start": i * 0.5, "end": i * 0.5 + 0.4, "score": 0.9}
+            if found
+            else {"word": w, "start": None, "end": None, "score": None}
+            for i, w in enumerate(passage["text"].split())
+        ]
+        enhancement.write_json(
+            folder / "alignment.json", {"passages": [{"id": passage["id"], "words": words}]}
+        )
+
+    monkeypatch.setattr(media, "ffmpeg", convert)
+    monkeypatch.setattr(enhancement, "run_worker", align)
+    queue = client.app.state.queue
+    queue.cancel_event = threading.Event()
+    store.update_job(job_id, state="running")
+    queue.process(job_id)
+    assert seen == ["1", "2"]
+    finished = store.job(job_id)
+    assert finished["message"] == "Complete word timing for 1 of 2 passages."
+    assert set(finished["params"]["realign_output"]["passages"]) == {"2"}
+
+
 def test_stale_revisions_and_other_results_are_refused(untimed):
     client, store, rid, result = untimed
     stale = request(client, rid, result, ["1"], revision=store.recording(rid)["revision"] + 1)

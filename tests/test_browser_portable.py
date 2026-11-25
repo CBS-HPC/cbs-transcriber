@@ -211,10 +211,10 @@ def test_create_complete_backup_from_library_dialog(page, local_app, tmp_path):
     # Earlier database-only inventories are hidden when none exist.
     expect(page.locator("#legacy-backups")).to_be_hidden()
     page.screenshot(path="test-results/portable-backup.png")
-    # Only the refused capture and unconfigured UCloud-location lookup are logged;
-    # no script error occurs.
+    # Only the refused backup admission (409, ADR 0192) and unconfigured UCloud-location
+    # lookup are logged; no script error occurs.
     assert errors == [
-        "console: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+        "console: Failed to load resource: the server responded with a status of 409 (Conflict)",
         "console: Failed to load resource: the server responded with a status of 400 (Bad Request)",
     ]
 

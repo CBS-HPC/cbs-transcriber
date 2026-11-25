@@ -33,6 +33,8 @@ EDIT_ACTIONS = {
     # Undo last change / Redo (ADR 0180): server-recorded exact predecessor restorations.
     "change_undo",
     "change_redo",
+    "passage_change_undo",
+    "passage_change_redo",
 }
 EDIT_CONTEXT = {
     "segment_id",
@@ -174,10 +176,17 @@ def serialized_payload_matches(segments, speakers, payload, digest):
     return payload == expected_payload and digest == expected_digest
 
 
-def verify_payload(payload, digest):
-    """Validate unchanged historical bytes without decoding them repeatedly."""
+def verify_payload(payload, digest, *, encoded=None):
+    """Validate unchanged historical bytes without decoding them repeatedly.
+
+    A caller that already encoded these exact characters (for its size bound) may pass the
+    UTF-8 bytes, so they are hashed without encoding them a second time.
+    """
     try:
-        if not isinstance(payload, str) or text_hash(payload) != digest:
+        if not isinstance(payload, str):
+            raise ValueError
+        actual = hashlib.sha256(encoded).hexdigest() if encoded is not None else text_hash(payload)
+        if actual != digest:
             raise ValueError
     except (TypeError, ValueError) as exc:
         raise ValueError("The saved research version failed its integrity check.") from exc
@@ -187,6 +196,52 @@ def verify_payload(payload, digest):
             return
     decode_payload(payload, digest)
     _remember_verified_payload(digest)
+
+
+_PASSAGES_PREFIX = '{"format":"' + FORMAT + '","segments":['
+_SPEAKERS_KEY = ',"speakers":'
+_DECODER = json.JSONDecoder()
+
+
+def verified_passage_texts(payload, digest):
+    """Verify a payload, then decode fresh objects with each passage's exact canonical text.
+
+    A verified payload is the canonical encoding of its own decoded content (ADR 0193). Its
+    passage array therefore holds each passage's canonical JSON verbatim between separators,
+    and decoding those slices gives exactly the objects json.loads would. Comparing slices is
+    the same as encoding the decoded passages again. Returns (decoded, texts); texts is None
+    only if the verified bytes do not have that layout, and callers then encode as before.
+    """
+    verify_payload(payload, digest)
+    try:
+        return _split_passages(payload)
+    except (ValueError, IndexError, RecursionError):
+        return json.loads(payload), None
+
+
+def _split_passages(payload):
+    if not payload.startswith(_PASSAGES_PREFIX):
+        raise ValueError("Unexpected payload layout.")
+    index = len(_PASSAGES_PREFIX)
+    segments, texts = [], []
+    if payload.startswith("]", index):
+        index += 1
+    else:
+        while True:
+            value, end = _DECODER.raw_decode(payload, index)
+            segments.append(value)
+            texts.append(payload[index:end])
+            index = end + 1
+            if payload.startswith("]", end):
+                break
+            if not payload.startswith(",", end):
+                raise ValueError("Unexpected payload layout.")
+    if not payload.startswith(_SPEAKERS_KEY, index):
+        raise ValueError("Unexpected payload layout.")
+    speakers, end = _DECODER.raw_decode(payload, index + len(_SPEAKERS_KEY))
+    if end != len(payload) - 1 or not payload.endswith("}"):
+        raise ValueError("Unexpected payload layout.")
+    return {"format": FORMAT, "segments": segments, "speakers": speakers}, texts
 
 
 def validate_reason(reason):

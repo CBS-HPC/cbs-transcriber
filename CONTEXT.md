@@ -14,7 +14,9 @@
 | Runtime cohort | At most eight accepted tasks processed by one child in stage passes, retaining one pinned engine object at a time; late tasks form a new cohort (ADR 0094). |
 | Transcript | The text of a recording, organised into passages and optionally timed words. |
 | Spelling dictionary | Verified public Hunspell files cached on this computer; separate from transcript text and private vocabulary (ADR 0185). |
-| Private spelling vocabulary | Personal words for this library and words scoped to a project, with independent revisions; retained in library backups, excluded from transcript exports and research reports. |
+| Private spelling vocabulary | Personal words for this library and words scoped to a project or a recording, with independent revisions; retained in library backups, excluded from transcript exports and research reports. |
+| Recording vocabulary | A recording's own accepted spelling words; it inherits, and cannot remove, its project's words (ADR 0186). |
+| Dictionary download | A server-lifetime Activity task that retrieves one pinned public spelling dictionary; never transcript text (ADR 0187). |
 | Result Trash | Recoverable removal of a saved model/enhancement result from live choices and exports; retained research history and files are not erased. |
 | Provider family | OpenAI, Custom, UCloud vLLM or UCloud Transcriber; the first selector narrows real saved model configurations. |
 | Native model expansion | Additive catalog profiles for one complete server/project connection, sharing the endpoint credential and preserving existing rows. |
@@ -31,6 +33,9 @@
 | Remote cleanup | Moving an app-owned run's input/output tree to UCloud Trash after local preservation or exact deletion consent, confirmed by listing its parent; the user empties Trash; independent retry. |
 | Deletion release | A confirmed decision for exact batch-owned folders, kept independently of removed project/job rows so failed cleanup stays actionable; never a new transcription or Trash purge. |
 | Local deletion stage | An exact managed path renamed into a same-volume marked wrapper before logical SQLite deletion; recovery restores live targets or cleans already committed targets, without replaying Delete. |
+| Project deletion task | The server-owned Activity task that stops a confirmed project's captured jobs, removes it from the library and removes its files; the Delete dialog only hands off (ADR 0190). |
+| Point of no return | The SQLite commit that removes a project's rows. Keep project, a failure or closing the app before it keeps the project; nothing after it recreates rows. |
+| Inactive project | A project whose deletion task is running: greyed "Deleting…", not openable, refusing edits and new work while other projects stay usable. |
 | Native batch | One UCloud allocation shared by selected recordings with identical native settings; each recording keeps its own job and result. |
 | Early native selection | Two or more selected native files whose batch exists from the first admitted file; each file uploads once its own inspection passes (ADR 0183). |
 | Dropped file | A file of an early native selection whose inspection or preparation failed; it keeps its own outcome and never joins the allocation. |
@@ -62,6 +67,8 @@
 | Source alignment-fit invalidation | A passage marker suppressing old creation-time alignment word scores after applied timing replacement/adoption, including omitted words; recognition confidence and raw source evidence remain. |
 | Passage / segment | A stretch of transcript with optional start/end times and a speaker label. |
 | Manual passage review | User progress (Not checked, Checked or Needs review) bound to exact saved passage content, independent of uncertainty hints and Working versions. |
+| Suggested review display | Uncertain or Timing missing shown in the native dropdown, derived without storing a review row; an exact-content researcher mark wins (ADR0191/V257). |
+| Automatic Needs review | A system-derived Needs review ("word timing missing" or "timing added") computed when review progress is read, never stored; a researcher's mark on the exact current content replaces it (ADR 0191). |
 | Change (undo step) | A saved version whose content differs from its predecessor, made by the researcher or applied at their request; no-change saves, Trash/Restore markers, review marks, Working choices and notes are not changes (ADR 0180). |
 | Undo last change / Redo | Appending the exact predecessor of the newest change (Undo) or the exact version the newest Undo removed (Redo) as a new version; history is never rewritten. |
 | What changed | A read-only, bounded word-level comparison of a saved version with its predecessor or another version of the same recording (ADR 0181). |
@@ -80,6 +87,7 @@
 | Speaker assignment | Choosing a voice label for one passage, distinct from renaming that label throughout a result. |
 | Batch workflow | Selected project recordings transcribed immediately and optionally enhanced with one frozen processing setup; ordinary API requests, no OpenAI Batch API. |
 | Export Settings | Shared result/project download dialog; project ZIP reports exported and skipped results. |
+| Backup task | A server-owned Activity item making one complete local backup (ADR 0192); Stop works until it is being saved, and its outcome is verified, stopped, failed or needs checking. |
 | Prepared export | A temporary ZIP built independently of its dialog and downloaded through Activity; frozen selected content, not a backup or restart-durable processing job. |
 | Parallel local tasks | Per-step limit on how many files this computer prepares, inspects, admits or sends to a provider API at once; it gates new claims only and never stops running work (ADR 0146). |
 | Local inference runtime | App Python environment with standard WhisperX/CPU PyTorch dependencies; an alternate CUDA environment is an advanced option. Models are cached or downloaded explicitly. |

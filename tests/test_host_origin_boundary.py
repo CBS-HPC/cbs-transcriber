@@ -11,12 +11,14 @@ from cbs_transcriber.app import create_app, create_chooser_app
     [
         "app.js",
         "background_exports.js",
+        "project_deletions.js",
         "deleted_passages.js",
         "manual_review.js",
         "change_steps.js",
         "history_changes.js",
         "history_graph.js",
         "spelling.js",
+        "word_times.js",
     ],
 )
 def test_unversioned_editor_modules_are_fresh_after_app_restart(tmp_path, credentials, filename):

@@ -33,6 +33,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import (
     audio_inputs,
+    backup_tasks,
     deletions,
     enhancement_api,
     enhancement_cloud,
@@ -44,6 +45,7 @@ from . import (
     local_concurrency,
     original_inspection,
     portable_routes,
+    project_deletion_tasks,
     provider_connection,
     release_profile,
     remote_jobs,
@@ -145,6 +147,7 @@ from .transcripts import (
     split_passage,
     split_passage_manual,
 )
+from .word_times import edit_text_and_word_times
 
 
 class Name(BaseModel):
@@ -478,6 +481,23 @@ class FreeEditV2(BaseModel):
     text: str = Field(strict=True, max_length=200_000)
     reason: str | None = Field(default=None, strict=True, max_length=2000)
     working_choice: WorkingChoice | None = None
+
+
+class TypedWordTime(BaseModel):
+    """One word time typed in the passage editor, named by its exact range (ADR 0195)."""
+
+    model_config = ConfigDict(extra="forbid")
+    char_start: int = Field(strict=True, ge=0, le=200_000)
+    char_end: int = Field(strict=True, ge=1, le=200_000)
+    word: str = Field(strict=True, min_length=1, max_length=200_000)
+    start: float = Field(strict=True, ge=0, allow_inf_nan=False)
+    end: float = Field(strict=True, ge=0, allow_inf_nan=False)
+
+
+class FreeEditV4(FreeEditV2):
+    """Save passage with its text and typed word times as one version (ADR 0195)."""
+
+    word_times: list[TypedWordTime] = Field(min_length=1, max_length=1000)
 
 
 class SpeakerEdit(BaseModel):
@@ -819,6 +839,11 @@ class RuntimeBatchSettings(BaseModel):
     max_allocations: int = Field(strict=True, ge=1, le=4)
 
 
+class UCloudCleanup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    discard_fingerprint: str | None = Field(default=None, strict=True, pattern=r"^[a-f0-9]{64}$")
+
+
 class RuntimeDiscard(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fingerprint: str = Field(strict=True, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
@@ -877,11 +902,19 @@ def create_app(
     connection_checks = provider_connection.Checks()
     queue = JobQueue(store, credentials)
     deletion_requests = deletions.Deletions(store, queue, acquire_file_lease=not start_worker)
+    # Server-owned project deletion in Activity (ADR 0190); no worker starts until a Delete.
+    project_tasks = project_deletion_tasks.ProjectDeletionTasks(store, queue, deletion_requests)
     export_manager = ExportTasks(store, acquire_file_lease=not start_worker)
     from .spelling import SpellingService, default_cache_dir
+    from .spelling_tasks import DictionaryTasks
 
-    # Constructing the service creates no storage and starts no worker (ADR 0185).
+    # Constructing the service creates no storage and starts no worker (ADR 0185). Automatic
+    # dictionary downloads run only after a later save or editor use, never at startup, and
+    # never while the release profile hides spelling (ADR 0187).
     spelling_service = SpellingService(store, spelling_cache_dir or default_cache_dir())
+    spelling_downloads = DictionaryTasks(
+        spelling_service, enabled=release.enabled("spelling"), start_worker=start_worker
+    )
 
     def hf_cloud_plan():
         if not release.enabled("cbs_runtime"):
@@ -912,6 +945,28 @@ def create_app(
         # Short admission inhibitors are acquired before queue/snapshot ownership; their
         # worker drains never run while those locks are held.
         with hf_manager.exclusive(), export_manager.exclusive():
+            yield
+
+    @contextmanager
+    def backup_capture_guard():
+        # A deletion can be stopping jobs before a file journal/queue worker exists.
+        # Reserve both admissions atomically; keep its own staging path independent.
+        with project_tasks.capture_exclusive(), background_exclusive():
+            yield
+
+    # Server-owned local backups in Activity (ADR 0192). The task enters this same guard
+    # at admission, before its 202 reply, and holds it until its capture exits.
+    backup_manager = backup_tasks.BackupTasks(
+        store, queue, backup_capture_guard, acquire_file_lease=not start_worker
+    )
+
+    @contextmanager
+    def direct_capture_guard():
+        # The earlier synchronous route stays for existing clients, but never runs beside
+        # a background backup; both still serialize through the capture gate.
+        if backup_manager.active():
+            raise HTTPException(409, backup_tasks.BUSY)
+        with backup_capture_guard():
             yield
 
     processing_started = False
@@ -950,6 +1005,10 @@ def create_app(
                     else nullcontext()
                 ):
                     deletion_requests.recover_files()
+                    # After file journals: earlier receipts become notes, never a resumed Delete.
+                    project_tasks.recover()
+                    # Earlier backup notes become outcomes; nothing is recaptured (ADR 0192).
+                    backup_manager.recover()
                     initialize_processing()
                 yield
             except BaseException as primary:
@@ -958,11 +1017,31 @@ def create_app(
             finally:
                 cleanup_error = None
                 try:
-                    hf_manager.close()
+                    # First, while staging inhibitors still work: keep every project not yet
+                    # past its point of no return and drain the executor under the lease.
+                    project_tasks.close()
                 except BaseException as cleanup:
                     cleanup_error = cleanup
                 try:
+                    # Stop a backup not yet being saved and drain it under the lease; it
+                    # releases its capture, deletion and export/HF admission on exit.
+                    backup_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
+                try:
+                    hf_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
+                try:
                     export_manager.close()
+                except BaseException as cleanup:
+                    if cleanup_error is None:
+                        cleanup_error = cleanup
+                try:
+                    # Stop and drain a running download before the service closes its cache.
+                    spelling_downloads.close()
                 except BaseException as cleanup:
                     if cleanup_error is None:
                         cleanup_error = cleanup
@@ -994,9 +1073,12 @@ def create_app(
     passage_review_routes.install(app, store)
     passage_restore_routes.install(app, store)
     change_undo_routes.install(app, store)
-    spelling_routes.install(app, spelling_service, release)
+    spelling_routes.install(app, spelling_service, release, spelling_downloads)
     app.state.spelling = spelling_service
+    app.state.spelling_downloads = spelling_downloads
     app.state.deletions = deletion_requests
+    app.state.project_deletions = project_tasks
+    app.state.backup_tasks = backup_manager
     app.state.export_tasks = export_manager
     app.state.huggingface_tasks = hf_manager
     app.state.profile = release
@@ -1010,7 +1092,15 @@ def create_app(
         retry = request.url.path.startswith("/api/local-deletions/") and request.url.path.endswith(
             "/retry"
         )
-        return not deletion_requests.file_recovery_blocked or retry
+        # Keep project only signals its task, which owns rollback during staging (ADR 0190).
+        keep = project_deletion_tasks.keep_path(request.url.path)
+        # Stop backup only signals its own task (ADR 0192).
+        stop = backup_tasks.stop_path(request.url.path)
+        return not deletion_requests.file_recovery_blocked or retry or keep or stop
+
+    def capture_exempt(path):
+        # Exact signals and backup task controls touch no captured library state.
+        return project_deletion_tasks.keep_path(path) or backup_tasks.control_path(path)
 
     portable_routes.install(
         app,
@@ -1018,8 +1108,11 @@ def create_app(
         queue,
         credentials,
         mutation_allowed=local_mutation_allowed,
-        capture_guard=background_exclusive,
+        capture_guard=direct_capture_guard,
+        mutation_exempt=capture_exempt,
     )
+    backup_manager.attach(app.state.portable_capture_gate)
+    backup_tasks.install(app, backup_manager)
 
     @contextmanager
     def export_safe_staging():
@@ -1027,6 +1120,8 @@ def create_app(
             yield
 
     deletion_requests.staging = export_safe_staging
+    # Outside the capture gate: a fenced project's write is refused without waiting for it.
+    project_deletion_tasks.install(app, project_tasks)
 
     @app.middleware("http")
     async def local_file_recovery_admission(request, call_next):
@@ -1066,6 +1161,7 @@ def create_app(
 
     def require_runtime_idle(*, project_id=None, recording_ids=None):
         deletion_requests.require_files_idle()
+        project_tasks.require_idle(project_id=project_id)
         export_manager.require_idle(project_id=project_id, recording_ids=recording_ids)
         hf_manager.require_idle()
         try:
@@ -1160,33 +1256,43 @@ def create_app(
                 **row,
                 "storage_path": str(Path(row["storage_dir"]) if row["storage_dir"] else store.root),
                 "snapshot_error": store.snapshot_errors.get(row["id"]),
+                # Inactive while its Activity deletion runs: not openable or editable.
+                "deleting": project_tasks.deleting(row["id"]),
             }
             for row in rows
         ]
 
     @app.post("/api/projects", status_code=201)
     def create_project(body: ProjectCreate):
-        return store.create_project(
+        created = store.create_project(
             clean_name(body.name), body.classification, body.storage_parent, body.default_language
         )
+        if body.default_language is not None:
+            spelling_downloads.automatic()
+        return created
 
     @app.put("/api/projects/{identifier}/language")
     def project_language(identifier: str, body: LanguagePreference):
         try:
-            return language_preferences.save(
+            saved = language_preferences.save(
                 store, "project", identifier, body.language, body.revision
             )
         except language_preferences.Conflict as error:
             raise HTTPException(409, str(error)) from None
+        # A newly chosen language may need its public spelling dictionary (ADR 0187).
+        spelling_downloads.automatic()
+        return saved
 
     @app.put("/api/projects/{identifier}/recording-languages")
     def recording_languages(identifier: str, body: BulkRecordingLanguage):
         try:
-            return language_preferences.save_recordings(
+            saved = language_preferences.save_recordings(
                 store, identifier, body.language, [row.model_dump() for row in body.recordings]
             )
         except language_preferences.Conflict as error:
             raise HTTPException(409, str(error)) from None
+        spelling_downloads.automatic()
+        return saved
 
     @app.get("/api/storage")
     def storage():
@@ -1389,9 +1495,8 @@ def create_app(
 
     @app.get("/api/projects/{identifier}/recordings")
     def recordings(identifier: str):
-        store.one("SELECT id FROM projects WHERE id=?", (identifier,))
         # Canonical writer prefixes are cheap advisory candidates; export verifies full bytes.
-        rows = store.all(
+        query = (
             "SELECT id,project_id,name,filename,kind,status,duration,revision,created, "
             "notes,notes_revision,collection_id,language_override,language_revision, "
             "provider_id,active_transcript_id,(segments!='[]') AS has_transcript, "
@@ -1412,14 +1517,24 @@ def create_app(
             "AND t.id NOT IN (SELECT result_id FROM result_trash) "
             'AND v.payload LIKE \'{"format":"cbs-result-snapshot-v1","segments":[{%\') '
             "AS export_working FROM recordings "
-            "WHERE project_id=? ORDER BY created",
-            (identifier,),
+            "WHERE project_id=? ORDER BY created"
         )
-        for row in rows:
-            row["export_eligible"] = {
-                mode: bool(row.pop("export_" + mode)) for mode in ("working", "active", "all")
-            }
-            row["source_readiness"] = input_admission.source_readiness(store, row["id"])
+        with store.connection() as snapshot:
+            snapshot.execute("PRAGMA query_only=ON")
+            snapshot.execute("BEGIN")
+            if (
+                snapshot.execute("SELECT id FROM projects WHERE id=?", (identifier,)).fetchone()
+                is None
+            ):
+                raise KeyError(identifier)
+            rows = [dict(row) for row in snapshot.execute(query, (identifier,))]
+            for row in rows:
+                row["export_eligible"] = {
+                    mode: bool(row.pop("export_" + mode)) for mode in ("working", "active", "all")
+                }
+                row["source_readiness"] = input_admission.source_readiness(
+                    store, row["id"], connection=snapshot
+                )
         return rows
 
     @app.post("/api/recordings", status_code=201)
@@ -1467,6 +1582,7 @@ def create_app(
 
     def copy_recording(project_id, file, collection_id=None, upload_batch=None):
         store.one("SELECT id FROM projects WHERE id=?", (project_id,))
+        project_tasks.require_active(project_id)
         if collection_id is not None:
             # Checked before any bytes are copied.
             store.one(
@@ -1531,11 +1647,13 @@ def create_app(
     @app.put("/api/recordings/{identifier}/language")
     def recording_language(identifier: str, body: LanguagePreference):
         try:
-            return language_preferences.save(
+            saved = language_preferences.save(
                 store, "recording", identifier, body.language, body.revision
             )
         except language_preferences.Conflict as error:
             raise HTTPException(409, str(error)) from None
+        spelling_downloads.automatic()
+        return saved
 
     @app.patch("/api/recordings/{identifier}/notes")
     def recording_notes(identifier: str, body: NotesEdit):
@@ -1994,8 +2112,20 @@ def create_app(
             identifier, segment_id, body, text_policy=MANUAL_TEXT_TIMING_POLICY
         )
 
+    @app.patch("/api/recordings/{identifier}/segments/{segment_id}/edit-v4")
+    def update_segment_v4(identifier: str, segment_id: str, body: FreeEditV4):
+        return save_segment_edit(
+            identifier, segment_id, body, text_policy=MANUAL_TEXT_TIMING_POLICY, word_times=True
+        )
+
     def save_segment_edit(
-        identifier: str, segment_id: str, body: Edit | FreeEditV2, *, realign=None, text_policy=None
+        identifier: str,
+        segment_id: str,
+        body: Edit | FreeEditV2,
+        *,
+        realign=None,
+        text_policy=None,
+        word_times=False,
     ):
         current = store.recording(identifier)
         if (text_policy or body.mode in {"timed_word", "mapped_word"}) and sum(
@@ -2006,7 +2136,20 @@ def create_app(
         for index, segment in enumerate(current["segments"]):
             if segment["id"] == segment_id:
                 timing_warning = None
-                if text_policy:
+                action, context = None, None
+                if word_times:
+                    updated, timing_warning, text_changed, timed = edit_text_and_word_times(
+                        segment, body.text, [item.model_dump() for item in body.word_times]
+                    )
+                    if not text_changed and not timed:
+                        raise ValueError("There are no changes to save.")
+                    if not text_changed:
+                        # Times only: recorded exactly as a single-word timing edit is.
+                        action = "word_timing_edit"
+                        context = {"segment_id": segment_id, "mode": "timed_word"}
+                        if len(timed) == 1:
+                            context["word_index"] = timed[0]
+                elif text_policy:
                     edit = (
                         edit_manual_text_retaining_timing
                         if text_policy == MANUAL_TEXT_TIMING_POLICY
@@ -2027,14 +2170,16 @@ def create_app(
                     current["segments"],
                     current["speakers"],
                     body.revision,
-                    action={
+                    action=action
+                    or {
                         "word": "word_correction",
                         "mapped_word": "word_correction",
                         "timed_word": "word_timing_edit",
                         "free": "free_rewrite",
                         "restore": "original_restore",
                     }[body.mode],
-                    context={
+                    context=context
+                    or {
                         "segment_id": segment_id,
                         "mode": body.mode,
                         **({"text_policy": text_policy} if text_policy else {}),
@@ -2262,7 +2407,10 @@ def create_app(
                 )
             ):
                 params = json.loads(row["params"])
-                ready = params.get("realign_output") and not params.get("realign_applied")
+                output = params.get("realign_output")
+                if isinstance(output, dict) and "passages" in output:
+                    output = output["passages"]
+                ready = output and not params.get("realign_applied")
                 partial = (
                     row["state"] in {"failed", "cancelled"}
                     and params.get("repair_cloud", {}).get("protocol") == repair_cloud.PROTOCOL
@@ -2304,6 +2452,8 @@ def create_app(
                         recording["duration"],
                         # Repair all leaves out what cannot be timed alone; one tag explains.
                         skip_invalid=len(wanted) > 1,
+                        # No 1 s alignment for text that cannot fit its window (ADR 0189).
+                        alignable_only=True,
                     )
                     if not set(unit["ids"]) & pending
                 ]
@@ -3042,6 +3192,7 @@ def create_app(
         plans = []
         for identifier in recording_ids:
             recording = store.recording(identifier)
+            project_tasks.require_active(recording["project_id"])
             language_guard = language_preferences.guard(store, recording)
             preference = language_preferences.selected(language_guard)
             route = input_admission.snapshot_routing(
@@ -3554,7 +3705,30 @@ def create_app(
             "json_extract(j.params,'$.routing.reason') AS routing_reason, "
             "COALESCE(json_extract(j.params,'$.realign'),0) AS realign, "
             "(json_extract(j.params,'$.realign_output') IS NOT NULL AND "
-            "json_extract(j.params,'$.realign_applied') IS NULL) AS realign_ready, "
+            "json_extract(j.params,'$.realign_applied') IS NULL AND "
+            "(json_type(j.params,'$.realign_output.passages') IS NULL OR "
+            "EXISTS(SELECT 1 FROM json_each(j.params,'$.realign_output.passages') "
+            "WHERE json_type(j.params,'$.realign_output.passages')='object'))) AS realign_ready, "
+            # ADR 0191: finished word timing keeps its outcome in Activity.
+            "CASE WHEN json_extract(j.params,'$.realign')=1 THEN json_object("
+            "'applied',json_extract(j.params,'$.realign_applied'),"
+            "'applied_count',COALESCE("
+            "json_array_length(j.params,'$.realign_apply_receipt.applied_ids'),"
+            "json_array_length(j.params,'$.realign_receipt.applied_ids')),"
+            "'skipped_count',COALESCE("
+            "json_array_length(j.params,'$.realign_apply_receipt.skipped_ids'),"
+            "json_array_length(j.params,'$.realign_receipt.skipped_ids')),"
+            "'output_count',CASE "
+            "WHEN json_type(j.params,'$.realign_output.passages')='object' THEN "
+            "(SELECT count(*) FROM json_each(j.params,'$.realign_output.passages')) "
+            "WHEN json_type(j.params,'$.realign_output')='object' THEN 1 END,"
+            "'complete_count',CASE "
+            "WHEN json_type(j.params,'$.realign_output.passages')='object' THEN "
+            "(SELECT count(*) FROM json_each(j.params,'$.realign_output.passages') "
+            "WHERE json_type(value,'$.word_timing')='true') "
+            "WHEN json_type(j.params,'$.realign_output')='object' THEN "
+            "json_type(j.params,'$.realign_output.word_timing')='true' END) "
+            "END AS realign_outcome, "
             "json_extract(j.params,'$.enhancement.execution') AS execution, "
             "CASE WHEN j.kind='enhance' AND "
             "json_extract(j.params,'$.source_snapshot.source_version_id') IS NOT NULL THEN "
@@ -3802,6 +3976,9 @@ def create_app(
             row["segment_ids"] = json.loads(row["segment_ids"]) if row["segment_ids"] else None
             row["source_changed"] = bool(row["source_changed"])
             row["realign"], row["realign_ready"] = bool(row["realign"]), bool(row["realign_ready"])
+            from .local_timing import activity_outcome
+
+            row["realign_outcome"] = activity_outcome(row["realign_outcome"])
             if row["ucloud_batch_id"]:
                 row.update(native_status[row["ucloud_batch_id"]])
         # Owner obligations outlive the recent per-file query, including deleted member rows.
@@ -3817,8 +3994,11 @@ def create_app(
             + runtime_preparation.activity(store)
             + retained
             + deletion_requests.file_activity()
+            + project_tasks.activity()
+            + backup_manager.activity()
             + export_manager.activity()
             + hf_manager.activity()
+            + spelling_downloads.activity()
         )
 
     @app.post("/api/local-deletions/{identifier}/retry")
@@ -3916,17 +4096,41 @@ def create_app(
         return retained_preview(store, credentials, store.job(identifier))
 
     @app.post("/api/jobs/{identifier}/cleanup-ucloud")
-    def cleanup_ucloud(identifier: str):
+    def cleanup_ucloud(identifier: str, body: UCloudCleanup | None = None):
         from . import restored_owners
 
         restored_owners.require_job(store, identifier)
         from . import repair_cloud
         from .ucloud_native import cleanup_owned
 
-        batch = runtime_batches.job_batch(store, store.job(identifier))
+        job = store.job(identifier)
+        if job["kind"] == "transcribe" and job["params"].get("native_batch_id"):
+            from . import native_batch
+
+            with queue.control_jobs([identifier]):
+                job = store.job(identifier)
+                batch = native_batch.batch_for_job(store, job)
+                if batch["state"] in {"queued", "running"}:
+                    raise HTTPException(409, "Wait for the UCloud batch to finish before cleanup.")
+                batch_id = batch["id"]
+                decision = batch["params"].get("ucloud_run", {}).get("release_decision") or {}
+                if body is not None and body.discard_fingerprint is not None:
+                    native_batch.confirm_discard(store, batch_id, body.discard_fingerprint)
+                    return remote_release.retry(store, credentials, "native_batch", batch_id)
+                if decision.get("kind") == "discard":
+                    return remote_release.retry(store, credentials, "native_batch", batch_id)
+                if body is not None:
+                    preview = native_batch.discard_preview(store, batch_id)
+                    if preview is not None:
+                        return {"discard_preview": preview}
+                return {"cleanup_state": native_batch.cleanup_batch(store, credentials, batch_id)}
+        if body is not None and body.discard_fingerprint is not None:
+            raise ValueError(
+                "Discard confirmation applies only to native UCloud Transcriber batches."
+            )
+        batch = runtime_batches.job_batch(store, job)
         if batch:
             return runtime_batches.retry_cleanup(store, credentials, batch["id"])
-        job = store.job(identifier)
         if job["params"].get("repair_cloud", {}).get("protocol") == repair_cloud.PROTOCOL:
             if job["state"] in {"queued", "running"}:
                 raise HTTPException(409, "Wait for the repair to finish before cleanup.")
@@ -3941,13 +4145,6 @@ def create_app(
                 raise HTTPException(409, "Wait for native transcription to finish before cleanup.")
             if job["params"].get("settings", {}).get("provider_type") != "ucloud":
                 raise ValueError("Cleanup applies only to native Transcriber jobs.")
-            if job["params"].get("native_batch_id"):
-                from .native_batch import batch_for_job, cleanup_batch
-
-                batch = batch_for_job(store, job)
-                if batch["state"] in {"queued", "running"}:
-                    raise HTTPException(409, "Wait for the UCloud batch to finish before cleanup.")
-                return {"cleanup_state": cleanup_batch(store, credentials, batch["id"])}
         return {"cleanup_state": cleanup_owned(store, credentials, job)}
 
     @app.post("/api/jobs/{identifier}/reconcile")
@@ -4163,7 +4360,7 @@ def create_app(
 
     @app.post("/api/remote-releases/{kind}/{identifier}/retry")
     def retry_remote_release(kind: Literal["runtime_batch", "native_batch"], identifier: str):
-        # Retries only the Trash step a confirmed Delete already authorized (ADR 0101).
+        # Retries only the previously authorized Trash step (ADRs 0101 and 0197).
         with queue.control_owner(kind, identifier):
             return remote_release.retry(store, credentials, kind, identifier)
 

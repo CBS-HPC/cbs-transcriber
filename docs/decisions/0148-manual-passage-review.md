@@ -2,6 +2,9 @@
 
 Accepted 9 November 2026 for MVP. Implemented with synthetic backend, migration, portable
 restore and browser verification; real-user acceptance remains separate.
+Amended by ADR 0191: automatic Needs review for missing or newly added word timing is
+derived at read time, never stored as a review row; a mark bound to the exact current
+content still wins.
 
 Users need Not checked, Checked and Needs review marks plus an overall checked count. These
 are human workflow metadata, separate from model uncertainty, qualitative topic coding and

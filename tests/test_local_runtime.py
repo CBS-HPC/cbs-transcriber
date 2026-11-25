@@ -40,7 +40,8 @@ for line in sys.stdin:
         child = subprocess.Popen([
             sys.executable, "-I", "-c",
             "import os,sys,time; from pathlib import Path; "
-            "Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(60)",
+            "p = Path(sys.argv[1]); pending = p.with_suffix('.pending'); "
+            "pending.write_text(str(os.getpid())); pending.replace(p); time.sleep(60)",
             str(folder / "descendant.pid"),
         ])
         while not (folder / "descendant.pid").exists():
@@ -277,6 +278,130 @@ def test_queue_shutdown_cancels_active_warm_processing_and_waits_for_exit(runtim
     assert not owner.thread.is_alive()
     assert len(errors) == 1 and isinstance(errors[0], enhancement.media.Cancelled)
     assert runtime.process is None and process.poll() is not None
+
+
+class FinishingProcess:
+    """A worker that is still running for a few polls and then exits cleanly."""
+
+    def __init__(self, polls):
+        self.polls, self.returncode = polls, 0
+
+    def poll(self):
+        self.polls -= 1
+        return None if self.polls > 0 else 0
+
+
+def test_progress_poll_survives_a_progress_file_being_replaced(tmp_path, monkeypatch):
+    """B468: on Windows the app's read of progress.json can be refused while the worker
+    replaces it. That advisory read must never fail the job; the next poll reads it."""
+    enhancement_worker.write_json(tmp_path / "progress.json", {"stage": "aligning"})
+    reads, real = [], enhancement.read_output
+
+    def busy_once(path):
+        reads.append(path.name)
+        if len(reads) == 1:
+            raise PermissionError(13, "Permission denied")
+        return real(path)
+
+    monkeypatch.setattr(enhancement, "read_output", busy_once)
+    messages = []
+    enhancement.monitor_worker(
+        FinishingProcess(4), tmp_path, EnhancementOptions(), threading.Event(), messages.append
+    )
+    assert len(reads) >= 2
+    assert messages == ["Aligning words…"]
+
+
+def test_worker_progress_write_waits_for_a_reader_and_never_fails_the_work(tmp_path, monkeypatch):
+    """B468, worker side: a refused replace is retried briefly, then the old stage is kept."""
+    folder = tmp_path
+    enhancement_worker.write_progress(folder, "loading", 0.05)
+    path = folder / "progress.json"
+    reader = path.open("rb")  # The app polling progress, as on Windows.
+    releaser = threading.Timer(0.05, reader.close)
+    releaser.start()
+    try:
+        assert enhancement_worker.write_progress(folder, "aligning", 0.3, pause=0.02)
+    finally:
+        releaser.join()
+        reader.close()
+    assert json.loads(path.read_text(encoding="utf-8"))["stage"] == "aligning"
+    attempts = []
+
+    def always_busy(target, value):
+        attempts.append(target.name)
+        target.with_suffix(".pending").write_text("{}", encoding="utf-8")
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(enhancement_worker, "write_json", always_busy)
+    assert not enhancement_worker.write_progress(folder, "complete", 1, attempts=3, pause=0)
+    assert attempts == ["progress.json"] * 3
+    assert json.loads(path.read_text(encoding="utf-8"))["stage"] == "aligning"
+    assert not path.with_suffix(".pending").exists()
+    # Other failures, and every output file, still propagate.
+    monkeypatch.setattr(
+        enhancement_worker, "write_json", lambda *a: (_ for _ in ()).throw(OSError(28, "Full"))
+    )
+    with pytest.raises(OSError):
+        enhancement_worker.write_progress(folder, "complete", 1)
+
+
+def synthetic_alignment_modules(monkeypatch, observed):
+    def align(passages, model, metadata, audio, device, **kwargs):
+        observed.append(("align", stages[-1] if stages else None))
+        return {"word_segments": [{"word": "Hej", "start": 0, "end": 1, "score": 0.9}]}
+
+    stages = []
+    modules = {
+        "torch": SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: False, empty_cache=lambda: None)
+        ),
+        "whisperx": SimpleNamespace(
+            align=align, load_align_model=lambda *a, **kw: (object(), {"language": "da"})
+        ),
+        "huggingface_hub": SimpleNamespace(snapshot_download=lambda *a, **kw: "cached-model"),
+        "nltk": SimpleNamespace(data=SimpleNamespace(load=lambda path: None)),
+    }
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    real = enhancement_worker.write_progress
+
+    def record(directory, stage, fraction, **kwargs):
+        stages.append(stage)
+        observed.append(("progress", stage))
+        return real(directory, stage, fraction, **kwargs)
+
+    monkeypatch.setattr(enhancement_worker, "write_progress", record)
+    monkeypatch.setattr(enhancement_worker, "audio_data", lambda folder: [])
+
+
+def test_worker_reports_aligning_before_ordinary_alignment(tmp_path, monkeypatch):
+    """B470: short passages moved from "Loading local models…" straight to complete."""
+    observed = []
+    synthetic_alignment_modules(monkeypatch, observed)
+    monkeypatch.setattr(enhancement_worker, "CACHE_ALIGNMENT", True)
+    monkeypatch.setattr(enhancement_worker, "ALIGNMENT_CACHE", None)
+    request = {
+        "options": EnhancementOptions(language="da", device="cpu").model_dump() | {"duration": 1},
+        "passages": [{"id": "0", "start": 0, "end": 1, "text": "Hej"}],
+    }
+    assert enhancement_worker.execute(request, request_folder(tmp_path, "first")) is None
+    assert observed[:3] == [
+        ("progress", "loading"),
+        ("progress", "aligning"),
+        ("align", "aligning"),
+    ]
+    assert observed[-1] == ("progress", "complete")
+    # The persistent CBS Runtime still keeps the last real progress instead of "loading".
+    observed.clear()
+    monkeypatch.setattr(
+        enhancement_worker,
+        "RUNTIME_CACHE",
+        enhancement_worker.RuntimeModelSlot(lambda identity, loads: None),
+    )
+    assert enhancement_worker.execute(request, request_folder(tmp_path, "second")) is None
+    assert ("progress", "loading") not in observed
+    assert observed[:2] == [("progress", "aligning"), ("align", "aligning")]
 
 
 def test_worker_reuses_alignment_model_only_for_the_same_language_and_device(tmp_path, monkeypatch):

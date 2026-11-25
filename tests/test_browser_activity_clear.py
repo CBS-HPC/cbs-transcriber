@@ -8,6 +8,8 @@ from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
 
+from cbs_transcriber import ucloud_native
+from cbs_transcriber.providers import Settings
 from cbs_transcriber.store import now
 
 pytestmark = pytest.mark.browser
@@ -130,7 +132,7 @@ def test_clear_finished_collapses_old_cleanup_cards_and_preserves_actions(page, 
     page.locator("#activity-clear").click()
     expect(visible_cards).to_have_count(1)
     retained = page.locator("#jobs [data-retained-activity]")
-    expect(retained.locator("summary")).to_have_text("3 earlier jobs need attention")
+    expect(retained.locator(":scope > summary")).to_have_text("3 earlier jobs need attention")
     expect(retained).not_to_have_attribute("open", "")
     finished_job(store, rid, "media", "completed", "New preparation completed")
     expect(visible_cards).to_have_count(2)
@@ -139,7 +141,7 @@ def test_clear_finished_collapses_old_cleanup_cards_and_preserves_actions(page, 
     expect(visible_cards).to_have_count(2)
     expect(retained).not_to_have_attribute("open", "")
     page.screenshot(path="test-results/activity-cleared-retained.png")
-    retained.locator("summary").click()
+    retained.locator(":scope > summary").click()
     actions = retained.get_by_role("button", name="Retry remote cleanup", exact=True)
     expect(actions).to_have_count(3)
     actions.first.click()
@@ -149,3 +151,51 @@ def test_clear_finished_collapses_old_cleanup_cards_and_preserves_actions(page, 
     expect(retained).not_to_have_attribute("open", "")
     expect(visible_cards).to_have_count(1)
     assert {identifier: store.job(identifier)["params"] for identifier in old} == before
+
+
+def test_recording_cards_show_failed_batch_members_until_stopped(page, local_app, monkeypatch):
+    app = local_app.server.config.app
+    store = app.state.store
+    project = store.create_project("Transcription outcomes")
+    first, second, untouched, dismissed = [
+        store.create_recording(project["id"], filename)["id"]
+        for filename in ("first.wav", "second.wav", "untouched.wav", "dismissed.wav")
+    ]
+    store.execute("UPDATE recordings SET status='ready' WHERE project_id=?", (project["id"],))
+    finished_job(store, first, "transcribe", "failed", "Earlier failed attempt")
+    finished_job(store, dismissed, "transcribe", "failed", "Finished transcription failure")
+    settings = Settings(
+        provider_type="ucloud", base_url="https://cloud.invalid", model=ucloud_native.MIG_MODEL
+    ).model_dump()
+    params = {"settings": settings, "provider_name": "Synthetic UCloud"}
+    with app.state.queue.lock:
+        jobs = store.add_transcription_jobs(
+            [{"recording_id": rid, "params": params} for rid in (first, second)]
+        )
+        owner = jobs[0]["params"]["native_batch_id"]
+        store.update_native_batch(owner, run_update={"job_id": "12345", "remote_state": "RUNNING"})
+        store.finish_native_batch(owner, "failed", "Could not retrieve transcripts")
+    stopped = []
+    monkeypatch.setattr(ucloud_native, "terminate_owned", lambda _, __, job: stopped.append(job))
+
+    def badge(recording):
+        return page.locator(f'[data-recording="{recording}"] .card-bottom .badge')
+
+    page.goto(local_app.url)
+    for recording in (first, second, dismissed):
+        expect(badge(recording)).to_have_text("Failed - See Activity")
+    expect(badge(untouched)).to_have_text("Ready to transcribe")
+    page.get_by_role("button", name="Activity", exact=True).click()
+    page.get_by_role("button", name="Stop UCloud batch (2 files)", exact=True).click()
+    for recording in (first, second):
+        expect(badge(recording)).to_have_text("Ready to transcribe")
+    assert stopped == ["12345"]
+    assert all(store.job(job["id"])["state"] == "cancelled" for job in jobs)
+    expect(badge(dismissed)).to_have_text("Failed - See Activity")
+    page.locator("#jobs .job").filter(has_text="Finished transcription failure").get_by_role(
+        "button", name="Remove from Activity"
+    ).click()
+    expect(badge(dismissed)).to_have_text("Ready to transcribe")
+    page.reload()
+    for recording in (first, second, untouched, dismissed):
+        expect(badge(recording)).to_have_text("Ready to transcribe")

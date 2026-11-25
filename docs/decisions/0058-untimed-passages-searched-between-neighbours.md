@@ -2,6 +2,7 @@
 
 Accepted 23 October 2026. Amends ADR 0056 and the passage repair rule "never infer bounds from
 adjacent passages".
+Amended by ADR 0189 (windows too short for their text are not aligned).
 
 When alignment cannot place part of a passage whose source had no bounds, it leaves untimed
 fragments with no start or end. Until now they showed a separate "No word timing" tag and

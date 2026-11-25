@@ -104,6 +104,8 @@ def require_code(identity):
 
 def legacy_readers(store, settings, runtime_id):
     """An old uploaded supervisor cannot participate in the new shared-use lock."""
+    # A suspended UCloud job can resume without participating in the shared lock.
+    settled_states = api.TERMINAL - {"SUSPENDED"}
     result = []
     for row in store.all(
         "WITH safe_jobs AS (SELECT id,kind,CASE WHEN json_valid(params) "
@@ -133,7 +135,7 @@ def legacy_readers(store, settings, runtime_id):
             and (run.get("submission_intent") or run.get("submission_attempted"))
             and not run.get("reconciled_not_created")
         )
-        if uncertain or (run.get("job_id") and run.get("remote_state") not in api.TERMINAL):
+        if uncertain or (run.get("job_id") and run.get("remote_state") not in settled_states):
             result.append(row["id"])
     return result
 

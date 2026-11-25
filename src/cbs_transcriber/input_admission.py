@@ -1439,16 +1439,21 @@ def projection(store, job_id, *, connection=None):
         }
 
 
-def source_readiness(store, recording_id):
+def source_readiness(store, recording_id, *, connection=None):
+    """Project readiness from verified metadata, optionally using the caller's read snapshot."""
     try:
-        cache = original_inspection.read(store, recording_id)
+        cache = (
+            original_inspection.read(store, recording_id)
+            if connection is None
+            else original_inspection._load(connection, recording_id)
+        )
     except (ValueError, KeyError):
         return {"state": "error", "duration": None, "error_code": "invalid_evidence"}
     if cache is None:
         return {"state": "uninspected", "duration": None, "error_code": None}
     from . import restored_owners
 
-    with store.connection() as db:
+    with store.connection() if connection is None else nullcontext(connection) as db:
         if restored_owners.is_restored(db, "job", cache["inspection_job_id"]):
             return {"state": "uninspected", "duration": None, "error_code": "restored_history"}
     return {

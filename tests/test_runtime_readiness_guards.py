@@ -494,6 +494,7 @@ def singleton_owner(client, credentials, tmp_path, prepare):
     [
         ("lock", "runtime-preparation-lock"),
         ("legacy", "runtime-legacy-reader"),
+        ("suspended-legacy", "runtime-legacy-reader"),
         ("unknown", "runtime-readiness-unknown"),
     ],
 )
@@ -534,7 +535,8 @@ def test_actual_prepare_paths_refuse_before_any_setup_side_effect(
         if obstacle == "lock":
             lock = cloud.runtime + "/.prepare-lock"
             cloud.metadata[lock] = {"id": lock, "status": {"type": "DIRECTORY"}}
-        elif obstacle == "legacy":
+        elif obstacle in {"legacy", "suspended-legacy"}:
+            remote_state = "SUSPENDED" if obstacle == "suspended-legacy" else "RUNNING"
             project = owner.store.create_project("Known synthetic older reader")
             row = owner.store.create_recording(project["id"], "legacy.wav")
             owner.store.add_job(
@@ -545,7 +547,7 @@ def test_actual_prepare_paths_refuse_before_any_setup_side_effect(
                         "settings": owner.settings.model_dump(),
                         "runtime_id": api.runtime_id(),
                     },
-                    "ucloud_run": {"job_id": "older-runtime", "remote_state": "RUNNING"},
+                    "ucloud_run": {"job_id": "older-runtime", "remote_state": remote_state},
                 },
             )
         else:

@@ -21,6 +21,46 @@ verified local morning changes on `codex/post-mvp-morning`; activation remains s
 
 ## Current post-MVP branch
 
+20-21 November night continuation: local `codex/night-post-v2-20261120` is verified at product
+`f96362f` (ADR0190/0191, B513-B518, V254-V258): 448 backend passes/two skips and 108 selected
+browser passes on one immutable source, with exact hashes and independent review. See the
+[night composition receipt](docs/verification-2026-11-20-night-composition.md). Main, Claude's
+original branches, rc2 and the loaded preview are unchanged. Whole-suite and human/provider
+acceptance remain open. The user still needs to choose whether too-short timing repair may
+replace passage bounds; no widening or new timing-editor save workflow was implemented.
+
+
+20 November final follow-on tasks (local, separate from verified source): cursor-word timing
+prototype `f140a34` has 15 browser passes but no persistence and remains unmerged/OFF by default
+(T159). Project deletion in Activity is now implemented on `claude/deletion-activity`
+(ADR 0190, T160), independently hardened at `8cad1eb` with376 backend passes/two skips
+and22 relevant browser passes. Real H24 remains. The agreed review dropdown passed58 focused
+browser cases at `9b56e20`. Both are composed on local `codex/night-post-v2-20261120` for final
+gates; main and the running preview are unchanged. Backup in Activity has a reviewed
+proposal and three characterization passes, including the necessary reciprocal
+deletion/capture admission fence (T161); that plan is not an accepted ADR or task service. Save/Split benchmarking was deferred at the user's request;
+no usable timing samples were collected. Exact private artifacts are in the Claude handoff.
+
+
+20 November offline weekend composition: `codex/weekend-post-v2-20261120` combines
+the reviewed timing, spelling/Text uncertainty, disabled Runtime supersession and
+unused native capacity helpers at product `4574083`. Focused staged gates and
+independent source Go are recorded in the [composition receipt](docs/verification-2026-11-20-weekend-composition.md).
+The local rc2 wheel remains separate/frozen at `6ff03df`; no main merge/push,
+publication, installation or app reload occurred. Real provider/device acceptance
+and the remaining weekend features are open; Runtime switches remain off and
+the native helper has no paid-control integration.
+
+
+20 November Codex editor checkpoint on `codex/weekend-spelling-20261120`: Claude's
+recording vocabulary/Activity downloads/double-click redesign was independently checked,
+and dotted model uncertainty now appears in the actual Text draft without changing its
+native editing state (T157/ADR0188). **165 distinct focused cases pass**, with the
+cached-engine harness limitation recorded in the [verification receipt](docs/verification-2026-11-20-editor-spelling.md).
+That editor branch is now included in the offline composition above; it remains
+unloaded/unreleased. Spelling stays hidden in MVP.
+Spelling bug IDs were reconciled to B488–B491; core export/timing keeps B467–B470.
+
 12 November handover: [the continuation plan](docs/work-plans/mvp-v2-continuation-2026-11-12.md)
 records tested components and the unstarted Runtime Stage 2, funding-observer (T146) and
 schema-19 Working (T147) designs. Editor/review workflow is the next user discussion;
@@ -55,6 +95,19 @@ longer relies on a Windows-only socket close: it first shuts each connection dow
 own duplicate descriptor, which also reaches a stalled TLS handshake (ADR 0178 amendment,
 B465). Windows-verified (272 funding tests); Linux only by a stdlib probe; macOS pending.
 
+20 November (Claude, `claude/timing-units-fix`, not merged or loaded): local passage word
+timing on the MVP v2 preview. Repair all no longer fails when Windows briefly refuses the
+progress file (B468); job failures name busy files and processing faults separately from disk
+problems (B469); windows too short for their text are refused, skipped when frozen and shown as
+"Too short to time", and Activity shows "Aligning words…" (B470, ADR 0189). Synthetic and
+offline-replay evidence only; a real WhisperX run on the user's audio is human check H15a.
+
+- [x] **Local passage timing reliability candidate (B468–B470/B481/B486/B487, ADR 0189).**
+  Frozen backend gate: 377 passes; final browser gate: 22 passes, plus independent real
+  Windows held-reader and cancellation checks. Unicode parity and local rc2 wheel/constraints
+  are verified (source `1ae0069`, packaging `6ff03df`); installation-helper/profile gate 155 passes; [verification](docs/verification-2026-11-20-timing-rc2.md). Real-library
+  WhisperX acceptance remains H15a; this candidate has not been loaded or published.
+
 The assembled local `codex/mvp-v2-reliability-candidate` now has independent Go on 193 focused
 tests, preserving exact reviewed UI/native/Runtime source. [Composition and limits](docs/verification-2026-11-12-reliability-composition.md).
 It is not loaded or published. Funding-based CPU fallback remains planned; disabled Runtime
@@ -65,8 +118,19 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   durable Stop and no new allocation/upload/followup. Final 76 focused cases and independent
   review pass; earlier 444 passes/one platform skip remain qualified prior-source evidence.
   [Verification](docs/verification-2026-11-12-native-startup-reconnection.md).
-  Not loaded or real-provider accepted. Fresh singleton generic-curated failures, historical
-  generic failures, uncertain submissions and cleanup-only obligations remain manual.
+  The 23 November Windows full-profile live checks passed H7–H9 on local source `9575be8`.
+  Startup rejoined a queued allocation, explicit Retry reused a confirmed upload, and startup
+  recovered the remaining download without duplicating results.
+  [Live scope and limits](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
+  Fresh singleton generic-curated failures, historical generic failures, uncertain submissions
+  and cleanup-only obligations remain manual. Live missing-output Retry remains unverified.
+
+- [ ] **Runtime preparation and lifecycle acceptance.** The local rc3 candidate includes B581,
+  which treats a matching suspended legacy job as a possible reader at preparation admission.
+  Its scoped synthetic gates pass. The full-profile Windows test app reported base preparation
+  needed in a read-only check. Controlled paid preparation and a real small batch await approval.
+  Audit the broader effect of resumable states on preparation ownership, capacity, Stop and cleanup
+  separately. [Guard verification](docs/verification-2026-11-23-runtime-reader-guard.md).
 
 - [ ] **Isolated Runtime recovery (T144), authorized stability work.** Stage1 on
   `codex/mvp-v2-runtime-generations` from reviewed observation checkpoint `857a727` implements
@@ -79,8 +143,11 @@ generation Stage 1 is verified separately at `401769e`, with later recovery stag
   Stage 2 (disabled owner/folder/readiness-promotion slice) is implemented on
   `codex/mvp-v2-runtime-protocol`: builder `e9dd23d`, independent review `229865a`, defect
   fix `600141f` (B453); combined on `claude/v2-integration` with all switches off.
-  - [x] Disabled supersession of a settled failed candidate (`claude/runtime-supersession`,
-    19 November, synthetic only). Independent review is still required before enablement.
+  - [x] Disabled settled-candidate supersession (`claude/runtime-supersession`, 19 November).
+    Independent review found B484/B485; local fixes have nine red/green regressions and
+    final 203 generation and 249 legacy/HF/Stage1 passes with three platform skips;
+    [verification and limits](docs/verification-2026-11-20-runtime-supersession.md). All
+    generation switches remain off; no live preparation or activation is implied.
   - [ ] Strict comparison with UCloud's normalised specification:
     [designed](docs/proposals/runtime-strict-specification-comparison-2026-11-19.md);
     needs authorized real UCloud job replies.
@@ -171,6 +238,11 @@ Functional acceptance does not establish speed.
   separate controls-ready, primary API, render and background-settled timing. Preserve exact
   timing/history/Working/inverse and snapshot/recovery contracts. These further changes are
   explicitly deferred until after MVP.
+  **Broadened 20 November (post-v2 weekend):** testing MVP v2 the user still finds manual
+  editing slow on long transcripts, not only Save and Split: opening and typing in long
+  passages, Save, Merge, Split and Delete on 600–2,000-passage transcripts, and the per-passage
+  Undo merge (also reported slow). Measure each action end to end (click to usable controls)
+  with synthetic fixtures and fix the largest costs.
 
 Requested source cleanup is complete in main and Desktop: the retired external preparation
 bundle is removed, and both historical Markdown archives are under docs/archive with incoming
@@ -261,6 +333,23 @@ and internal relative links updated. Test-result/cache removal was audited, not 
     Packaged-profile tests, the MVP walkthrough and isolated installation smoke pass.
     Main stays full. This is the historical rc1 checkpoint; current user distribution is the
     published v0.1.0 wheel plus matching constraints, as described in README.
+  - [x] Verify the local MVP v2 rc3 wheel and a fresh isolated Windows installation on
+    the development PC. The installed app passed synthetic upload, word timing edit,
+    export and restart. The local preview serves matching wheel assets from its own
+    pilot library. Managed Windows and shortcut acceptance remain open.
+    [Local pilot verification](docs/verification-2026-11-24-rc3-local-pilot.md).
+  - [x] Attribute the exact-wheel broad gate (5 backend, 9 Chromium failures, 1 teardown
+    error): load timing, the B588 fixture, two intermittent cases that also fail on main,
+    and rc3 regressions B596/B597 (plus stale B598), fixed in source. All 25 nodes pass.
+  - [ ] Rebuild the rc3 wheel from the fixed candidate, repeat the fresh isolated install
+    and update the pilot guide's "next pilot build" wording; held until the user agrees.
+  - [x] Root-cause the intermittent "Working authority differs from its admission" failure
+    in speaker-label follow-ups: a test-only native batch mock imported a file still being
+    admitted (B600). Real batches wait for sealing; the mock now does too.
+  - [ ] Root-cause the intermittent browser-test teardown where the language-save case's
+    server is still running 10 s after stop (both full gates; not in 22 smaller runs).
+  - [ ] Stabilise the 1299 px breakpoint check in the wide-view language layout test; it
+    fails intermittently on main as well (4 of 6 runs).
   - [ ] Complete real-device/provider/backup/NVivo acceptance. A fresh monolithic full-suite
     run on the exact packaged RC remains distinct from the documented layered verification.
 
@@ -269,7 +358,20 @@ and internal relative links updated. Test-result/cache removal was audited, not 
 - [ ] **CBS Runtime preparation and batches (T85e/T85f/T86) — stability before PII integration.**
   User priority, 11 November. On 20 November the user added Runtime implementation and testing
   to the post-v2 plan: it opens the way to other transcription models and to the AI-assisted
-  coding work. Live preparation and paid test jobs still need approval each time. The morning branch implements verified exact host/shell stamp
+  coding work. Live preparation and paid test jobs still need approval each time.
+  **20 November: the user deleted the old Runtime folder on the UCloud project drive**, which
+  held the retained `runtime-busy` preparation lock described below. The app's local records
+  of that failed preparation (job evidence, cleanup obligations, readiness stamps) are
+  unchanged. **Confirmed the same afternoon with the user's OK** (one read-only lookup through
+  the app's bounded file API, nothing created or changed): the `cbs-runtime` parent folder,
+  this version's runtime folder (`whisperx-3.8.6-cu128-a8f866300a50`), `.prepare-lock`,
+  `.in-use` and `stamp.json` are all absent. The only library has no Runtime records, so nothing
+  needs reconciling: a clean slate. The controlled live-test plan is
+  [runtime-live-test-2026-11-21](docs/work-plans/runtime-live-test-2026-11-21.md); every
+  credit-using step needs the user's OK. **21 November, user direction:** once the Runtime is
+  stable (live test passed), extend it to also host the smaller LLM expected for AI-assisted
+  qualitative coding (see that roadmap item), reusing the Runtime's preparation, MIG allocation,
+  owned folders, Activity and cleanup rather than a separate hosting path. The morning branch implements verified exact host/shell stamp
   validation and PREPARE=1 legacy-reader/retained-lock refusal before new job submission
   (ADR 0172), plus the separately reviewed configured-model preparation plan (ADR 0173).
   These fixes do not reclaim the historical lock or establish live Runtime acceptance.
@@ -360,6 +462,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   recording/project deletion in their test scenarios. Large-history/concurrent performance and
   untested recovery paths remain open. Routine batch-requested inspections now appear within the
   request or allocation in synthetic checks; validate the display in a real batch after activation.
+  Project recording cards now show visible per-file transcription failures in the local rc3
+  follow-up (T167). Confirm the failed badge and reset after cancellation or dismissal in the
+  [pilot checklist](docs/testing/human-release-checklist.md#h11a--failed-transcription-on-the-project-page).
+  The local rc3 follow-up adds a confirmed discard path for an ended native batch whose
+  outputs cannot be imported (T168). Keep the ordinary save-first cleanup and add the
+  discard prompt to the colleague candidate after verification. Missing-output automatic
+  resubmission and broader cleanup remain separate work.
 - [ ] **Task dependency composition audit.** Media preparation and original-backed native
   transcription are intentionally independent; the current twelve-file overlap has a healthy
   local checkpoint and source review found no conflicting-write defect. Complete combined
@@ -384,6 +493,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Review the existing current-Working version
   lookup's broad metadata projection and bound it without changing preview or export behavior.
   [Audit and benchmark plan](docs/work-plans/manual-transcript-editing-performance.md).
+  The [23 November rc3 candidate check](docs/verification-2026-11-23-rc3-editing.md)
+  covers matched 600- and 1,200-passage server and browser pairs. The first 1,200-passage
+  round reduced median Save from 6.987 to 3.963 s and Split from 5.375 to 3.839 s until
+  controls were ready. Larger histories, measurement on the installed build and representative
+  hardware, and the long-history Undo scan remain open.
 - [ ] **Preparation and passage-repair acceptance (T87d/T87f/T90e/T90f).** New inference uses
   immutable originals independently of browser playback; remote compressed-input preparation
   and bounded older-recording cloud repairs are implemented offline. Validate real codecs,
@@ -403,8 +517,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   licence, pinned revision and hashes; download it outside the repository, never in routine
   tests. Import its reference transcripts as results so scale costs no transcription; transcribe
   only a small subset. Cover upload, media preparation, lists, Activity, editor, search, export,
-  backup/restore and deletion. Human check H15b in the
-  [release checklist](docs/testing/human-release-checklist.md).
+  backup/restore and deletion. A synthetic 1,204-recording test exercised lists, search,
+  Activity and ZIP export on Windows. The recording-list fix is in the local rc3
+  composition. On 1,204 synthetic recordings the verified API projection took 0.41–0.60 s,
+  compared with 10.91–12.63 s before the change. Eight matched Chromium trials showed
+  median controls-ready time of 1.38 s versus 8.59 s, with all cards present. Human check
+  H15b at larger scale remains open.
+  [Measurements](docs/verification-2026-11-23-rc3-scale.md).
 - [ ] **Local processing concurrency across task types.** Implemented on
   `claude/local-concurrency` (ADR 0146, T111): Settings → Local Processing → Parallel local
   tasks with automatic media = logical CPUs − 2 in 2..8, inspection = CPUs/2 in 2..4, API 6 and
@@ -430,7 +549,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   and tested synthetically. Complete remaining crash, platform, filesystem and live acceptance;
   keep unresolved deletion/cleanup visible. Real Cloud Files, Mac and power-loss behavior are
   not established by those tests.
-- [ ] **Project deletion in Activity — decided 20 November, post-v2.** Testing MVP v2 the
+- [x] **Project deletion in Activity — decided 20 November, post-v2.** Testing MVP v2 the
   user deleted a 12-recording project; the Delete dialog could still be closed while the final
   step ran, so the open project stayed visible until a refresh removed it. Today the open
   dialog drives deletion (it re-sends Delete each second while jobs stop; closing it abandons
@@ -444,6 +563,24 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   stays permanent and recovery relies on backups ("Recently deleted" and automatic pre-delete
   backups were not chosen). No quick fix for v2: the full version only, in post-v2 work. Needs
   its own ADR (job semantics); apply the same model to recording deletes where it fits.
+  **Implemented on `claude/deletion-activity` (ADR 0190, V250–V253, T160, B500–B503):** a
+  server-owned task with the three stages and Keep project; the point of no return is the
+  SQLite Delete commit, with owner UCloud release receipts now written in that same
+  transaction and Trash only afterwards; only that project is inactive (UI, and server 409
+  `project_deleting` refusals); early close keeps the project and leaves an
+  *interrupted* note via a small receipt folder (no schema change); nothing resumes. Synthetic
+  backend scenarios (Codex A1–M1 where feasible), new browser cases and the existing deletion
+  suites pass. Recording deletes keep the dialog-driven flow (it would need recording-level
+  inactivity in every route and editor). Evening independent review on
+  `codex/night-deletion-fixes-20261120` reproduced and fixed existing backup-capture admission
+  overlap, premature Keep/COMMIT claims and a Keep-before-Stop reserved-control race
+  (B513-B515, V254-V256); R5 lost-Trash-reply tests now cover Runtime and native owners.
+  The corrected frozen backend inventory has 376 distinct passes/two skips; the final fixed
+  source passed all 22 relevant browser cases. Independent source/backend review is Go; see
+  [the night verification receipt](docs/verification-2026-11-20-night-deletion.md). The earlier
+  deep-path harness failures are retained (B516); production path guards are unchanged.
+  Still unmerged/unloaded at this component checkpoint; whole-browser and real-device/UCloud
+  H24 acceptance remain separate. Future backup Activity UI (T161) remains a proposal.
 - [ ] **Library module review.** Review library creation, selection, switching and deletion;
   paths, backup/restore and interrupted-operation recovery; accessibility and navigation between
   Library and Settings. Record actual defects and distinguish implementation, mocked tests and
@@ -499,18 +636,33 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   renewed approval and preserves the original identity of any frozen transfer.
   The local capture parent is selectable; a same-device warning is shown and a best-effort
   Windows check can identify the same filesystem volume. Hardware independence is not established.
-  Validate a real UCloud transfer, download, independent receipt, restore and retention workflow,
-  including separately hosted transfer endpoints, which remain blocked until explicitly trusted,
-  plus real-library Windows and Mac restore. The user waived a new backup for this disposable test
-  library; that does not waive preservation requirements for other libraries.
-- [ ] **Backup Settings and Activity.** Implement the proposed Settings → Backup entry and
-  durable, separately verified local/cloud status and progress using the existing Library flow;
-  retain explicit destination approval, restore isolation and manual retention confirmation.
-  The Restore flow checks earlier or external receipts against local or UCloud package bytes;
-  this is a transport check, not a restore test. Older database-only copies remain available
-  only as advanced recovery when present; creation is removed from the Library UI. Capture still has no Activity
-  entry, percentage progress or cancellation, and a lost response can leave a partial copy.
-  Automatic schedules are not implemented. See the [Settings design](docs/work-plans/weekend-2026-10-31.md#backup-controls-in-settings--design-review).
+  A Windows test-library capture and local restore verified four projects, 12 original recordings,
+  12 saved results and versions, and 16 note versions. The same UCloud upload resumed its existing
+  operation but refused a transfer origin outside the approved list. The backup and exact operation
+  are preserved. Zero verified objects does not establish an empty remote folder.
+  First identify the exact refused origin and transfer direction without changing approval.
+  Any later recovery must keep the owned destination and verify existing objects before
+  writing missing ones. The separate diagnostic prototype `fc05ec6` keeps the existing
+  approval and journal. Its broader run had one intermittent Windows settings-save failure.
+  The local rc3 composition now includes the WebSocket redirect guard (B587).
+  Live cloud backup and restore acceptance remains open. Validate approved transfer,
+  download, receipt, restore
+  and retention, plus larger Windows libraries and macOS.
+  [Verification](docs/verification-2026-11-23-rc3-backup-and-reconnect.md).
+- [ ] **Backup Settings and Activity.** Integrated in the local rc3 candidate
+  ([ADR 0192](docs/decisions/0192-backup-in-settings-with-activity.md), T161): the Settings → Backup tab and Library → Backups → Create backup hand a local backup to one
+  server-owned Activity task with stages, copy counts, Stop until it is being saved, and a
+  verified/stopped/failed outcome; its own incomplete copy is removed or named, and a restart
+  reports interrupted backups without resuming them. Synthetic backend and Chromium checks
+  pass, and Windows local Activity capture passed with 12 public originals. Remaining:
+  real-device acceptance (H21: large libraries, removable and cloud-synced folders, crashes,
+  macOS) and separately verified UCloud status in Settings (UCloud transfer
+  stays in Library → Backups, hidden in MVP, unchanged). Explicit destination approval,
+  restore isolation and manual retention confirmation are unchanged. The Restore flow checks
+  earlier or external receipts against local or UCloud package bytes; this is a transport
+  check, not a restore test. Older database-only copies remain available only as advanced
+  recovery when present. Automatic schedules are not implemented. See the
+  [Settings design](docs/work-plans/weekend-2026-10-31.md#backup-controls-in-settings--design-review).
 - [ ] **Institutional storage and privacy.** Agree UCloud data classification and transfer
   approval, account/drive access, TLS and token scope, storage encryption and key/receipt custody,
   audit logging, retention, holds and withdrawal with CBS IT/DPO. Real transfer is not verified
@@ -529,6 +681,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Per-model language controls are hidden in the compact model list; saved values and frozen jobs
   remain unchanged. Machine selectors have been removed under the fixed-MIG policy.
   [Implementation plan](docs/work-plans/project-language-default.md).
+- [ ] **Language-compatible model picker, later.** For new transcription choices, use the
+  recording-language override or project default and show models verified to support it.
+  Define the unset/Automatic and mixed-language batch cases. Keep the full model list in
+  Settings and preserve saved results, existing profiles and frozen jobs.
 - [ ] **Automatic language (T84).** General automatic language for enhancements, follow-ups and
   repairs, including mixed-language behavior, remains incomplete. CBS Runtime has explicit
   experimental full-ASR Auto; do not present a configured language as detected or infer missing
@@ -548,7 +704,7 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   The Show filter (All / Not checked / Needs review / Checked / Uncertain / Missing word timing)
   is implemented and browser-verified; Next to review follows it (T148). Real-user acceptance
   and coordination with any future re-transcription tags remain open.
-- [ ] **Word timing in review and Activity — decided 20 November, post-v2.** Testing MVP v2
+- [x] **Word timing in review and Activity — decided 20 November, post-v2.** Testing MVP v2
   the user found passages with missing or rebuilt timing hard to locate, and a per-passage
   "Add word timing" job vanished from Activity when it finished (finished realignments are
   hidden as routine; the ready timing is added only when the recording is next open with no
@@ -560,13 +716,67 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   recording is opened, not added because the passage changed, or failed) until cleared.
   Automatic marks need a truthful system actor and their own ADR (passage review is manual
   metadata today, ADR 0148); preserve the passage-hash binding, stale-Checked rule and drafts.
+  **Implemented 20 November on branch `claude/timing-review` (unmerged; ADR 0191, T162,
+  V243/V244, B510–B512):** automatic marks are derived when review progress is read, never
+  stored; the researcher's mark on the exact current content always wins. New timing versions
+  record the passages they timed (`timing_added`); older timing raises no mark. The reasons show
+  beside the status, the summary counts them, and Show/Next to review find them. Finished word
+  timing stays in Activity with its outcome; the worker's own message is no longer replaced by
+  "Complete"; passages being timed leave the Repair all count at once. Synthetic backend,
+  restore and browser checks pass; real-library acceptance is H15c. Merged into
+  `claude/post-v2` at f2ea4ea after root review.
+- [x] **Review status dropdown shows Uncertain and Timing missing — decided 20 November
+  (evening), post-v2, amends ADR 0191 and the review-hint display.** Testing the MVP v2
+  preview, the user asked to remove the separate "Review suggested" tag. Instead the passage's
+  status dropdown itself shows **Uncertain** (visually highlighted) for passages flagged by the
+  model's uncertainty hints, and **Timing missing** for passages that lack word timing. When a
+  passage is both uncertain and missing timing, **Uncertain wins**. These are automatic states
+  shown in the dropdown, not marks the researcher set; keep ADR 0191's rules: derived, never
+  stored as review rows, the researcher's own mark on the exact current content wins, and
+  untimed-by-design results are not flagged. Implemented at `9b56e20` on the isolated
+  dropdown branch (V257, T163, ADR0191 amendment): timing added retains Needs review and its
+  reason; Show/Next and dotted text uncertainty are preserved.58 focused browser cases passed,
+  including explicit same-status manual override, stale Checked with complete/missing timing,
+  disabled derived options, no implicit writes and native keyboard focus. Cached Spylls host/
+  child imports are a test qualification (B517), not an installed-worker claim. Composed locally
+  with deletion at `5482338`; final composition gates remain separate and nothing was loaded.
+- [ ] **Too-short passage bounds: retiming pilot — decided 21 November.** The user answered
+  "Yes, small pilot" to Codex's option 2 (`_handover\codex-2026-11-21\cbs-night-short-window-design-20261120.md`):
+  "Add word timing" may correct a too-short passage's saved start/end from its own aligned
+  words, only when every word aligns completely and in order, searched within the gap between
+  the neighbouring passages (at most 60 s, never across a neighbour, never storing the search
+  window as timing). The previous version stays in History and Undo restores it; partial or
+  ambiguous output leaves saved timing unchanged and keeps its evidence. The separate
+  pilot composition `3bdee7e` passed 191 synthetic backend and 19 Chromium cases across
+  retiming, Undo, legacy plans and word timing. A stale draft was refused after Apply.
+  Real-audio acceptance still needs a concrete Per og Kim passage and timestamp.
+  [Pilot verification](docs/verification-2026-11-23-rc3-retiming-pilot-composition.md).
+- [x] **Word-timing editor — decisions 21 November.** Build from Codex's prototype f140a34:
+  the ordinary Text editor plus start/end boxes for the word at the cursor. Edited times are
+  part of the passage draft: **Save passage saves text and times together**, Cancel discards
+  both, one History version, Undo restores it. When the cursor is between two words or on a
+  space, **the boxes show nothing**. Still to settle while building: selections spanning words
+  and one-character words (conservative defaults, shown to the user).
+  **Implemented for local rc3 verification (source `07d9bbd`, ADR 0195, V272, T164,
+  B552–B557, B582–B585).** Start (s)/End (s)
+  boxes just below the textarea replace the ordinal word dropdown and its saved-text preview.
+  Settled defaults: a selection spanning several words shows nothing; a selection within one
+  word shows it; a one-character word (one grapheme, such as "i" or an emoji) is selected by
+  the caret on either side of it, since it has no inside; a longer word needs the caret inside
+  it. New or changed draft words start empty (the tooltip explains that saving may still keep a
+  replaced word's time, ADR 0166). Typed times follow their word through spelling fixes and are
+  dropped with a notice when it is deleted or split. Save passage uses a new edit-v4 route only
+  when times were typed; older routes are unchanged. Shown in MVP. Synthetic backend and
+  Chromium/Windows browser checks pass; real IME, screen reader, Mac/Firefox and real-user
+  acceptance remain open.
 - [ ] **Passage editor and word-timing redesign.** Review moving the global edit-mode and
   realignment controls into each passage's editor, and redesign how word timing is displayed
   and edited. Assess usability, keyboard access, draft preservation, timing accuracy, undo/history,
   partial or missing timing, and how edits interact with explicit alignment jobs; preserve the
   user's deferral of automatic second-pass alignment.
-  The saved-text playback preview and compact ordinal/word timing dropdown with Edit word are
-  implemented and verified; this does not complete the broader editor redesign.
+  The saved-text playback preview and compact ordinal/word timing dropdown with Edit word were
+  implemented and verified, and are now replaced by the cursor word-time boxes (ADR 0195); this
+  does not complete the broader editor redesign.
   The user rejected the duplicated preview in Text mode. Its removal, Text Replay and
   double-click opening Text are implemented, browser-verified and loaded in rc3.
   **Post-MVP replay in the Text editor:** follow/highlight spoken words directly within the
@@ -583,6 +793,13 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   blocking wording changes. ADR 0156 retains the older conservative generation for history.
   Automatic timing estimates and the broader redesign remain post-MVP;
   any future estimate must be labelled and distinct from aligned/verified timing.
+  **User design direction, 20 November (post-v2):** (1) the word-timing editor should look like
+  the ordinary Text editor, plus two boxes for the start and end time: the user puts the
+  cursor on a word and the boxes show that word's timing, editable in place (replacing the
+  ordinal/word dropdown). (2) The dotted underline of uncertain words should also show while
+  the Text editor is open, drawn in its highlighting surface behind the textarea; keep it
+  distinct from the spelling redesign's underline (for example dotted vs wavy) so both can
+  mark the same word. Preserve draft, caret, native Undo, typing focus and late-reply fences.
 - [x] **Realignment alignment-hint provenance — local child only.** ADR 0169 now seals the
   fresh host policy and invalidates whole-passage source alignment-fit hints after actual
   timing replacement/adoption, including omitted words. Exact legacy transforms, raw evidence,
@@ -605,14 +822,19 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   19 November the user chose every recommended answer of the
   [design proposal](docs/proposals/history-undo-2026-11-18.md). Slice 1 is implemented on
   `claude/undo-last-change` (ADR 0180, T150): toolbar **Undo last change** / **Redo** with live
-  labels, exact predecessor restoration of every saved content change, one Redo until the next
-  change, reach to the result's start; review marks stay outside Undo. It is hidden in the
-  MVP profile until the user decides whether MVP v2 shows it. Slice 2 (ADR 0181, T151): the
-  History change list with word-level "What changed", undone/redone tags and "Revert this
-  change" for proven older merges, splits and deletions, replacing the per-passage controls
-  when the feature is on. Slice 3 (ADR 0182, T152): a Branches tab drawing results as lanes
-  with branch points, merge edges, Working and undo markers. All three are hidden in MVP;
-  remaining: the user's choice for MVP v2 and a real-library look before loading.
+  labels and exact predecessor restoration of saved content changes. Redo can replay consecutive
+  undone changes until a new change is saved. Review marks stay outside Undo. Slice 2 (ADR 0181,
+  T151) provides the History change list, word-level "What changed", undone/redone tags and
+  "Revert this change" for proven older merges, splits and deletions. Slice 3 (ADR 0182,
+  T152) draws results as branches with Working and undo markers. The user's 20 November
+  decision exposes all three in MVP v2 and keeps the per-passage controls as well. Code is
+  implemented and the rc2 package preserves that profile; broader real-user/history workflow
+  acceptance remains separate. The earlier pending-choice/hidden-MVP description is obsolete.
+  **Passage Undo/Redo follow-up, 24 November — implemented locally (T166, ADR 0196).**
+  The row controls walk saved text, word-time and eligible speaker-assignment changes while
+  preserving edits in other passages. Split, merge and deletion bound that history. Labels
+  match the recording toolbar. Restore original stays available as a separate action. Include
+  this in the next colleague build after the held rebuild and fresh-install checks.
 - [ ] **Review passage re-transcription.** Discuss the value of the current function and whether
   it needs redesign, including provider and model choice, context around the passage, result
   comparison, user review and how it fits the overall editing workflow.
@@ -631,10 +853,29 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Preserve recording language, private vocabulary, draft/timing guards and saved opt-out. The
   [original design](docs/proposals/offline-spelling-2026-11-05.md) retains the wider future plan.
   On 12 November the user proposed underlines directly in the Text editor with on-demand
-  alternatives instead of the separate spelling panel. Right-click/keyboard access is the
-  recommendation; the trigger remains undecided. Preserve double-click selection, caret,
-  native Undo, timing and local-only processing; no UI integration is authorized by this proposal
-  and the hidden v2 port keeps the reviewed panel.
+  alternatives instead of the separate spelling panel.
+  - [x] **Redesign of 20 November** (branch claude/spelling-redesign, T156, still hidden in
+    MVP). The user asked for recording vocabulary inheriting project words, automatic
+    dictionary downloads in Activity and on-demand suggestions without fixed boxes, then chose
+    Ctrl+click (⌘+click on macOS; Alt+Enter from the keyboard), no line under the text box with
+    coloured words and a remembered Spelling checkbox, popover actions recording/project/Ignore,
+    and a Settings → Spelling tab. Implemented with [ADR 0186](docs/decisions/0186-recording-spelling-vocabulary.md)
+    and [ADR 0187](docs/decisions/0187-spelling-activity-downloads-and-on-demand-suggestions.md);
+    synthetic unit, browser and MVP checks pass (B488, B491 fixed before commit).
+  - [x] **Double-click trigger** (branch claude/spelling-trigger, 20 November): the user asked
+    again for suggestions by double-clicking a word. Double-click on a coloured word in the open
+    editor now opens the popover beside the browser's own word selection; other words do
+    nothing extra, the editor-opening double-click is unchanged, Alt+Enter stays and Ctrl+click
+    was removed (ADR 0187 update, B489, B490). Independent review of the redesign found no
+    further defect to fix; Chromium browser tests pin the trigger and the distinct
+    wavy/dotted styles on one word.
+  - [ ] Not yet verified: macOS double-click and Option+Enter, Firefox/Safari double-click
+    word selection and Undo after a chosen suggestion, screen-reader announcements, a
+    real-library look, real dictionaries with researchers, and downgrading to an earlier v2
+    build once recording words exist (ADR 0186 records that limit). Post-v2 work (user,
+    20 November): spelling stays hidden in v2 and the v2 → main merge does not wait for this
+    branch. A later uncertainty underline in the Text editor should use its own layer that
+    leaves pointer events to the textarea; ADR 0187 keeps spelling's wavy line below it.
 - [ ] **Passage re-transcription source and transfer.** The current passage action uses the
   browser-playback audio and can upload a whole prepared WAV to UCloud even for one passage.
   Plan original-source bounded clips, preserving timeline/word ownership, source evidence,
@@ -671,15 +912,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Refreshed merge/conflict previews now use their own fresh Working authority while keeping
   unsaved editor drafts separate; synthetic stale-refresh and closed-preview checks cover B376.
   See ADR 0133 for the scope of the synthetic evidence.
-- [ ] **Existing sole-result Working designation — current-schema gap.** The ADR 0141
-  implementation is present in main and called at startup, but its schema-18 guard refuses
-  the current schema 19. Eligible old sole results can still need explicit Set as working.
-  Extend/review current-schema eligibility without simply removing the guard; retain untouched-
-  passage evidence, restored-library refusal, job/authority fences, owned-folder snapshot
-  refresh/recovery and startup bounds. The 27 genuine-schema-18/current-schema-refusal checks
-  pass; current-schema support and real activation remain open. Job-finish re-evaluation was
-  not adopted. See the [release limitation](docs/verification-2026-11-10-mvp-release.md#remaining-acceptance).
-  [Earlier review](docs/proposals/existing-sole-working-review-2026-11-04.md).
+- [x] **Existing sole-result Working designation — current-schema implementation (T147).**
+  ADR 0179 extends the intentionally held ADR 0141 path to reviewed 18/18 and 19/19 pairs,
+  retaining untouched-result, restore, native-authority, owned-snapshot and startup fences.
+  Builder and independent adversarial evidence cover 171 cases; B454 adds unreadable-evidence
+  refusal without aborting the pass. This supersedes the earlier current-schema engineering
+  gap, not its historical MVP 0.1.0 limitation. Real-library acceptance remains separate;
+  automatic job-finish re-evaluation was not adopted. See [ADR 0179](docs/decisions/0179-existing-working-schema19.md)
+  and the [earlier review](docs/proposals/existing-sole-working-review-2026-11-04.md).
 - [ ] **NVivo and REFI-QDA (T88a/T88c).** The acceptance pack is synthetic; test actual
   transcript imports on Windows and Mac and implement/validate REFI-QDA codebook/project
   interchange for supported codes, passages and memos. Do not claim compatibility until tested.
@@ -747,8 +987,16 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   Activity asks per batch whether to use a full GPU, stating its higher credit use; nothing
   switches without that click (amends ADR 0124). Detecting "no MIG free" needs UCloud capacity
   or queue evidence before activation.
-  Full-GPU ask: proposed design only in [ADR 0184](docs/decisions/0184-native-full-gpu-ask.md)
-  (V233/T154; not implemented or reviewed). User decisions 19 November: ask as soon as two
+  Full-GPU ask: [ADR 0184](docs/decisions/0184-native-full-gpu-ask.md) remains unintegrated.
+  Supplied-data capacity/never-started helpers are implemented and reviewed synthetically;
+  [verification and activation limits](docs/verification-2026-11-20-native-gpu-helpers.md).
+  (V233/T154; activation remains separate). The unintegrated switching prototype still
+  needs a fail-closed MVP gate, terminal ownership and reviewed Continue authority.
+  The separate mock-only observer `093814c` exercises product, wallet and application
+  reads against synthetic fixtures. Its scoped suite passed 203 tests. Independent review
+  found a synthetic response stream/close error that needs a sanitized fallback.
+  Authenticated observation, a hard I/O deadline and live metadata remain open.
+  User decisions 19 November: ask as soon as two
   capacity reads agree the MIG is full and a full B200 is free (no queue-time threshold),
   preferably before the POST; a queued MIG is cancelled and proven never started first; Retry
   returns to the MIG; hidden in MVP v2. Read-only live evidence is permitted once implemented;
@@ -801,7 +1049,10 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   project creation stays accessible at narrow widths too; synthetic browser checks pass.
   Existing project-overview layout is unchanged; installed MVP remains unchanged.
 
-- [ ] **Deactivate direct OpenAI backend — decided 11 November.** Remove OpenAI-hosted
+- [x] **Deactivate direct OpenAI backend — decided 11 November.** **Active in MVP v2** (checked
+  23 November): the morning branch is merged into the v2 line and `require_service_available`
+  refuses new direct OpenAI requests in every profile; the "activation pending" text below is
+  historical. Real-user acceptance follows the human release checklist. Remove OpenAI-hosted
   service setup and models from ordinary user choices, and refuse new direct OpenAI
   transcription requests. Retain the shared OpenAI-compatible client/protocol code, endpoint
   configuration and relevant tests for a possible future UCloud transcription service using
@@ -813,7 +1064,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   pending. Local raw/chunk finalization and accepted-request drain
   remain available, while missing-part requests refuse without new direct service calls.
 
-- [ ] **First-launch front-page connection setup — requested 11 November.** Let a first-time
+- [x] **First-launch front-page connection setup — requested 11 November.** **Active in MVP v2**
+  (checked 23 November; merged with the morning branch). Real first-time-user acceptance
+  remains (human checklist). Let a first-time
   user enter the UCloud API key and an optional Hugging Face access token directly on the
   front page. Reuse the existing Settings validation and secure credential-storage flow;
   keep credentials editable later in Settings. This is first-use onboarding, not a prompt
@@ -822,8 +1075,14 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   inline download-capable Check call. Implementation/source review are complete on the
   isolated morning branch; complete backend coverage and 67 relevant browser cases pass,
   with no installed update. Activation and real-user acceptance remain open.
+  The tested local rc3 follow-up (B589) enables Turbo and Parakeet on first-use Save.
+  Turbo is initially selected and Large-v3 is unchecked. The wheel rebuild is held
+  while pilot testing continues.
 
-- [ ] **HF access and configured-model preparation in Activity.** Explicit nonempty primary
+- [x] **HF access and configured-model preparation in Activity.** **Active in MVP v2** (checked
+  23 November): saving a token returns 202 and starts the check in Activity; the user's preview
+  showed "Token valid · terms accepted" on 20 November. Live model download/preparation
+  acceptance remains. Explicit nonempty primary
   HF Save should check access and model terms, then prepare configured local/UCloud assets
   with cache reuse, Stop, token/plan fences and truthful partial states. Use the existing
   durable remote owner and a versioned model plan beyond base readiness; do not claim all
@@ -843,7 +1102,9 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   CBS Transcriber icon to Windows/macOS launchers. Implementation is undecided; this is an
   investigation candidate, not a committed feature or MVP requirement.
 
-- [ ] **Post-MVP connected-provider selectors.** Offer providers in project/recording
+- [x] **Post-MVP connected-provider selectors.** **Active in MVP v2** (checked 23 November):
+  selectors offer only providers whose saved connection passed its check (`connection_ready`).
+  Real-provider acceptance remains. Offer providers in project/recording
   transcription selectors only after successful configuration and a connection check in
   Settings. Fresh presets or missing credentials alone must not appear ready to use. Bind
   readiness to the saved connection; recheck after relevant settings/credential changes.
@@ -874,7 +1135,11 @@ and internal relative links updated. Test-result/cache removal was audited, not 
   workflow, inference provider and researcher review before implementation; preserve source
   transcripts and distinguish AI suggestions from approved coding. Summaries, aspect
   sentiment/stance and expanded NVivo exports remain separate planned parts of this roadmap.
-  [Roadmap](docs/ai-analysis-nvivo-roadmap.md).
+  [Roadmap](docs/ai-analysis-nvivo-roadmap.md). **21 November:** the user wants the smaller LLM
+  for this work hosted on the CBS Runtime once the Runtime is stable (see the CBS Runtime item);
+  the 20 November inference-tier context (1g MIG, full B200, UCloud AI platform tiers; a
+  model-independent coding engine behind an OpenAI-compatible SDK interface; access control and
+  safeguards) still awaits the rest of the user's text before a planning note is written.
 - [ ] **Automatic second-pass word alignment (T93a).** Explicitly deferred as later fine-tuning;
   do not add a default extra inference pass now.
 - [ ] **Hviske 5.3/6 engines (T89d).** Planned separate architecture support is explicitly held.

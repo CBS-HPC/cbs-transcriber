@@ -322,6 +322,34 @@ label {
   font-size: 11px;
   color: var(--muted);
 }
+/* A project being deleted in Activity is inactive: greyed and not openable (ADR 0190). */
+.project-link.deleting {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.project-link.deleting:hover {
+  background: transparent;
+}
+.project-link .project-tag {
+  margin-left: auto;
+  font-size: 11px;
+  font-style: italic;
+  white-space: nowrap;
+}
+.deletion-stages {
+  margin: 8px 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+.deletion-stages [data-stage-status="pending"] {
+  color: var(--muted);
+}
+.deletion-stages [data-stage-status="current"] {
+  font-weight: 600;
+}
+.deletion-stages [data-stage-status="done"]::marker {
+  color: var(--muted);
+}
 .sidebar-create {
   background: transparent;
   text-align: left;
@@ -1195,11 +1223,12 @@ html.busy * {
   min-height: 35px;
 }
 /* Undo last change / Redo (ADR 0180): a compact row under Versions, never widening it. */
-.result-controls > .change-steps {
+.editor-options > .change-steps {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+  margin-left: auto;
 }
 .change-steps .change-step {
   max-width: 240px;
@@ -1638,39 +1667,109 @@ select {
   gap: 9px;
   margin-left: auto;
 }
-/* Local spelling (ADR 0185): a panel below the open Text editor, never an overlay. */
+/* Local spelling (ADR 0185/0187): a remembered toggle in the editor toolbar, coloured
+   words in a layer behind the textarea and an on-demand suggestion popover. */
 .passage-spelling {
-  margin: 0.65rem 0;
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.passage-spelling .checkbox-label {
+.passage-editor-toolbar .passage-spelling-toggle {
   margin: 0;
+  cursor: pointer;
 }
-.spelling-issues,
-.spelling-dictionaries {
-  list-style: none;
-  padding: 0;
+.passage-spelling[data-spelling-state="issues"] .passage-spelling-toggle {
+  color: var(--cbs-chestnut);
 }
-.spelling-issues > li,
-.spelling-dictionaries > li {
-  border-bottom: 1px solid var(--line);
-  padding: 0.65rem 0;
+.passage-spelling [data-spelling-download] {
+  font-size: 11px;
+  min-height: 24px;
 }
-.spelling-issue-actions,
+.passage-spelling-overlay {
+  position: absolute;
+  inset: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 5px;
+}
+.passage-spelling-overlay-content {
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: 15px;
+  line-height: 1.8;
+  color: transparent;
+}
+/* Spelling is a red wavy line placed lower than the amber dotted uncertainty underline
+   (.uncertain-word, offset 3px), so both stay readable when one word has both. */
+.passage-spelling-overlay .spelling-flag {
+  color: transparent;
+  background: rgb(230 106 87 / 16%);
+  border-radius: 2px;
+  text-decoration: underline wavy var(--cbs-red);
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 6px;
+}
+.spelling-popover {
+  position: absolute;
+  z-index: 3;
+  max-width: min(360px, 100%);
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgb(36 46 112 / 18%);
+  font-size: 12px;
+}
+.spelling-popover-word {
+  margin: 0 0 6px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.spelling-popover .field-note {
+  margin: 4px 0;
+}
+.spelling-popover p:empty {
+  display: none;
+}
 .spelling-suggestions,
-.spelling-vocabulary-actions {
+.spelling-popover-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.35rem;
 }
-.spelling-dictionaries .field-note {
+.spelling-dictionaries {
+  list-style: none;
+  padding: 0;
+}
+.spelling-dictionaries > li {
+  border-bottom: 1px solid var(--line);
+  padding: 0.65rem 0;
+}
+#spelling-panel .field-note,
+#spelling-vocabulary-dialog .field-note,
+.spelling-popover .field-note {
+  float: none;
   display: block;
+  font-size: 11px;
+}
+.spelling-dictionaries .field-note {
+  margin: 2px 0;
+}
+.spelling-dictionary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
 }
 #spelling-vocabulary-dialog {
   width: min(540px, calc(100vw - 30px));
 }
-#spelling-vocabulary-text {
+#spelling-vocabulary-text,
+#spelling-vocabulary-project-words {
   width: 100%;
 }
 .passage-actions button {
@@ -1741,14 +1840,16 @@ select {
   background: transparent;
   isolation: isolate;
 }
-.passage-text-overlay {
+.passage-text-overlay,
+.passage-uncertainty-overlay {
   position: absolute;
   inset: 1px;
   overflow: hidden;
   pointer-events: none;
   border-radius: 5px;
 }
-.passage-text-overlay-content {
+.passage-text-overlay-content,
+.passage-uncertainty-overlay-content {
   padding: 12px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -1777,34 +1878,36 @@ select {
   gap: 10px;
   margin-top: 12px;
 }
-.passage-editor-toolbar label,
-.passage-word-fields label {
+/* ADR 0195: start/end of the word at the cursor, just below the Text editor. */
+.passage-word-times {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  margin: 8px 0 4px;
+}
+.passage-word-times label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--muted);
   font-size: 11px;
 }
-.editor-playback-preview {
-  margin: 10px 0;
+.passage-word-times input {
+  width: 6.5em;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 13px;
 }
-.editor-playback-preview .field-note {
-  margin: 4px 0;
+.passage-word-times input[aria-invalid="true"] {
+  border-color: var(--cbs-red);
+  outline-color: var(--cbs-red);
 }
-.editor-playback-scroll {
-  max-height: 7.5rem;
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-.editor-playback-text {
-  margin: 0;
-  white-space: pre-wrap;
+.word-times-status {
+  color: var(--muted);
+  font-size: 11px;
   overflow-wrap: anywhere;
-  line-height: 1.9;
-  font-size: 15px;
 }
 .export-choices {
   margin: 12px 0;
@@ -1866,41 +1969,17 @@ select {
 .manual-review-row button {
   white-space: nowrap;
 }
+/* ADR 0191: the reason for an automatic Needs review, in muted text beside the status. */
+.manual-review-row .review-reason {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
 .manual-review-row [role="status"],
 .manual-review-row [role="alert"] {
   max-width: 260px;
   font-size: 10px;
   overflow-wrap: anywhere;
-}
-.passage-word-fields {
-  display: grid;
-  grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(120px, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-.timing-word-choice > .button {
-  margin-top: 6px;
-  min-height: 28px;
-  padding: 4px 8px;
-  font-size: 11px;
-}
-.timing-word-choice [data-word-correction] {
-  margin-top: 6px;
-}
-@media (max-width: 640px) {
-  .passage-word-fields {
-    grid-template-columns: 1fr;
-  }
-}
-.passage-word-fields label {
-  align-items: stretch;
-  flex-direction: column;
-}
-.passage-word-fields input,
-.passage-word-fields select {
-  width: 100%;
-  min-width: 0;
-  font-size: 13px;
 }
 .passage-realign {
   display: flex;
@@ -2426,6 +2505,11 @@ select {
   margin: 10px 0;
   overflow-wrap: anywhere;
 }
+/* ADR 0191: a finished word-timing job's outcome reads before its worker message. */
+.job p.timing-outcome {
+  color: var(--ink);
+  font-weight: 600;
+}
 .job progress {
   display: block;
   width: 100%;
@@ -2609,6 +2693,8 @@ dialog .checkbox-label {
 }
 .settings-tabs {
   display: flex;
+  /* Narrow windows wrap tabs onto another line rather than widening the dialog (B597). */
+  flex-wrap: wrap;
   gap: 4px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 20px;
@@ -2744,10 +2830,7 @@ dialog .checkbox-label {
 .uncertainty-controls .field-note {
   float: none;
 }
-.review-flag {
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 10px;
+.manual-review-row select.review-status-automatic {
   font-weight: 600;
   color: #7a4b00;
   background: #fff1d6;

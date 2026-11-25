@@ -6,7 +6,7 @@ from browser_provider_support import mock_native_check
 from playwright.sync_api import expect
 from test_browser import local_app as local_app
 from test_browser import page as page
-from test_browser import provider_advanced, skip_first_use
+from test_browser import provider_advanced, settings_tabs, skip_first_use
 from test_native_model_profiles import raw_profile
 
 from cbs_transcriber.catalog import provider_catalog, ucloud_models
@@ -289,7 +289,7 @@ def test_deferred_families_preserve_advanced_policy_and_credentials(
     skip_first_use(page)
     page.locator("#settings-open").click()
     expect(page.locator("#settings-dialog")).to_be_visible()
-    expect(page.get_by_role("tab")).to_have_text(["UCloud", "Hugging Face", "Local Processing"])
+    expect(page.get_by_role("tab")).to_have_text(settings_tabs(page))
     expect(page.locator("#ucloud-vllm-setup")).not_to_be_visible()
     provider_advanced(page)
     expect(page.locator("#forget-hosting-keys")).not_to_be_visible()

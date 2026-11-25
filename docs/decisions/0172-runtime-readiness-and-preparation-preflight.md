@@ -38,6 +38,11 @@ not be blocked by this new-submission check. Absence is only a racy observation:
 exclusive lock acquisition, `.in-use`, known legacy-reader refusal and owned release remain
 authoritative. A lock appearing after preflight must still cause safe shell refusal.
 
+**23 November 2026 (B581):** A matching legacy reader recorded as SUSPENDED can resume
+and still blocks this preparation check. Exercise all three submission paths with the
+existing identity scope. This change is specific to the preflight reader test.
+[Verification](../verification-2026-11-23-runtime-reader-guard.md).
+
 Never infer reclaim authority from age, terminal owner, a missing Activity card or a successful
 metadata listing. Do not remove locks/cache, rewrite frozen jobs, alter generation settings,
 resubmit uncertain jobs or claim all ASR/speaker caches ready from a base stamp. Existing

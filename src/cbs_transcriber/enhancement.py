@@ -642,6 +642,34 @@ def unbounded(segment):
     return segment["start"] is None or segment["end"] is None
 
 
+def aligner_frames(seconds):
+    """Upper bound on the 20 ms frames the pinned wav2vec2 aligners see in a clip (ADR 0189).
+
+    Both pinned aligners (da/en) hop 320 samples at 16 kHz over a 400-sample receptive field.
+    One extra sample of slack keeps the bound generous for rounding at clip edges."""
+    samples = math.floor(seconds * 16000) + 1
+    return 1 if samples < 400 else (samples - 400) // 320 + 1
+
+
+def alignment_characters(text):
+    """Characters the aligner must place: interior spaces count, as WhisperX sends them."""
+    return len(" ".join(text.split()))
+
+
+def alignable(text, start, end):
+    """CTC alignment places at most one character per frame. A window with fewer frames than
+    characters can never be aligned, so running it would only report nothing (ADR 0189)."""
+    return alignment_characters(text) <= aligner_frames(end - start)
+
+
+def too_short_message(text, start, end):
+    return (
+        f"The audio this passage can be searched in ({end - start:.2f} s) is too short for its "
+        f"{alignment_characters(text)} characters: the word aligner needs about 20 ms of audio "
+        "per character, so word timing cannot be found there. The passage is unchanged."
+    )
+
+
 def joined_text(members):
     """One alignment text for adjacent passages, with each passage's character range."""
     text, ranges = "", []
@@ -653,14 +681,18 @@ def joined_text(members):
     return text, ranges
 
 
-def timing_units(source, segment_ids, options, duration, *, skip_invalid=False):
+def timing_units(
+    source, segment_ids, options, duration, *, skip_invalid=False, alignable_only=False
+):
     """Passage word timing (ADR 0056/0058): what to align, and the audio it may be found in.
 
     A bounded passage uses its own interval. A passage without its own start and end is aligned
     together with adjacent passages like it, searched for only between the neighbouring known
     times (or the recording's start/end). That window only limits the search: it is never
     stored as their timing, and uncertain words stay untimed. `skip_invalid` (Repair all)
-    leaves out passages that cannot be timed alone instead of refusing the whole request."""
+    leaves out passages that cannot be timed alone instead of refusing the whole request.
+    `alignable_only` (fresh requests, ADR 0189) also refuses windows with fewer aligner frames
+    than characters; re-derivation checks of frozen units keep the earlier rule."""
     if (
         options.execution != "local"
         or not options.align
@@ -674,7 +706,7 @@ def timing_units(source, segment_ids, options, duration, *, skip_invalid=False):
     position = {s["id"]: i for i, s in enumerate(segments)}
     if any(i not in position for i in segment_ids):
         raise ValueError("A selected passage does not belong to the saved result.")
-    units, covered = [], set()
+    units, covered, skipped = [], set(), set()
     for index in sorted({position[i] for i in segment_ids}):
         if index in covered:
             continue
@@ -721,16 +753,27 @@ def timing_units(source, segment_ids, options, duration, *, skip_invalid=False):
             or len(text.split()) > MAX_WINDOW_WORDS
             else None
         )
-        if refusal:
+        short = refusal is None and alignable_only and not alignable(text, start, end)
+        if refusal or short:
             if skip_invalid:
+                skipped.add("short" if short else "whole")
                 continue
-            raise ValueError(refusal)
+            raise ValueError(refusal or too_short_message(text, start, end))
         covered.update(range(first, last + 1))
         units.append({"ids": [s["id"] for s in members], "start": start, "end": end})
     if not units:
         raise ValueError(
-            "None of these passages can be timed on their own. Use Add word timing / speakers "
-            "for the whole result."
+            "None of these passages can be timed: the audio each one can be searched in is too "
+            "short for its text (the word aligner needs about 20 ms per character). They are "
+            "unchanged."
+            if skipped == {"short"}
+            else "None of these passages can be timed on their own. Use Add word timing / "
+            "speakers for the whole result."
+            + (
+                " The others' audio intervals are too short for their text."
+                if "short" in skipped
+                else ""
+            )
         )
     validate_input(source | {"segments": [segments[i] for i in sorted(covered)]}, options, duration)
     return units
@@ -766,12 +809,18 @@ def run_timing_units(queue, job, recording, options, source, units):
     folder = queue.store.directory(recording["id"]) / "enhancements" / job["id"]
     by_id = {s["id"]: s for s in source["segments"]}
     total = sum(len(unit["ids"]) for unit in units)
-    outputs, done = {}, 0
+    outputs, done, short = {}, 0, 0
     for index, unit in enumerate(units):
         if queue.cancel_event.is_set():
             raise media.Cancelled()
         members = [by_id[i] for i in unit["ids"]]
         text, ranges = joined_text(members)
+        if not alignable(text, unit["start"], unit["end"]):
+            # Frozen before ADR 0189: no aligner can place this text in its window. Leave the
+            # passages unchanged instead of loading models for a guaranteed empty result.
+            short += len(members)
+            done += len(members)
+            continue
         window = normalize_segments(
             [
                 {
@@ -825,27 +874,29 @@ def run_timing_units(queue, job, recording, options, source, units):
         done += len(members)
     params = job["params"]
     complete = sum(output["word_timing"] for output in outputs.values())
+    note = (
+        f" {short} of {total} passages were not aligned: the audio they can be searched in is "
+        "too short for their text (about 20 ms per character)."
+        if short
+        else ""
+    )
+    message = (
+        f"Complete word timing for {complete} of {total} passages.{note}"
+        if outputs
+        else "Word timing cannot be found in these passages: the audio they can be searched in "
+        "is too short for their text (about 20 ms per character). They are unchanged."
+        if short == total
+        else f"Word timing could not be found in these passages' audio.{note}"
+    )
     from . import timing_capture
 
     if timing_capture.enabled(job):
-        timing_capture.publish_output(
-            queue.store,
-            job,
-            {"passages": outputs},
-            f"Complete word timing for {complete} of {total} passages.",
-        )
+        timing_capture.publish_output(queue.store, job, {"passages": outputs}, message)
         queue.store.update_job(job["id"], progress=1)
         return
     if outputs:
         params["realign_output"] = {"passages": outputs}
-    queue.store.update_job(
-        job["id"],
-        params=params,
-        progress=1,
-        message=f"Complete word timing for {complete} of {total} passages."
-        if outputs
-        else "Word timing could not be found in these passages' audio.",
-    )
+    queue.store.update_job(job["id"], params=params, progress=1, message=message)
 
 
 def validate_input(source, options, duration):
@@ -936,7 +987,12 @@ def monitor_worker(process, folder, options, cancel, progress, *, persistent=Fal
                 )
             path = folder / "progress.json"
             if path.exists():
-                value = read_output(path)
+                try:
+                    value = read_output(path)
+                except (OSError, ValueError):
+                    # Progress is advisory. On Windows a file the worker is replacing can
+                    # refuse to open for a moment (B468); read it again on the next poll.
+                    value = None
                 stage = value.get("stage") if isinstance(value, dict) else None
                 if stage in STAGES and stage != previous:
                     progress(STAGES[stage])

@@ -204,8 +204,13 @@ def test_bounded_alignment_retains_exact_scope_without_asr_and_routes_copied_lan
     assert not list(env.folder.glob("aligned-*.json"))
     assert not list(env.folder.glob("recognition-*.json"))
     assert not (env.folder / "transcription.json").exists()
-    assert [event["stage"] for event in env.progress] == ["loading", "aligning", "complete"]
-    assert [event["fraction"] for event in env.progress] == [0.05, 0.6, 1]
+    assert [event["stage"] for event in env.progress] == [
+        "loading",
+        "aligning",
+        "aligning",
+        "complete",
+    ]
+    assert [event["fraction"] for event in env.progress] == [0.05, 0.3, 0.6, 1]
     metadata = worker.clip_alignment_metadata(
         env.folder, request=env.request, require_alignment=True
     )

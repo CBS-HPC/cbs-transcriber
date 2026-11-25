@@ -90,4 +90,4 @@ def test_delayed_hints_do_not_replace_a_focused_pristine_edit(page, local_app):
     expect(input_).to_have_value("Alpha")
     assert input_.evaluate("(input) => input.selectionStart") == 2
     page.locator("#passage-0").get_by_role("button", name="Cancel", exact=True).click()
-    expect(page.locator("#passage-0 .review-flag")).to_have_count(1)
+    expect(page.locator("#passage-0.review")).to_have_count(1)

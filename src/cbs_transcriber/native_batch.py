@@ -20,6 +20,7 @@ from .store import now
 from .transcripts import MAX_TRANSCRIPT_BYTES, parse_transcript
 
 TERMINAL = {"SUCCESS", "FAILURE", "EXPIRED", "ABORTED", "CANCELLED", "SUSPENDED"}
+DISCARD_TERMINAL = TERMINAL - {"SUSPENDED"}
 # Downloads and early output reads keep four transfers (bounded transcript buffers). Uploads
 # follow Settings → UCloud "Files uploaded at once per batch", read when a batch starts.
 TRANSFER_WORKERS = 4
@@ -612,8 +613,193 @@ def record_deleted_members(store, identifier, job_ids):
     )
 
 
+def _batch_in(db, identifier):
+    from .store import Store
+
+    return Store._native_batch(
+        db.execute("SELECT * FROM native_batch_runs WHERE id=?", (identifier,)).fetchone()
+    )
+
+
+def _merge_run_in(db, batch, update):
+    batch["params"]["ucloud_run"].update(update)
+    db.execute(
+        "UPDATE native_batch_runs SET params=?,updated=? WHERE id=?",
+        (json.dumps(batch["params"]), now(), batch["id"]),
+    )
+    return _batch_in(db, batch["id"])
+
+
+def confirm_release_in(db, identifier, *, target, deleted_job_ids):
+    """confirm_release inside the caller's open writer transaction (ADR 0190).
+
+    A project deletion task commits the decision with its logical Delete: Keep, failure or an
+    early close leaves no release decision. The remote steps run only after that commit.
+    """
+    from . import restored_owners
+
+    restored_owners.require_owned(db, "native_batch", identifier)
+    batch = _batch_in(db, identifier)
+    if batch["state"] in {"queued", "running"}:
+        raise ValueError("Stop the UCloud batch before releasing its folder.")
+    if not set(deleted_job_ids) <= {member["job_id"] for member in batch["members"]}:
+        raise ValueError("The deleted files do not belong to this UCloud batch.")
+    run = batch["params"].get("ucloud_run", {})
+    update = {
+        "release_decision": run.get("release_decision")
+        or {"kind": "deletion", "decided_at": now(), "target": target},
+        "deleted_members": _deleted_list(run, deleted_job_ids),
+        "cancel_requested": True,
+    }
+    if run.get("cleanup_state") not in native.CLEANED and (
+        run.get("owned_folder") or run.get("root_created")
+    ):
+        update.update(cleanup_state="pending", cleanup_stage="release_confirmed")
+    return _merge_run_in(db, batch, update)
+
+
+def record_deleted_members_in(db, identifier, job_ids):
+    """record_deleted_members inside the caller's open writer transaction (ADR 0190)."""
+    from . import restored_owners
+
+    restored_owners.require_owned(db, "native_batch", identifier)
+    batch = _batch_in(db, identifier)
+    if not set(job_ids) <= {member["job_id"] for member in batch["members"]}:
+        raise ValueError("The deleted files do not belong to this UCloud batch.")
+    run = batch["params"].get("ucloud_run", {})
+    return _merge_run_in(db, batch, {"deleted_members": _deleted_list(run, job_ids)})
+
+
+def _discardable(batch):
+    run = batch["params"].get("ucloud_run", {})
+    eligible = (
+        batch["state"] in {"failed", "cancelled", "interrupted"}
+        and run.get("remote_state") in DISCARD_TERMINAL
+        and run.get("job_id")
+        and not uncertain(run)
+        and sealed(batch)
+        and run.get("folders_created") is True
+        and run.get("cleanup_state") not in native.CLEANED
+        and not run.get("release_decision")
+    )
+    if not eligible:
+        return False
+    try:
+        return run.get("owned_folder") == folder_for(batch)
+    except ValueError:
+        # Activity can still display legacy owners that cannot be safely discarded.
+        return False
+
+
+def _discard_preview_in(db, batch):
+    if not _discardable(batch):
+        return None
+    gone = _deleted(db, batch) | dropped(batch)
+    expected = {
+        member["job_id"]: member["recording_id"]
+        for member in batch["members"]
+        if member["job_id"] not in gone
+    }
+    rows = db.execute(
+        "SELECT j.id,j.recording_id,j.state,j.updated,"
+        "(SELECT id FROM transcript_results WHERE job_id=j.id) AS saved "
+        "FROM jobs j WHERE j.id IN (SELECT value FROM json_each(?)) AND j.kind='transcribe' "
+        "AND json_extract(CASE WHEN json_valid(j.params) THEN j.params END,'$.native_batch_id')=? "
+        "AND json_type(CASE WHEN json_valid(j.params) THEN j.params END,'$.input_intent') IS NULL "
+        "ORDER BY j.id",
+        (json.dumps(list(expected)), batch["id"]),
+    ).fetchall()
+    if {row["id"]: row["recording_id"] for row in rows} != expected or any(
+        row["state"] not in {"failed", "cancelled", "interrupted", "completed"} for row in rows
+    ):
+        raise ValueError(
+            "The batch files changed. Wait for the batch to finish and refresh Activity."
+        )
+    saved = sum(row["saved"] is not None for row in rows)
+    if saved == len(rows):
+        return None
+    preview = {
+        "remote_job_id": batch["params"]["ucloud_run"]["job_id"],
+        "folder": folder_for(batch),
+        "saved_count": saved,
+        "unsaved_count": len(rows) - saved,
+    }
+    preview["fingerprint"] = hashlib.sha256(
+        json.dumps(
+            [
+                batch["id"],
+                batch["updated"],
+                batch["params"]["settings"],
+                preview,
+                [tuple(row) for row in rows],
+            ],
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    return preview
+
+
+def discard_preview(store, identifier):
+    from . import restored_owners
+
+    with store.connection() as db:
+        db.execute("BEGIN")
+        restored_owners.require_owned(db, "native_batch", identifier)
+        return _discard_preview_in(db, _batch_in(db, identifier))
+
+
+def confirm_discard(store, identifier, fingerprint):
+    """Freeze a separate Trash decision; callers hold the whole owner control reservation."""
+    from . import restored_owners
+
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        restored_owners.require_owned(db, "native_batch", identifier)
+        batch = _batch_in(db, identifier)
+        run = batch["params"].get("ucloud_run", {})
+        decision = run.get("release_decision")
+        if (
+            isinstance(decision, dict)
+            and decision.get("kind") == "discard"
+            and decision.get("fingerprint") == fingerprint
+        ):
+            return
+        preview = _discard_preview_in(db, batch)
+        if preview is None or preview["fingerprint"] != fingerprint:
+            raise ValueError("The batch changed. Use Retry remote cleanup to review it again.")
+        stamp = now()
+        _merge_run_in(
+            db,
+            batch,
+            {
+                "release_decision": {**preview, "kind": "discard", "decided_at": stamp},
+                "cleanup_state": "pending",
+                "cleanup_stage": "release_confirmed",
+                "cleanup_error": None,
+                "cleanup_error_code": None,
+                "cleanup_http_status": None,
+                "cancel_requested": True,
+            },
+        )
+        db.execute(
+            "UPDATE native_batch_runs SET state='cancelled',message=?,updated=? WHERE id=?",
+            ("Batch discarded. Saved transcripts kept.", stamp, identifier),
+        )
+        db.execute(
+            "UPDATE jobs SET state='cancelled',message=?,updated=? WHERE state IN "
+            "('failed','cancelled','interrupted') AND json_extract(CASE WHEN json_valid(params) "
+            "THEN params END,'$.native_batch_id')=? AND id IN (SELECT value FROM json_each(?))",
+            (
+                "Batch discarded.",
+                stamp,
+                identifier,
+                json.dumps([m["job_id"] for m in batch["members"]]),
+            ),
+        )
+
+
 def release_info(batch):
-    """Activity projection of a Delete-consented release; no credentials or text bodies."""
+    """Activity projection of an authorized release; no credentials or text bodies."""
     run = batch["params"].get("ucloud_run", {})
     decision = run.get("release_decision")
     if not isinstance(decision, dict):
@@ -623,7 +809,7 @@ def release_info(batch):
     return {
         "owner_kind": "native_batch",
         "id": batch["id"],
-        "kind": "deletion",
+        "kind": "discard" if decision.get("kind") == "discard" else "deletion",
         "target_kind": target.get("kind")
         if target.get("kind") in {"project", "recording"}
         else None,
@@ -669,7 +855,9 @@ def retained_activity(store):
         run = batch["params"].get("ucloud_run", {})
         release = release_info(batch)
         label = (
-            "UCloud cleanup for a deleted recording"
+            "UCloud cleanup for a discarded batch"
+            if release["kind"] == "discard"
+            else "UCloud cleanup for a deleted recording"
             if release["target_kind"] == "recording"
             else "UCloud cleanup for a deleted project"
         )
@@ -831,6 +1019,11 @@ def status_fields(store, job, *, connection=None):
         "ucloud_submission_uncertain": uncertain(run),
         "ucloud_stop_requested": bool(run.get("termination_requested")),
         "ucloud_cancel_requested": bool(run.get("cancellation_requested")),
+        "ucloud_batch_discardable": _discardable(batch)
+        and any(
+            m["state"] in {"failed", "cancelled", "interrupted"} and m["result_id"] is None
+            for m in members.values()
+        ),
         "remote_release": release_info(batch),
     }
 
@@ -846,8 +1039,7 @@ def retry_batch(queue, job, replace=False):
             raise ValueError("This UCloud batch cannot be retried while work is active.")
         if batch["params"].get("ucloud_run", {}).get("release_decision"):
             raise ValueError(
-                "This UCloud batch's folder was released when its recordings were deleted. "
-                "Start a new run instead."
+                "This UCloud batch was released. Select recordings to start a new transcription."
             )
         settings = providers.Settings.model_validate(batch["params"]["settings"])
         members = _surviving_members(queue.store, batch)

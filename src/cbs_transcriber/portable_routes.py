@@ -18,7 +18,11 @@ from starlette.responses import JSONResponse
 
 from . import libraries, portable_cloud, portable_retention, portable_simple, portable_transport
 from .portable_capture import CaptureGate, backup_volume_hint, capture_library, captures
+from .portable_capture import verify_capture as verify_receipt
 from .portable_restore import restore_library
+
+# A server-owned background backup takes the capture admission itself (ADR 0192).
+CAPTURE_PATHS = frozenset({"/api/library/portable-backups", "/api/library/backup-tasks"})
 
 _RESTORE_INDEX_LOCK = threading.RLock()
 
@@ -197,7 +201,16 @@ def _restore_index(store, identifier, binding):
                 temporary.unlink(missing_ok=True)
 
 
-def install(app, store, queue, credentials, *, mutation_allowed=None, capture_guard=None):
+def install(
+    app,
+    store,
+    queue,
+    credentials,
+    *,
+    mutation_allowed=None,
+    capture_guard=None,
+    mutation_exempt=None,
+):
     gate = CaptureGate()
     # Blocked admission must leave endpoint workers free to drain earlier writes.
     admission_limiter = anyio.CapacityLimiter(1)
@@ -205,9 +218,11 @@ def install(app, store, queue, credentials, *, mutation_allowed=None, capture_gu
 
     @app.middleware("http")
     async def mutation_admission(request, call_next):
-        capture = request.method == "POST" and request.url.path == "/api/library/portable-backups"
+        capture = request.method == "POST" and request.url.path in CAPTURE_PATHS
         mutation = request.method in {"POST", "PUT", "PATCH", "DELETE"}
-        if not mutation or capture:
+        # A deletion task's exact Keep signal must reach it while staging excludes writes.
+        exempt = mutation_exempt is not None and mutation_exempt(request.url.path)
+        if not mutation or capture or exempt:
             return await call_next(request)
         # Waiting on a Condition must never block the serving event loop. Shield acquisition
         # so cancellation cannot leave an acquired mutation slot without its finalizer.
@@ -253,28 +268,7 @@ def install(app, store, queue, credentials, *, mutation_allowed=None, capture_gu
     def verify_capture(backup_id: str):
         # The creator reference is written before publication. Its presence alone is not
         # evidence that the package was completely published or is still intact.
-        portable_transport._hex(backup_id, 32)
-        receipt = next((item for item in captures(store) if item["backup_id"] == backup_id), None)
-        if receipt is None:
-            raise ValueError("No saved backup receipt exists for this library.")
-        folder = receipt.get("folder")
-        if (
-            not isinstance(folder, str)
-            or not Path(folder).is_absolute()
-            or Path(folder).name != "portable-" + backup_id
-        ):
-            raise ValueError("The saved backup receipt has an invalid folder.")
-        observation = portable_transport.inspect_transport(
-            folder, expected_commit_sha256=receipt["commit_sha256"]
-        )
-        if (
-            observation["backup_id"] != backup_id
-            or observation["manifest_sha256"] != receipt.get("manifest_sha256")
-            or observation["file_mapping_count"] != receipt.get("files")
-            or observation["legacy_gap_count"] != receipt.get("legacy_gaps")
-            or observation["unique_object_bytes"] != receipt.get("unique_bytes")
-        ):
-            raise ValueError("The backup does not match its saved receipt.")
+        receipt = verify_receipt(store, backup_id)
         return {
             **receipt,
             "scope": "whole_library",

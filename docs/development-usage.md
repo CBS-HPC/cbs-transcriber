@@ -215,3 +215,11 @@ coverage gaps and rate assumptions. If a cumulative milestone view is useful, la
 cumulative and do not add it to phase totals. Preserve the original release baseline unless a
 documented reconciliation correction is needed. Keep measured usage distinct from estimates
 and leave missing Claude or billing values pending until their owner supplies evidence.
+
+## Unmeasured night continuation, 20-21 November 2026
+
+Local work continued on `codex/night-post-v2-20261120` through the timed Claude handoff,
+including parallel Codex agents. This work remains outside the measured token cutoffs above.
+The stopped accounting audit was not resumed; no new token, credit or monetary total is
+asserted. Keep the fixed MVP baseline and cumulative checkpoints unchanged. A later scoped,
+deduplicated accounting update is still needed; Claude usage remains assigned to Claude.

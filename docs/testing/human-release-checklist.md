@@ -15,15 +15,17 @@ the user's approval each time; checks marked **later** belong to features still 
 
 ### H1 · Fresh install on a clean Windows PC
 
-- **Do:** On a Windows x64 PC without the app, follow README "Install and start" with the
-  release wheel and constraints file; start `cbs-transcriber`.
+- **Do:** On a Windows x64 PC without the app, follow README "Install and start" for the
+  local `App/.venv` wheel and matching constraints route. Start the exact environment
+  Python with `-m cbs_transcriber --profile mvp`; no app executable on PATH is required.
 - **Pass when:** Installation finishes without changing Conda or global PATH, the browser opens
   at http://127.0.0.1:8765, and a short recording can be uploaded, played and exported.
 - **Status:** Not run. (MVP 0.1.0 installed on the developer PC only.)
 
 ### H2 · Desktop and Start menu shortcut on Windows
 
-- **Do:** `cbs-transcriber --create-shortcut --shortcut-location desktop --profile mvp`, then
+- **Do:** Use that installation's exact environment Python with
+  `-m cbs_transcriber --create-shortcut --shortcut-location desktop --profile mvp`, then
   double-click it; repeat without a location for the Start menu.
 - **Pass when:** The shortcut starts the installed app with the MVP profile and the same
   library; creating it again refuses to overwrite.
@@ -53,9 +55,11 @@ the user's approval each time; checks marked **later** belong to features still 
 
 ### H6 · Uninstall
 
-- **Do:** `uv tool uninstall cbs-transcriber`.
-- **Pass when:** The tool is gone; libraries, project folders and saved credentials remain, as
-  the uninstall guide says.
+- **Do:** Follow `docs/uninstall.md` for the actual installation type. The default local
+  `App/.venv` route removes only its stopped App installation and its launcher; an older
+  uv-tool installation instead uses `uv tool uninstall cbs-transcriber`.
+- **Pass when:** That installation is gone; sibling Library/Projects, originals, backups
+  and credentials remain as the guide specifies. Never remove the whole parent folder.
 - **Status:** Not run.
 
 ## UCloud batches
@@ -67,8 +71,12 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** Without pressing Retry, Activity picks the same batch up again, follows it and
   saves each result once; the UCloud working folder is cleaned up afterwards.
 - **Why human:** Startup reconnect (T141, ADR 0174) is new in v2. On 12 November the overnight
-  batch needed an explicit Retry; this preview is the reconnect's first real use.
-- **Status:** Not run.
+  batch needed an explicit Retry.
+- **Status:** Passed 23 November 2026 on Windows 11, full-profile source code at
+  `9575be8`, in the isolated test library. Three public FLEURS clips (23 seconds total)
+  were queued on a B200 1g MIG. The app closed in queue, then reopened to the same
+  allocation without Retry. Each recording received one result and one version. The
+  batch's working folder disappeared from the UCloud listing after Trash settlement.
 
 ### H8 · Closing the app while files upload (paid if resubmitted)
 
@@ -76,14 +84,21 @@ the user's approval each time; checks marked **later** belong to features still 
   Start again and press Retry on the interrupted batch.
 - **Pass when:** Only files without a confirmed upload are uploaded again (a half-uploaded file is
   replaced), one UCloud job is submitted, and no file is transcribed twice.
-- **Status:** Not run.
+- **Status:** Passed 23 November 2026 on the H7 setup. The app closed with the first
+  clip uploaded and the second partially uploaded. Explicit Retry reused the first,
+  replaced the partial upload and sent the third. UCloud received one submission for
+  this batch. Each recording received one result and the working folder moved to Trash.
 
 ### H9 · Closing the app while results download
 
 - **Do:** Stop the app while Activity reports results being saved; start again.
 - **Pass when:** Saved files stay saved, the rest are fetched and saved once, and nothing in the
   project is half-written.
-- **Status:** Not run.
+- **Status:** Passed 23 November 2026 on the H7 setup. During shutdown, an in-progress
+  save finished and a third recording still downloading remained recoverable. On
+  restart the same allocation saved the third result automatically. The two saved
+  results kept one version each. The working folder moved to Trash. An additional
+  attempt finished before shutdown and did not exercise the interruption.
 
 ### H10 · Early uploads, upload limits and plain status (paid)
 
@@ -101,6 +116,26 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** The UCloud job ends, credit use stops, and the working folder moves to UCloud
   Trash; results already saved stay.
 - **Status:** Not run on v2.
+
+### H11a · Failed transcription on the project page
+
+- **Do:** If a transcription in the pilot fails, check the recording on its project page.
+  Stop it from Activity if Stop is offered, or remove its finished card when it can be dismissed.
+- **Pass when:** The recording without a transcript shows **Failed - See Activity**. Once the
+  job is cancelled or its entry is dismissed, it returns to **Ready to transcribe**. Other
+  recordings in the batch keep their own status.
+- **Status:** Not run in the packaged pilot.
+
+### H11b · Confirmed remote cleanup of an ended batch
+
+- **Do:** In a disposable pilot batch with unsaved outputs you can discard, choose **Retry
+  remote cleanup**. Review and dismiss the warning first. Confirm only when you intend to
+  discard those outputs and the working folder.
+- **Pass when:** The warning identifies the exact job and unsaved count. Declining keeps
+  recovery available. Confirmation keeps local originals and saved results, and the exact
+  batch folder moves to UCloud Trash when the job is verified ended. The resolved card can
+  be cleared from Activity.
+- **Status:** Not run in the packaged pilot.
 
 ### H12 · Delete a recording that is in a running batch (paid)
 
@@ -132,6 +167,31 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** Media preparation finishes, the app stays usable, and memory/CPU stay reasonable.
 - **Status:** Not run.
 
+### H15a · Passage word timing on a real result (Add word timing / Repair all)
+
+- **Do:** On Windows, open a real result with untimed passages (for example "Per og Kim") and
+  use Repair all, then Add word timing on one passage whose interval is plausible.
+- **Pass when:** Passages whose saved interval is far too short for their text show "Too short
+  to time" and are not sent; Repair all runs every remaining unit without the "Local file
+  operation failed" error; Activity moves from "Loading local models…" to "Aligning words…";
+  timing appears for passages where speech is found, and the job message names any passages
+  left unchanged. Only synthetic tests and an offline replay of the 20 November job cover this.
+- **Status:** Not run.
+
+### H15c · Word timing in review and Activity (later, post-v2)
+
+- **Do:** On a copy of a real library, open a word-timing result with untimed passages and a
+  speakers-only result. Choose Show → Needs review and use Next to review. Mark one untimed
+  passage Checked and another Not checked. Then use Add word timing on one passage and Repair
+  all, keep a passage editor open while one finishes, close it, and open Activity.
+- **Pass when:** Untimed passages show Needs review with "word timing missing", the
+  speakers-only result shows none; your own Checked/Not checked marks stay; a newly timed
+  passage shows Needs review with "timing added", even if it was Checked; the Repair all count
+  drops as soon as a passage is sent; Activity keeps each finished timing job with "Word timing
+  added to passage N", "Ready, added when…", "Not added: the passage changed" or its reason,
+  until Clear finished. Only synthetic tests cover this (ADR 0191).
+- **Status:** Not run. Implemented 20 November on an unmerged post-v2 branch.
+
 ## Editing and review
 
 ### H15b · Very large library stress test (later, after MVP v2)
@@ -147,7 +207,13 @@ the user's approval each time; checks marked **later** belong to features still 
   outside the repository and never in routine tests. Candidates to check: LibriSpeech (many
   short read clips), AMI meetings (long, several speakers), Earnings-22 (long calls),
   VoxPopuli or Common Voice (very many clips).
-- **Status:** Not run. Requested 20 November; not needed before the MVP v2 release.
+- **Status:** The 23 November synthetic subset exercised a 1,204-recording project and
+  1,800-passage transcript in Chromium. Listing recordings took 9.98–16.29 seconds at
+  the API in the first baseline trials. Later matched Chromium trials showed controls
+  ready with every card at a median of 1.38 seconds after the fix, compared with 8.59
+  seconds on the immediate baseline. Public speech, end-to-end ingestion and larger
+  backup/restore/deletion acceptance are open.
+  [Measurements](../verification-2026-11-23-rc3-scale.md).
 
 ### H16 · Editing a long real transcript
 
@@ -187,7 +253,11 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Do:** Export a project with "include original recordings" totalling several GB.
 - **Pass when:** The browser download completes, the ZIP opens, and the app stays usable while it
   is prepared.
-- **Status:** Not run.
+- **Status:** A Windows synthetic 540 MB archive downloaded through Chromium. The test
+  verified all 1,204 original files, 1,203 transcripts and the expected skip. Export
+  preparation continued after closing the dialog, and explicit cancellation cleared
+  a separate run's staging. Multi-GB and real-device acceptance remain open.
+  [Measurements](../verification-2026-11-23-rc3-scale.md).
 
 ## Library, backup and restore
 
@@ -195,7 +265,29 @@ the user's approval each time; checks marked **later** belong to features still 
 
 - **Do:** Make a backup from Library, restore it into a new library, switch to it; repeat on a Mac.
 - **Pass when:** The restored library opens with every project, transcript, version and note.
-- **Status:** Not run on a real library.
+- **Status:** Windows local capture and restore passed 23 November on the isolated public-clip
+  library. The new library was registered in the test profile. Row comparisons confirmed four
+  projects, 12 recordings/results/versions and 16 note versions. All 36 mapped files matched their
+  captured hashes. Interactive library switching and macOS remain open. UCloud upload paused on an
+  unapproved transfer origin. The local backup and journal are retained for investigation.
+  [Verification](../verification-2026-11-23-rc3-backup-and-reconnect.md).
+- **Also (backup in Activity, ADR 0192):** on a copy of a real library with several GB of
+  recordings, (1) open Settings → Backup and choose **Make backup**, close Settings and follow
+  Activity: Waiting, Copying the library database, Listing files, Copying files with counts,
+  Checking the copy, Saving the backup. Try an edit meanwhile (it should wait, not fail).
+  (2) Start another backup and press **Stop backup** while files are copied. (3) Start one to
+  a USB disk and unplug it mid-copy; start one to a OneDrive-synced folder. (4) Close the app
+  (Ctrl+C) during copying, start it again; then close it while "Saving the backup" if you can
+  catch it. (5) Save the receipt from a finished card and check it in Library → Backups.
+- **Pass when:** (1) ends "Backup saved and checked" with the folder named, the receipt
+  matches, and the edit is saved after the copy. (2) ends "Backup stopped" with no new
+  `portable-…` folder and no leftover `.portable-….partial`. (3) ends failed or stopped with
+  a plain reason and any leftover folder named on the card. (4) shows "Backup not finished"
+  with any incomplete copy named and removable; a backup closed while saving asks for
+  **Check again**, which confirms it or names its folders. Nothing restarts by itself.
+- **Status (Activity):** Windows capture passed for the 12-original test library after correcting
+  the directory witness (B580). The broader backend gate passed. Large libraries, slow/removable
+  and cloud-synced folders, process crashes and macOS are open.
 
 ### H22 · Switching libraries and two browser tabs
 
@@ -210,13 +302,25 @@ the user's approval each time; checks marked **later** belong to features still 
 - **Pass when:** Blockers are shown and explained; nothing outside the library is touched.
 - **Status:** Not run.
 
-### H24 · Project deletion in Activity (later)
+### H24 · Project deletion in Activity
 
-- **Do:** After the post-v2 change, delete a project with many recordings, press Keep project
-  during "Stopping jobs", then repeat and close the app before the point of no return.
-- **Pass when:** Only that project is inactive, Keep project keeps it, and closing the app early
-  keeps it too (decided 20 November).
-- **Status:** Not built yet. The v2 dialog can still be closed during the final step.
+- **Do:** On a build with ADR 0190, use a throwaway project with many recordings (some with
+  running local jobs, and one with a UCloud batch if available). (1) Delete it: the dialog
+  should close at once and Activity should show "Deleting project …" with Stopping jobs,
+  Removing from the library and Removing files. Try to open the project, its recordings and a
+  second browser tab inside it. (2) Repeat with a second project and press **Keep project**
+  during "Stopping jobs". (3) Repeat and close the app (Ctrl+C) during "Stopping jobs", then
+  start it again. (4) On Windows, hold a file of the project open in another program while
+  deleting, then retry the local cleanup card.
+- **Pass when:** Only the deleting project is greyed "Deleting…" and cannot be opened or
+  changed, while other projects keep working; the tab inside it returns to the project list.
+  (1) ends with "Project deleted." and its folders gone (and the UCloud working folder in
+  UCloud Trash). (2) keeps the project and its files; jobs already stopped stay stopped and
+  nothing restarts. (3) keeps the project and Activity says the deletion did not finish;
+  nothing resumes. (4) keeps a Local file cleanup card until Retry succeeds.
+- **Status:** Not run. Implemented on `claude/deletion-activity` (ADR 0190) with synthetic
+  backend and Chromium tests only; real Windows/macOS file locks, app shutdown and UCloud
+  Trash are unverified.
 
 ## Accessibility and browsers
 

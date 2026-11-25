@@ -14,13 +14,25 @@ from .app import create_app, create_chooser_app
 from .storage import default_project_parent, legacy_library_root
 from .store import SCHEMA_VERSION
 
-# A paused media stream must not hold a library switch open; ordinary Ctrl+C is unchanged.
+# A paused media stream must not hold a library switch open.
 SWITCH_DRAIN_SECONDS = 5
+# Nor Ctrl+C: an open browser tab (e.g. a paused audio stream) otherwise kept uvicorn waiting
+# for its connection forever, and on Python 3.12+ even a second Ctrl+C still waited in
+# asyncio's Server.wait_closed (B480). After this bound, uvicorn cancels the remaining request
+# tasks and the app's own lifespan shutdown still drains workers and releases the library.
+SHUTDOWN_DRAIN_SECONDS = 10
 
 
 def server_for(app, port):
     return uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", access_log=False)
+        uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+            access_log=False,
+            timeout_graceful_shutdown=SHUTDOWN_DRAIN_SECONDS,
+        )
     )
 
 

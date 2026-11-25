@@ -325,10 +325,16 @@ $("#first-use-setup").addEventListener("submit", async (event) => {
       firstUse.saving = version;
       status.textContent = "Saving the UCloud connection…";
       renderFirstUse();
+      const models = state.modelPresets.ucloud_transcriber.models;
       await api("/providers", {
         method: "POST",
         body: {
           ...draft,
+          enabled_models: models
+            .filter((model) => model.default_enabled !== false)
+            .map((model) => model.model),
+          enabled_models_touched: models.map((model) => model.model),
+          enabled_model_versions: {},
           ucloud_transcriber: result.setup,
           api_key: key,
           remember,
@@ -435,6 +441,7 @@ function acceptRecording(context, recording) {
 let nameResolver = null,
   wordContext = null,
   editorReplayId = null,
+  // Always false since the Edit word pane was replaced (ADR 0195); other modules read it.
   timedWordSaving = false,
   passageTextSaving = false,
   passageRealignChoice = null,
@@ -817,7 +824,7 @@ function manualTranscriptEdit(path, options) {
   const method = (options.method || "GET").toUpperCase();
   return (
     (method === "PATCH" &&
-      /^\/recordings\/[^/]+\/(?:segments\/[^/]+(?:\/(?:speaker|edit-v[123]))?|speakers)$/u.test(
+      /^\/recordings\/[^/]+\/(?:segments\/[^/]+(?:\/(?:speaker|edit-v[1-4]))?|speakers)$/u.test(
         path,
       )) ||
     (method === "POST" &&
@@ -827,17 +834,17 @@ function manualTranscriptEdit(path, options) {
   );
 }
 function manualEditTarget(path, method, body = {}) {
-  // A passage editor's explicit Working choice covers its text and word-timing
-  // tabs; both save to the same revision-fenced passage.
+  // A passage editor's explicit Working choice covers its text and word times
+  // (ADR 0195); every edit-vN route saves to the same revision-fenced passage.
   const mode =
     method === "PATCH" &&
-    /^\/recordings\/[^/]+\/segments\/[^/]+(?:\/edit-v[123])?$/u.test(path) &&
+    /^\/recordings\/[^/]+\/segments\/[^/]+(?:\/edit-v[1-4])?$/u.test(path) &&
     ["word", "mapped_word", "timed_word"].includes(body.mode)
       ? "free"
       : body.mode;
   return JSON.stringify([
     method,
-    path.replace(/(\/segments\/[^/]+)\/edit-v[123]$/u, "$1"),
+    path.replace(/(\/segments\/[^/]+)\/edit-v[1-4]$/u, "$1"),
     mode ?? null,
     body.speaker ?? null,
     body.direction ?? null,
@@ -1270,6 +1277,7 @@ function canDiscardPassage() {
 function clearEdit() {
   if (typeof invalidateSpellingEditor === "function")
     invalidateSpellingEditor();
+  textEditorSizeObserver.disconnect();
   editVersion++;
   state.dirty = false;
   state.editing = null;
@@ -1283,7 +1291,7 @@ let pendingBulkLanguage = false,
 function requireSettledLanguage(path, options) {
   const method = (options.method || "GET").toUpperCase();
   const recording = path.match(
-    /^\/recordings\/([^/]+)\/(?:passage-timing|retranscriptions|enhancements|segments\/[^/]+(?:\/edit-v[123])?)$/u,
+    /^\/recordings\/([^/]+)\/(?:passage-timing|retranscriptions|enhancements|segments\/[^/]+(?:\/edit-v[1-4])?)$/u,
   );
   let ids = null;
   if (recording && (method === "POST" || method === "PATCH"))
@@ -1718,9 +1726,11 @@ async function refreshProjects() {
 }
 function renderProjects() {
   $("#projects").innerHTML = state.projects
-    .map(
-      (project) =>
-        `<a href="#/projects/${project.id}" class="project-link ${state.project?.id === project.id ? "active" : ""}"><span class="folder" aria-hidden="true">▱</span><span class="project-label">${h(project.name)}</span><span class="project-count">${project.recordings}</span></a>`,
+    .map((project) =>
+      project.deleting
+        ? // Inactive while its Activity deletion runs: not openable (ADR 0190).
+          `<span class="project-link deleting" aria-disabled="true" title="This project is being deleted. Follow it in Activity."><span class="folder" aria-hidden="true">▱</span><span class="project-label">${h(project.name)}</span><span class="project-tag">Deleting…</span></span>`
+        : `<a href="#/projects/${project.id}" class="project-link ${state.project?.id === project.id ? "active" : ""}"><span class="folder" aria-hidden="true">▱</span><span class="project-label">${h(project.name)}</span><span class="project-count">${project.recordings}</span></a>`,
     )
     .join("");
 }
@@ -2365,6 +2375,14 @@ async function route() {
     state.project = state.projects.find(
       (project) => project.id === recording.project_id,
     );
+    if (state.project?.deleting) {
+      // An inactive project's recordings do not open; show the project list.
+      history.replaceState(null, "", "#/");
+      state.project = null;
+      toast("This project is being deleted. Follow it in Activity.");
+      await route();
+      return;
+    }
     state.recording = recording;
     renderProjects();
     await openEditor();
@@ -2377,7 +2395,12 @@ async function route() {
   state.comparison = null;
   state.project = match
     ? state.projects.find((p) => p.id === match[2])
-    : state.projects[0] || null;
+    : state.projects.find((p) => !p.deleting) || null;
+  if (state.project?.deleting) {
+    history.replaceState(null, "", "#/");
+    toast("This project is being deleted. Follow it in Activity.");
+    state.project = state.projects.find((p) => !p.deleting) || null;
+  }
   state.selected.clear();
   updateSelection();
   $("#library-view").hidden = false;
@@ -2429,6 +2452,51 @@ async function refreshRecordings() {
   for (const id of state.selected) if (!ids.has(id)) state.selected.delete(id);
   renderRecordings();
 }
+const READY_TO_TRANSCRIBE = "Ready to transcribe";
+const TRANSCRIPTION_FAILED = "Failed - See Activity";
+let failedTranscriptions = new Set();
+
+function updateRecordingFailures(shown) {
+  const visibleFailures = new Set();
+  for (const card of shown) {
+    const members = card.activity_group?.members ??
+      card.ucloud_batch_members ?? [card];
+    for (const member of members) {
+      if (member.state === "failed")
+        visibleFailures.add(member.job_id ?? member.id);
+    }
+  }
+  // The durable rows in /jobs arrive newest first. A newer attempt supersedes a failed one.
+  const checked = new Set(),
+    failures = new Set();
+  for (const job of state.jobs) {
+    const id = job.recording_id;
+    if (
+      job.kind !== "transcribe" ||
+      !id ||
+      job.restored_history ||
+      checked.has(id)
+    )
+      continue;
+    checked.add(id);
+    if (job.state === "failed" && visibleFailures.has(job.id)) failures.add(id);
+  }
+  if (
+    failures.size === failedTranscriptions.size &&
+    [...failures].every((id) => failedTranscriptions.has(id))
+  )
+    return;
+  failedTranscriptions = failures;
+  // Activity actions can poll without refetching the project. Update badges in place.
+  for (const badge of $("#recordings").querySelectorAll(
+    "[data-ready-transcription]",
+  )) {
+    const failed = failures.has(badge.dataset.readyTranscription);
+    badge.textContent = failed ? TRANSCRIPTION_FAILED : READY_TO_TRANSCRIBE;
+    badge.classList.toggle("failed", failed);
+    badge.classList.toggle("neutral", !failed);
+  }
+}
 function renderRecordings(captureNotes = true) {
   if (captureNotes)
     document.querySelectorAll("[data-card-notes]").forEach(rememberCardNotes);
@@ -2457,9 +2525,11 @@ function renderRecordings(captureNotes = true) {
           : recording.has_transcript
             ? "Transcript ready"
             : recording.status === "ready"
-              ? "Ready to transcribe"
+              ? READY_TO_TRANSCRIBE
               : "Preparing";
-      return `<article class="recording-card ${state.selected.has(recording.id) ? "selected" : ""}" data-recording="${recording.id}"><div class="card-top"><span class="file-icon" aria-hidden="true">${recording.kind === "video" ? "▷" : "♫"}</span><label><span class="sr-only">Select ${h(recording.name)}</span><input type="checkbox" data-select="${recording.id}" ${state.selected.has(recording.id) ? "checked" : ""}></label><button class="icon-button danger" data-delete="${recording.id}" aria-label="Delete ${h(recording.name)}" title="Delete recording" ${pendingDeletions.has(`/recordings/${recording.id}`) ? "disabled" : ""}>×</button></div><button class="card-name" data-open="${recording.id}">${h(recording.name)}</button><div class="card-file">${h(recording.filename)}</div><div class="card-bottom"><span class="badge ${active ? "working" : recording.status === "error" ? "failed" : !recording.has_transcript ? "neutral" : ""}">${status}</span><span>${time(recording.duration)} · ${h(recording.filename.split(".").pop().toUpperCase())}</span></div><label class="card-language"><select aria-label="Language for ${h(recording.name)}" data-recording-language="${h(recording.id)}" ${pendingRecordingLanguages.has(recording.id) ? "disabled" : ""}>${recordingLanguageOptions(recording.language_override)}</select></label>${cardNotesMarkup(recording)}${pendingDeletions.has(`/recordings/${recording.id}`) ? `<p class="settings-note" role="status">${h(pendingDeletions.get(`/recordings/${recording.id}`))}</p>` : ""}<small class="card-results">${recording.transcript_count || 0} results</small></article>`;
+      const ready = status === READY_TO_TRANSCRIBE,
+        failed = ready && failedTranscriptions.has(recording.id);
+      return `<article class="recording-card ${state.selected.has(recording.id) ? "selected" : ""}" data-recording="${recording.id}"><div class="card-top"><span class="file-icon" aria-hidden="true">${recording.kind === "video" ? "▷" : "♫"}</span><label><span class="sr-only">Select ${h(recording.name)}</span><input type="checkbox" data-select="${recording.id}" ${state.selected.has(recording.id) ? "checked" : ""}></label><button class="icon-button danger" data-delete="${recording.id}" aria-label="Delete ${h(recording.name)}" title="Delete recording" ${pendingDeletions.has(`/recordings/${recording.id}`) ? "disabled" : ""}>×</button></div><button class="card-name" data-open="${recording.id}">${h(recording.name)}</button><div class="card-file">${h(recording.filename)}</div><div class="card-bottom"><span class="badge ${active ? "working" : failed || recording.status === "error" ? "failed" : !recording.has_transcript ? "neutral" : ""}"${ready ? ` data-ready-transcription="${h(recording.id)}"` : ""}>${failed ? TRANSCRIPTION_FAILED : status}</span><span>${time(recording.duration)} · ${h(recording.filename.split(".").pop().toUpperCase())}</span></div><label class="card-language"><select aria-label="Language for ${h(recording.name)}" data-recording-language="${h(recording.id)}" ${pendingRecordingLanguages.has(recording.id) ? "disabled" : ""}>${recordingLanguageOptions(recording.language_override)}</select></label>${cardNotesMarkup(recording)}${pendingDeletions.has(`/recordings/${recording.id}`) ? `<p class="settings-note" role="status">${h(pendingDeletions.get(`/recordings/${recording.id}`))}</p>` : ""}<small class="card-results">${recording.transcript_count || 0} results</small></article>`;
     })
     .join("");
   refreshRecordingLanguageDefaults();
@@ -3035,16 +3105,15 @@ $("#delete-project-form").addEventListener(
     }
     button.disabled = true;
     $("#delete-project-error").hidden = true;
+    $("#delete-project-progress").textContent =
+      "Checking what will be deleted…";
+    $("#delete-project-progress").hidden = false;
+    // ADR 0190: the server owns the deletion. Once it is accepted the dialog closes at
+    // once and Activity shows its stages and Keep project; nothing here drives it.
+    let task;
     try {
-      const deleted = await deleteManaged(
-        `/projects/${project.id}`,
-        current,
-        (message) => {
-          $("#delete-project-progress").textContent = message;
-          $("#delete-project-progress").hidden = false;
-        },
-      );
-      if (!deleted || !current()) return;
+      task = await CBSProjectDeletions.start(project, current);
+      if (!task || !current()) return;
     } catch (error) {
       if (!current()) return;
       // Keep the reason inside the dialog (e.g. unresolved UCloud jobs block deletion).
@@ -3060,11 +3129,13 @@ $("#delete-project-form").addEventListener(
       }
     }
     dialog.close();
+    $("#activity").hidden = false;
+    await pollJobs().catch(() => {});
     // A newer poll read can supersede this refresh; the home view below needs the new list.
     while (!(await refreshProjects())) if (epoch !== viewEpoch) return;
     if (epoch !== viewEpoch) return;
     if (location.hash) location.hash = "";
-    await route();
+    else await route();
   }),
 );
 $("#add-files").addEventListener("click", () => $("#media-files").click());
@@ -6206,7 +6277,14 @@ async function loadHints() {
     // A superseded editor load cannot replace newer cached hints for the same revision.
     if (version !== hintVersion) return;
     hintCache.set(key, hints);
-    if (sameRecordingView(context) && !state.dirty && !state.editing)
+    // Hint display may arrive after typing. Refresh only display layers for this
+    // exact view/result/revision; the textarea and its editing history stay native.
+    if (
+      context.epoch === viewEpoch &&
+      context.id === state.recording?.id &&
+      key ===
+        `${state.recording?.active_transcript_id}:${state.recording?.revision}`
+    )
       refreshTranscriptHints();
   })();
   pendingHints.set(pendingKey, pending);
@@ -6219,23 +6297,10 @@ async function loadHints() {
 }
 
 function refreshPassageHintFlag(passage, reasons) {
-  const heading = passage.querySelector(".passage-heading");
-  let flag = heading.querySelector(".review-flag");
   passage.classList.toggle("review", !!reasons);
-  if (reasons) {
-    if (!flag) {
-      flag = document.createElement("span");
-      flag.className = "review-flag";
-      heading
-        .querySelector(".timestamp")
-        .insertAdjacentElement("afterend", flag);
-    }
-    flag.textContent = "Review suggested";
-    flag.title = `Review suggested: ${reasons.join("; ")}. Model signals, not a measure of correctness.`;
-  } else flag?.remove();
 }
 function refreshTranscriptHints() {
-  if (!state.recording || state.dirty || state.editing) return;
+  if (!state.recording) return;
   const review = uncertaintyView(),
     changed = [];
   for (const segment of state.recording.segments) {
@@ -6244,6 +6309,8 @@ function refreshTranscriptHints() {
     refreshPassageHintFlag(passage, review.flagged.get(segment.id));
     const text = passage.querySelector(":scope > .passage-text");
     const marks = review.words.get(segment.id) || [];
+    const editor = passage.querySelector(":scope > .passage-editor");
+    if (editor) refreshTextEditorUncertainty(segment, editor, marks);
     if (text && renderedWordHints.get(text) !== JSON.stringify(marks)) {
       renderPassageText(text, segment, true, marks);
       changed.push(segment);
@@ -6343,7 +6410,7 @@ function uncertaintyView() {
     ids.length === flagged.length
       ? `Re-transcribe all ${ids.length} of ${segments.length} flagged passages`
       : `Re-transcribe ${ids.length} of ${flagged.length} flagged passages`;
-  tag.title = `New wording from WhisperX for the passages marked "Review suggested", saved as a separate result to compare.${ids.length < flagged.length ? " Only flagged passages with a known audio interval of at most 60 seconds are sent, at most 200 at a time." : ""}`;
+  tag.title = `New wording from WhisperX for the passages flagged Uncertain, saved as a separate result to compare.${ids.length < flagged.length ? " Only flagged passages with a known audio interval of at most 60 seconds are sent, at most 200 at a time." : ""}`;
   updateTranscriptTags();
   $("#uncertainty-note").textContent = available
     ? `${view.flagged.size} passage(s) suggested for review${hints.edited_passages ? ` · ${hints.edited_passages} edited passage(s) no longer show model signals` : ""}`
@@ -6352,7 +6419,7 @@ function uncertaintyView() {
 }
 for (const id of ["#show-uncertainty", "#uncertainty-share"])
   $(id).addEventListener("change", () => {
-    if (!state.dirty) renderTranscript();
+    refreshTranscriptHints();
   });
 // T71: new wording for chosen passages from WhisperX, as a separate result to compare.
 function retranscribable(segment) {
@@ -6582,22 +6649,41 @@ function clampedWindow(window) {
     end: Math.min(window.end, duration),
   };
 }
-function eligiblePassage(segment, segments = state.recording.segments) {
+// Mirrors enhancement.aligner_frames() (ADR 0189): the pinned wav2vec2 aligners place at
+// most one character per 20 ms frame, so text with more characters than frames never aligns.
+function alignerFrames(seconds) {
+  const samples = Math.floor(seconds * 16000) + 1;
+  return samples < 400 ? 1 : Math.floor((samples - 400) / 320) + 1;
+}
+// "time": Add word timing aligns it here; "whole": too long or no window, so the whole
+// result is offered; "short": its window has fewer aligner frames than characters.
+function timingKind(segment, segments = state.recording.segments) {
   const window = clampedWindow(
     timingWindow(segments, segments.indexOf(segment)),
   );
   const text = window.members.map((s) => s.text).join(" ");
-  return (
-    window.start != null &&
-    window.end != null &&
-    window.end > window.start &&
-    window.end - window.start <= 60 &&
-    Array.from(text).length <= 1200 &&
-    text.trim().split(/\s+/u).length <= 120
-  );
+  const words = text.split(/[\p{White_Space}\u001c-\u001f]+/u).filter(Boolean);
+  if (
+    !(
+      window.start != null &&
+      window.end != null &&
+      window.end > window.start &&
+      window.end - window.start <= 60 &&
+      Array.from(text).length <= 1200 &&
+      words.length <= 120
+    )
+  )
+    return "whole";
+  return Array.from(words.join(" ")).length >
+    alignerFrames(window.end - window.start)
+    ? "short"
+    : "time";
 }
-// Missing word timing is a compact "Add word timing" tag in the passage heading, like
-// "Review suggested"; the reason is its tooltip. Other timing states keep a quiet note.
+function eligiblePassage(segment, segments = state.recording.segments) {
+  return timingKind(segment, segments) === "time";
+}
+// Missing word timing is a compact "Add word timing" tag in the passage heading;
+// its reason is the tooltip. Other timing states keep a quiet note.
 function timingReason(segment) {
   const currentWords = playbackWords(segment).size;
   return segment.edited &&
@@ -6613,9 +6699,11 @@ function timingReason(segment) {
         : "Word timing missing or incomplete · passage highlighting";
 }
 // What "Add word timing" will do for this passage; every untimed passage gets the same tag.
-function timingScope(segment) {
-  if (!eligiblePassage(segment))
+function timingScope(segment, kind = timingKind(segment)) {
+  if (kind === "whole")
     return "Too long to time on its own (over 60 seconds or 120 words, or no timed neighbours within 60 seconds): opens Add word timing / speakers for the whole result.";
+  if (kind === "short")
+    return "The audio this passage can be searched in is too short for its text: the word aligner needs about 20 ms of audio per character, so word timing cannot be found there. The passage stays as it is.";
   return unboundedPassage(segment)
     ? "This passage has no start/end of its own: it is searched only between the neighbouring timed passages, together with adjacent untimed passages. That search window is never stored as timing; uncertain words stay untimed. You can start other passages meanwhile."
     : "Aligns only this passage on this computer and adds the timing to this result. You can start other passages meanwhile.";
@@ -6624,7 +6712,8 @@ function timingTag(segment, expectedTiming) {
   if (segment.word_timing || !timingGap(segment, expectedTiming)) return "";
   // The comparison is read only: its count is in the comparison note, with no actions.
   if (state.comparison?.segments.includes(segment)) return "";
-  return `<span class="passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-segment="${h(segment.id)}" data-reason="${h(timingReason(segment))}" data-scope="${h(timingScope(segment))}" ${eligiblePassage(segment) ? "" : "data-whole-result"}></span>`;
+  const kind = timingKind(segment);
+  return `<span class="passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-segment="${h(segment.id)}" data-reason="${h(timingReason(segment))}" data-scope="${h(timingScope(segment, kind))}" ${kind === "whole" ? "data-whole-result" : kind === "short" ? "data-too-short" : ""}></span>`;
 }
 function timingNote(segment, expectedTiming) {
   if (segment.word_timing || timingGap(segment, expectedTiming)) return "";
@@ -6666,6 +6755,63 @@ function timingProgress(job, id) {
   }
   return job.realign_ready ? "Adding" : null;
 }
+// Finished word timing stays in Activity with its outcome until cleared (ADR 0191).
+function timingActivityOutcome(job) {
+  if (!job.realign || job.state !== "completed" || job.input_preparation)
+    return null;
+  const outcome = job.realign_outcome || {},
+    ids = job.segment_ids || (job.segment_id == null ? [] : [job.segment_id]),
+    open = state.recording?.id === job.recording_id,
+    plural = (count) => `${count} passage${count === 1 ? "" : "s"}`;
+  if (outcome.applied === "applied") {
+    const count = outcome.applied_count ?? ids.length,
+      skipped = outcome.skipped_count || 0,
+      index =
+        open && ids.length === 1 && count === 1
+          ? state.recording.segments.findIndex((s) => s.id === ids[0])
+          : -1,
+      complete =
+        !skipped &&
+        Number.isInteger(outcome.output_count) &&
+        Number.isInteger(outcome.complete_count)
+          ? outcome.complete_count
+          : null,
+      where =
+        index >= 0
+          ? `passage ${index + 1}`
+          : count === 1
+            ? "one passage"
+            : plural(count);
+    let text = `Word timing added to ${where}`;
+    if (complete !== null && complete < count)
+      text +=
+        count === 1
+          ? ". Some words could not be timed, so it still counts as incomplete"
+          : ` (${complete} complete)`;
+    if (skipped)
+      text += `. ${plural(skipped)} not added: ${skipped === 1 ? "it" : "they"} changed`;
+    return { kind: "added", text: `${text}.` };
+  }
+  if (outcome.applied === "stale")
+    return {
+      kind: "stale",
+      text: `Not added: the passage${ids.length === 1 ? "" : "s"} changed.`,
+    };
+  if (job.realign_ready)
+    return {
+      kind: "ready",
+      text:
+        open && job.source_result_id === state.recording.active_transcript_id
+          ? "Ready, added when no passage is being edited."
+          : "Ready, added when you next open the recording.",
+    };
+  // Jobs finished before B511 lost their own message to "Complete".
+  const message =
+    job.message && job.message !== "Complete"
+      ? job.message.replace(/^[A-Z](?=[a-z])/u, (first) => first.toLowerCase())
+      : "no word timing was found in the audio.";
+  return { kind: "none", text: `Not added: ${message}` };
+}
 function refreshPassageRepairs() {
   document
     .querySelectorAll(".passage-repair, .bulk-passage-repair")
@@ -6687,16 +6833,32 @@ function refreshPassageRepairs() {
         );
         const left = ids.filter((id) => !waiting.has(id));
         const whole = host.dataset.wholeResult != null;
+        // Every listed passage is too short for its text: nothing here can time them.
+        const short = host.dataset.tooShort != null;
+        // Passages already being timed leave the count at once (ADR 0191, B512).
+        const pending = ids.length - left.length;
+        const remaining = Number(host.dataset.missing) - pending;
+        const noun = `incomplete passage${remaining === 1 ? "" : "s"}`;
         disabled = !whole && !left.length;
         label =
-          whole || left.length
+          whole || short || (left.length && !pending)
             ? host.dataset.label
-            : `Adding word timing to ${ids.length} passage(s)`;
+            : left.length
+              ? left.length === remaining
+                ? `Repair all ${remaining} ${noun}`
+                : `Repair ${left.length} of ${remaining} ${noun}`
+              : `Adding word timing to ${ids.length} passage(s)`;
+        const already =
+          pending && left.length
+            ? ` ${pending} more ${pending === 1 ? "is" : "are"} already being timed.`
+            : "";
         title = whole
           ? `${host.dataset.note} Opens Add word timing / speakers for the whole result.`
-          : featureOn("ucloud_enhancement")
-            ? `${host.dataset.note} Small selections use local WhisperX; larger selections can use an approved, prepared UCloud connection when original-v1 source proof is ready. Timing is added to this result as one version in History.`
-            : `${host.dataset.note} Local WhisperX times the selection on this computer. Timing is added to this result as one version in History.`;
+          : short
+            ? host.dataset.note
+            : featureOn("ucloud_enhancement")
+              ? `${host.dataset.note}${already} Small selections use local WhisperX; larger selections can use an approved, prepared UCloud connection when original-v1 source proof is ready. Timing is added to this result as one version in History.`
+              : `${host.dataset.note}${already} Local WhisperX times the selection on this computer. Timing is added to this result as one version in History.`;
         host.dataset.runIds = JSON.stringify(left);
       } else {
         const job = timingJob(resultId, ids[0]);
@@ -6704,9 +6866,12 @@ function refreshPassageRepairs() {
         const retry = ["failed", "interrupted", "cancelled"].includes(
           job?.state,
         );
-        disabled = !!progress;
-        label =
-          progress || (retry ? "Try word timing again" : "Add word timing");
+        // A window too short for its text cannot be aligned (ADR 0189); say so on the tag.
+        const short = !progress && host.dataset.tooShort != null;
+        disabled = !!progress || short;
+        label = short
+          ? "Too short to time"
+          : progress || (retry ? "Try word timing again" : "Add word timing");
         title =
           reason +
           (progress === "Adding"
@@ -6804,20 +6969,25 @@ function renderTimingWarning(result, selector) {
     target.innerHTML = summaryMarkup;
     return;
   }
+  const kinds = missing.map((s) => timingKind(s, result.segments));
   const ids = missing
-    .filter((s) => eligiblePassage(s, result.segments))
+    .filter((_, index) => kinds[index] === "time")
     .map((s) => s.id)
     .slice(0, 1000);
-  const others = missing.length - ids.length;
+  // Windows too short for their text are named, never sent or routed to the whole result.
+  const short = kinds.filter((kind) => kind === "short").length;
+  const others = missing.length - ids.length - short;
   const passages = `incomplete passage${missing.length === 1 ? "" : "s"}`,
-    note = `${missing.length} ${passages}; available timed words still highlight.${others ? ` ${others} cannot be timed in this request; use Add word timing / speakers for those.` : ""}`;
+    note = `${missing.length} ${passages}; available timed words still highlight.${short ? ` ${short} cannot be timed: the audio they can be searched in is too short for their text (the word aligner needs about 20 ms per character).` : ""}${others ? ` ${others} cannot be timed in this request; use Add word timing / speakers for those.` : ""}`;
   const label =
     ids.length === missing.length
       ? `Repair all ${missing.length} ${passages}`
       : ids.length
         ? `Repair ${ids.length} of ${missing.length} ${passages}`
-        : `Timing options for ${missing.length} ${passages}`;
-  target.innerHTML = `${summaryMarkup}<span class="bulk-passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-ids="${h(JSON.stringify(ids))}" data-label="${h(label)}" data-note="${h(note)}" ${ids.length ? "" : "data-whole-result"}></span>`;
+        : others
+          ? `Timing options for ${missing.length} ${passages}`
+          : `${missing.length} ${passages} too short to time`;
+  target.innerHTML = `${summaryMarkup}<span class="bulk-passage-repair timing-tag" data-repair-result="${h(state.recording.active_transcript_id)}" data-repair-ids="${h(JSON.stringify(ids))}" data-missing="${missing.length}" data-label="${h(label)}" data-note="${h(note)}" ${ids.length ? "" : others ? "data-whole-result" : "data-too-short"}></span>`;
 }
 function refreshSpeakerBadges(recording, previousRevision) {
   const speakers = [
@@ -6911,13 +7081,9 @@ function refreshMergeUndoOptions() {
   if (typeof renderDeletedPassages === "function")
     renderDeletedPassages(mergeUndoOptions.response);
   if (typeof renderChangeSteps === "function") renderChangeSteps();
-  // With the History change list on, older merges/splits are reverted there (ADR 0181).
-  if (
-    !mergeUndoOptions.ids ||
-    !mergeUndoOptions.splitIds ||
-    structureLocked() ||
-    featureOn("undo_last_change")
-  )
+  // Per-passage Undo merge/split stay beside the passage even with the History change list
+  // and Undo last change on (user, 20 November; amends ADR 0181).
+  if (!mergeUndoOptions.ids || !mergeUndoOptions.splitIds || structureLocked())
     return;
   for (const passage of $("#transcript").querySelectorAll("[data-segment]")) {
     const actions = passage.querySelector(".passage-actions");
@@ -6998,73 +7164,54 @@ function passageEditorMarkup(segment) {
     : segment.start == null && replay
       ? "Plays the original source passage; this fragment has no word timestamps."
       : "Replay this passage.";
-  const canEditWords = editableTimedWords(segment);
-  const canEditTimes =
-    Number.isFinite(segment.start) &&
-    Number.isFinite(segment.end) &&
-    segment.end > segment.start;
-  const first = canEditWords ? segment.words[0] : null;
-  const value = (number) => (Number.isFinite(number) ? String(number) : "");
-  const wordEditor = canEditWords
-    ? `<div data-editor-pane="timing" hidden>
-         <p class="split-help">${canEditTimes ? "Edit one mapped word and its start and end in seconds. Missing times stay blank until entered." : "You can correct a word, but its times cannot be changed without passage bounds."}</p>
-         <div class="passage-word-fields">
-           <div class="timing-word-choice"><label>Word<select data-timing-word data-selected="0" aria-label="Word to edit"></select></label><button type="button" class="button" data-action="edit-timed-word" aria-expanded="false">Edit word</button><div data-word-correction hidden><label>Corrected word<input data-timing-text aria-label="Word text" maxlength="200" spellcheck="false" value="${h(first.word)}"></label></div></div>
-           <label>Start (seconds)<input data-timing-start aria-label="Word start in seconds" type="number" min="0" step="any" value="${h(value(first.start))}" ${canEditTimes ? "" : "disabled"}></label>
-           <label>End (seconds)<input data-timing-end aria-label="Word end in seconds" type="number" min="0" step="any" value="${h(value(first.end))}" ${canEditTimes ? "" : "disabled"}></label>
-         </div>
-         <p class="split-help" data-timing-draft-note hidden>Save or cancel the text draft before saving word timing.</p>
-         <div class="edit-actions"><button class="button" data-action="previous-timed-word" disabled>Previous word</button><button class="button" data-action="next-timed-word" ${segment.words.length < 2 ? "disabled" : ""}>Next word</button><button class="button" data-action="reset-timed-word">Reset word</button><button class="button" data-action="cancel-edit">Cancel</button><button class="button primary" data-action="save-timed-word">Save word</button></div>
-       </div>`
-    : '<p class="split-help">Word timing editing is unavailable for this passage. Add word timing or use text editing.</p>';
   return `<div class="passage-editor">
     <div class="passage-editor-toolbar">
-      <label>Edit <select data-editor-mode aria-label="Editing mode for this passage"><option value="text">Text</option><option value="timing" ${canEditWords ? "" : "disabled"}>Word and timing</option></select></label>
       <button type="button" class="button passage-editor-replay" data-action="editor-replay" data-replay-label="${h(label)}" title="${h(help)}" ${replay && state.recording.status === "ready" ? "" : "disabled"}>▷ ${h(label)}</button>
     </div>
     <div data-editor-pane="text">
       <div class="passage-text-surface">
         <div class="passage-text-overlay" aria-hidden="true" hidden><div class="passage-text-overlay-content"></div></div>
+        <div class="passage-uncertainty-overlay" aria-hidden="true" hidden><div class="passage-uncertainty-overlay-content"></div></div>
         <textarea aria-label="Edit passage" maxlength="200000" spellcheck="false"></textarea>
       </div>
+      <div class="passage-word-times" data-word-times title="The start and end of the word at the cursor, in seconds of the recording. Save passage saves them with the text; Cancel discards both. Between words, or with several words selected, the boxes stay empty. A new or changed word has no time until you type one; if it only replaces one earlier word, saving may keep that word's time.">
+        <label>Start (s)<input data-word-time="start" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Start of the word at the cursor, in seconds" disabled></label>
+        <label>End (s)<input data-word-time="end" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="End of the word at the cursor, in seconds" disabled></label>
+        <span class="word-times-status" data-word-times-status role="status"></span>
+      </div>
       <p class="split-help" data-text-playback-note hidden></p>
-      <p class="split-help">Place the cursor between words to split. Save text changes first. If you know the split's audio position, pause playback there; unavailable timing is left unknown.</p>
+      <p class="split-help">Place the cursor between words to split. Save any text changes first. To use a known audio time, pause playback there. Unknown timing stays blank.</p>
       <label class="passage-realign" data-feature="editor_realign" ${featureOn("editor_realign") ? "" : "hidden"}><input type="checkbox" data-editor-realign ${featureOn("editor_realign") && (passageRealignChoice ?? $("#realign-edits").checked) ? "checked" : ""}>Realign this passage after saving on this computer</label>
-      <p class="split-help" data-text-draft-note hidden>Save or reset the word changes before saving passage text.</p>
       <div class="edit-actions"><button class="button" data-action="split" disabled>Split at cursor</button><button class="button" data-action="cancel-edit">Cancel</button><button class="button primary" data-action="save-edit" disabled>Save passage</button></div>
-    </div>
-    ${wordEditor}
-    <div class="editor-playback-preview" hidden>
-      <p class="field-note" data-editor-playback-label>Saved text for playback</p>
-      <div class="editor-playback-scroll" tabindex="0" role="region" aria-label="Saved text for passage playback"><p class="editor-playback-text"></p></div>
-      <p class="field-note" data-editor-playback-draft hidden>Playback follows saved text and timing. Unsaved edits are not used for word highlighting.</p>
     </div>
   </div>`;
 }
 function renderEditorPlayback(segment, editor) {
   refreshTextEditorPlayback(segment, editor);
-  renderPassageText(
-    editor.querySelector(".editor-playback-text"),
-    segment,
-    false,
-  );
-  editor.querySelector("[data-editor-playback-label]").textContent =
-    playbackWords(segment).size
-      ? "Saved text for playback"
-      : "Saved text for playback · word highlighting unavailable";
+  textEditorSizeObserver.disconnect();
+  textEditorSizeObserver.observe(editor.querySelector("textarea"));
+  if (typeof refreshWordTimes === "function") refreshWordTimes(segment, editor);
 }
 let activeTextPlaybackWord = null;
+const textEditorSizeObserver = new ResizeObserver((entries) => {
+  for (const { target } of entries)
+    if (target.isConnected)
+      syncTextEditorScroll(target.closest(".passage-editor"));
+});
 function syncTextEditorScroll(editor) {
-  if (editor.querySelector(".passage-text-overlay").hidden) return;
   const input = editor.querySelector("textarea");
-  const content = editor.querySelector(".passage-text-overlay-content");
-  // The native scrollbar reduces the textarea's text width. Match its actual
-  // client box, including padding, rather than the surrounding editor width.
+  // Match the native client box (including its scrollbar), without scrolling it.
   const width = `${input.clientWidth}px`;
   const transform = `translate(${-input.scrollLeft}px, ${-input.scrollTop}px)`;
-  if (content.style.width !== width) content.style.width = width;
-  if (content.style.transform !== transform)
-    content.style.transform = transform;
+  for (const overlay of editor.querySelectorAll(
+    ".passage-text-overlay, .passage-uncertainty-overlay",
+  )) {
+    if (overlay.hidden) continue;
+    const content = overlay.firstElementChild;
+    if (content.style.width !== width) content.style.width = width;
+    if (content.style.transform !== transform)
+      content.style.transform = transform;
+  }
 }
 // Text highlighting maps saved word timing onto the native textarea's draft. Offsets are
 // code points in the textarea's presentation (CR/CRLF become LF, as textarea values do).
@@ -7100,7 +7247,7 @@ function savedTextPresentation(segment) {
     words.push([index, offsets[start], offsets[end]]);
     cursor = end;
   }
-  saved = { characters, text: characters.join(""), words };
+  saved = { characters, text: characters.join(""), words, offsets };
   savedTextPresentations.set(segment, saved);
   return saved;
 }
@@ -7109,6 +7256,13 @@ function savedTextPresentation(segment) {
 // change), and still separated from any edited letters. Words touching the changed middle,
 // and every new or changed word, stay unhighlighted; no time is ever assigned to them.
 function draftPlaybackWords(segment, draft) {
+  return draftUnchangedRanges(
+    segment,
+    draft,
+    savedTextPresentation(segment).words,
+  );
+}
+function draftUnchangedRanges(segment, draft, ranges) {
   const saved = savedTextPresentation(segment);
   const before = saved.characters;
   const after = Array.from(draft);
@@ -7126,7 +7280,7 @@ function draftPlaybackWords(segment, draft) {
   const separated = (character) =>
     character === undefined || !/[\p{L}\p{N}\p{M}]/u.test(character);
   const words = [];
-  for (const [index, start, end] of saved.words) {
+  for (const [index, start, end] of ranges) {
     if (end < prefix || (end === prefix && separated(after[end])))
       words.push([index, start, end]);
     else if (
@@ -7168,6 +7322,81 @@ function renderTextEditorMirror(segment, content, draft) {
     activeTextPlaybackWord = null;
   return mirror;
 }
+// Model signals use their own layer, including words without playback timing.
+// Cache ranking per immutable hint reply/share; typing only remaps this passage.
+const textEditorHintViews = new WeakMap();
+const textEditorUncertaintyMirrors = new WeakMap();
+function textEditorUncertaintyMarks(segment) {
+  const hints = currentHints();
+  if (!hints || !$("#show-uncertainty").checked) return [];
+  const share = Number($("#uncertainty-share").value);
+  let cached = textEditorHintViews.get(hints);
+  if (cached?.share !== share) {
+    cached = { share, words: reviewMarks(hints, share).words };
+    textEditorHintViews.set(hints, cached);
+  }
+  return cached.words.get(segment.id) || [];
+}
+function refreshTextEditorUncertainty(
+  segment,
+  editor,
+  marks = textEditorUncertaintyMarks(segment),
+) {
+  const overlay = editor.querySelector(".passage-uncertainty-overlay"),
+    content = overlay.firstElementChild,
+    draft = editor.querySelector("textarea").value;
+  if (!marks.length) {
+    overlay.hidden = true;
+    content.replaceChildren();
+    textEditorUncertaintyMirrors.delete(content);
+    return;
+  }
+  const previous = textEditorUncertaintyMirrors.get(content);
+  if (
+    previous?.segment === segment &&
+    previous.draft === draft &&
+    previous.marks === marks
+  )
+    return;
+  const saved = savedTextPresentation(segment),
+    ranges = [];
+  let cursor = 0;
+  for (const [index, [start, end]] of marks.entries()) {
+    if (
+      Number.isInteger(start) &&
+      Number.isInteger(end) &&
+      start >= cursor &&
+      end > start &&
+      end < saved.offsets.length &&
+      saved.offsets[end] > saved.offsets[start]
+    ) {
+      ranges.push([index, saved.offsets[start], saved.offsets[end]]);
+      cursor = end;
+    }
+  }
+  const layout = draftUnchangedRanges(segment, draft, ranges),
+    fragment = document.createDocumentFragment();
+  cursor = 0;
+  for (const [, start, end] of layout.words) {
+    fragment.append(
+      document.createTextNode(layout.characters.slice(cursor, start).join("")),
+    );
+    const mark = document.createElement("span");
+    mark.className = "uncertain-word";
+    mark.textContent = layout.characters.slice(start, end).join("");
+    fragment.append(mark);
+    cursor = end;
+  }
+  fragment.append(
+    document.createTextNode(
+      layout.characters.slice(cursor).join("") + "\u200b",
+    ),
+  );
+  content.replaceChildren(fragment);
+  overlay.hidden = !layout.words.length;
+  textEditorUncertaintyMirrors.set(content, { segment, draft, marks });
+  syncTextEditorScroll(editor);
+}
 function refreshTextEditorPlayback(segment, editor) {
   const overlay = editor.querySelector(".passage-text-overlay");
   const content = overlay.firstElementChild;
@@ -7189,6 +7418,7 @@ function refreshTextEditorPlayback(segment, editor) {
         : "Unsaved changes: no unchanged timed words remain to highlight.";
   if (note.textContent !== message) note.textContent = message;
   note.hidden = !message;
+  refreshTextEditorUncertainty(segment, editor);
   syncTextEditorScroll(editor);
 }
 function tickTextEditorPlayback(segment, index, player) {
@@ -7231,139 +7461,21 @@ function followEditorPlaybackWord(word) {
     else if (target.bottom > box.bottom - 4)
       input.scrollTop += target.bottom - box.bottom + 4;
     syncTextEditorScroll(surface.closest(".passage-editor"));
-    return;
   }
-  const scroll = word?.closest(".editor-playback-scroll");
-  if (
-    !scroll ||
-    scroll.closest(".editor-playback-preview")?.hidden ||
-    !$("#follow-playback").checked
-  )
-    return;
-  const box = scroll.getBoundingClientRect(),
-    target = word.getBoundingClientRect();
-  if (target.top < box.top + 4) scroll.scrollTop += target.top - box.top - 4;
-  else if (target.bottom > box.bottom - 4)
-    scroll.scrollTop += target.bottom - box.bottom + 4;
-}
-function timedWordDraftChanged(segment, editor) {
-  const select = editor.querySelector("[data-timing-word]");
-  if (!select) return false;
-  const word = segment.words[Number(select.dataset.selected)];
-  if (!word) return false;
-  const value = (number) => (Number.isFinite(number) ? String(number) : "");
-  return (
-    editor.querySelector("[data-timing-text]").value !== word.word ||
-    editor.querySelector("[data-timing-start]").value !== value(word.start) ||
-    editor.querySelector("[data-timing-end]").value !== value(word.end)
-  );
-}
-function populateTimedWordChoices(segment, editor) {
-  const select = editor.querySelector("[data-timing-word]");
-  if (!select || select.options.length === segment.words.length) return;
-  select.replaceChildren(
-    ...segment.words.map(
-      (word, index) =>
-        new Option(`${index + 1} – ${word.word}`, String(index + 1)),
-    ),
-  );
-  select.value = String(Number(select.dataset.selected) + 1);
-}
-function showWordCorrection(editor, visible) {
-  editor.querySelector("[data-word-correction]").hidden = !visible;
-  const button = editor.querySelector('[data-action="edit-timed-word"]');
-  button.textContent = visible ? "Hide word edit" : "Edit word";
-  button.setAttribute("aria-expanded", String(visible));
-}
-function resetTimedWord(segment, editor, index) {
-  const word = segment.words[index];
-  if (!word) return;
-  const select = editor.querySelector("[data-timing-word]");
-  select.dataset.selected = String(index);
-  select.value = String(index + 1);
-  editor.querySelector("[data-timing-text]").value = word.word;
-  editor.querySelector("[data-timing-start]").value = Number.isFinite(
-    word.start,
-  )
-    ? String(word.start)
-    : "";
-  editor.querySelector("[data-timing-end]").value = Number.isFinite(word.end)
-    ? String(word.end)
-    : "";
-  editor.querySelector('[data-action="previous-timed-word"]').disabled =
-    index === 0;
-  editor.querySelector('[data-action="next-timed-word"]').disabled =
-    index === segment.words.length - 1;
-}
-function changeTimedWord(segment, editor, index) {
-  const input = editor.querySelector("[data-timing-word]");
-  const previous = Number(input.dataset.selected);
-  if (!Number.isInteger(index) || index < 0 || index >= segment.words.length) {
-    input.value = String(previous + 1);
-    toast("Choose a valid word number.", true);
-    return;
-  }
-  if (
-    index !== previous &&
-    timedWordDraftChanged(segment, editor) &&
-    !confirm("Discard the unsaved changes to this word?")
-  ) {
-    input.value = String(previous + 1);
-    return;
-  }
-  resetTimedWord(segment, editor, index);
-  refreshPassageDraft(segment, editor);
-}
-function showTimedWordEditor(
-  segment,
-  editor,
-  index,
-  focus = false,
-  selection = null,
-) {
-  const mode = editor?.querySelector("[data-editor-mode]");
-  const timing = editor?.querySelector('[data-editor-pane="timing"]');
-  if (!mode || !timing || !segment.words[index]) return false;
-  mode.value = "timing";
-  editor.querySelector('[data-editor-pane="text"]').hidden = true;
-  timing.hidden = false;
-  editor.querySelector(".editor-playback-preview").hidden = false;
-  populateTimedWordChoices(segment, editor);
-  resetTimedWord(segment, editor, index);
-  if (focus) {
-    showWordCorrection(editor, true);
-    const input = editor.querySelector("[data-timing-text]");
-    input.focus();
-    if (selection)
-      input.setSelectionRange(
-        Math.min(selection[0], input.value.length),
-        Math.min(selection[1], input.value.length),
-      );
-    else input.select();
-  }
-  if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
-  return true;
 }
 function refreshPassageDraft(segment, editor) {
   const textarea = editor.querySelector("textarea");
   const textDirty = passageEditText(segment, textarea) !== segment.text;
-  const wordDirty = timedWordDraftChanged(segment, editor);
   refreshTextEditorPlayback(segment, editor);
-  state.dirty = textDirty || wordDirty;
+  // Typed word times belong to the same draft (ADR 0195).
+  const timesDirty =
+    typeof refreshWordTimes === "function" && refreshWordTimes(segment, editor);
+  state.dirty = textDirty || timesDirty;
   editVersion++;
   saved(state.dirty ? "Unsaved changes" : undefined);
   refreshPassageSplit(editor);
   editor.querySelector('[data-action="save-edit"]').disabled =
-    !textDirty || wordDirty || passageTextSaving;
-  const textNote = editor.querySelector("[data-text-draft-note]");
-  if (textNote) textNote.hidden = !wordDirty;
-  const wordSave = editor.querySelector('[data-action="save-timed-word"]');
-  if (wordSave) wordSave.disabled = textDirty;
-  const wordNote = editor.querySelector("[data-timing-draft-note]");
-  if (wordNote) wordNote.hidden = !textDirty;
-  editor.querySelector("[data-editor-playback-draft]").hidden = !(
-    textDirty || wordDirty
-  );
+    !state.dirty || passageTextSaving;
 }
 function passageWordBoundary(text, cursor) {
   return (
@@ -7420,8 +7532,6 @@ function openPassageEditorInPlace(segment) {
   const input = passage.querySelector("textarea");
   input.value = segment.text;
   renderEditorPlayback(segment, passage.querySelector(".passage-editor"));
-  if (passage.querySelector("[data-timing-word]"))
-    resetTimedWord(segment, passage, 0);
   input.focus();
   updatePlaybackButtons();
   loadHints().catch(() => {});
@@ -7469,7 +7579,7 @@ function renderTranscript() {
                 ? "Plays the original source passage; this fragment has no word timestamps"
                 : "Replay this passage";
           const reasons = review.flagged.get(segment.id);
-          return `<article class="${["passage", timingGap(segment, expectedTiming) && "timing-gap", reasons && "review"].filter(Boolean).join(" ")}" id="passage-${segment.id}" data-segment="${segment.id}"><div class="passage-heading"><span class="speaker-badge s${speakers.indexOf(segment.speaker) % 4}" title="${h(speakerName(recording, segment.speaker))}">${h(speakerName(recording, segment.speaker))}</span><button class="timestamp" data-action="seek" ${segment.start == null ? "disabled" : ""}>${time(segment.start)}</button>${reasons ? `<span class="review-flag" title="${h(`Review suggested: ${reasons.join("; ")}. Model signals, not a measure of correctness.`)}">Review suggested</span>` : ""}${timingTag(segment, expectedTiming)}<div class="passage-actions"><button data-action="replay" aria-label="${replayLabel} ${segmentIndex + 1}" ${replay ? "" : "disabled"} title="${replayHelp}">▷ ${replayLabel}</button><button data-action="edit" ${state.mode === "word" && !segment.word_timing ? 'disabled title="Use Free text or restore original timing"' : ""}>${state.mode === "word" ? "Correct" : "Edit"}</button>${state.mode === "free" ? `<button data-action="merge-up" ${segmentIndex === 0 ? "disabled" : ""}>Merge up</button><button data-action="merge-down" ${segmentIndex === recording.segments.length - 1 ? "disabled" : ""}>Merge down</button>${featureOn("retranscribe") ? `<button data-action="retranscribe" ${retranscribable(segment) ? "" : 'disabled title="Needs a known audio interval of at most 60 seconds"'}>Re-transcribe</button>` : ""}<button class="danger" data-action="delete" aria-label="Delete passage ${segmentIndex + 1}" title="Delete this passage; earlier versions remain in History">Delete</button>` : ""}${segment.edited ? '<button data-action="restore">↶ Restore original</button>' : ""}</div></div>${editing ? passageEditorMarkup(segment) : `<p class="passage-text"></p>`}${timingNote(segment, expectedTiming)}</article>`;
+          return `<article class="${["passage", timingGap(segment, expectedTiming) && "timing-gap", reasons && "review"].filter(Boolean).join(" ")}" id="passage-${segment.id}" data-segment="${segment.id}"><div class="passage-heading"><span class="speaker-badge s${speakers.indexOf(segment.speaker) % 4}" title="${h(speakerName(recording, segment.speaker))}">${h(speakerName(recording, segment.speaker))}</span><button class="timestamp" data-action="seek" ${segment.start == null ? "disabled" : ""}>${time(segment.start)}</button>${timingTag(segment, expectedTiming)}<div class="passage-actions"><button data-action="replay" aria-label="${replayLabel} ${segmentIndex + 1}" ${replay ? "" : "disabled"} title="${replayHelp}">▷ ${replayLabel}</button><button data-action="edit" ${state.mode === "word" && !segment.word_timing ? 'disabled title="Use Free text or restore original timing"' : ""}>${state.mode === "word" ? "Correct" : "Edit"}</button>${state.mode === "free" ? `<button data-action="merge-up" ${segmentIndex === 0 ? "disabled" : ""}>Merge up</button><button data-action="merge-down" ${segmentIndex === recording.segments.length - 1 ? "disabled" : ""}>Merge down</button>${featureOn("retranscribe") ? `<button data-action="retranscribe" ${retranscribable(segment) ? "" : 'disabled title="Needs a known audio interval of at most 60 seconds"'}>Re-transcribe</button>` : ""}<button class="danger" data-action="delete" aria-label="Delete passage ${segmentIndex + 1}" title="Delete this passage; earlier versions remain in History">Delete</button>` : ""}${segment.edited ? '<button data-action="restore">↶ Restore original</button>' : ""}${featureOn("undo_last_change") && recording.active_transcript_id ? '<button type="button" data-action="passage-steps" aria-expanded="false">Undo / Redo</button>' : ""}</div></div>${editing ? passageEditorMarkup(segment) : `<p class="passage-text"></p>`}${timingNote(segment, expectedTiming)}</article>`;
         })
         .join("")
     : recording.active_transcript_id
@@ -7484,8 +7594,6 @@ function renderTranscript() {
     if (input) {
       input.value = segment.text;
       renderEditorPlayback(segment, passage.querySelector(".passage-editor"));
-      if (passage.querySelector("[data-timing-word]"))
-        resetTimedWord(segment, passage, 0);
     } else
       renderPassageText(
         passage.querySelector(".passage-text"),
@@ -7548,12 +7656,8 @@ $("#edit-mode").addEventListener("change", (event) => {
 });
 $("#transcript").addEventListener("input", (event) => {
   if (timedWordSaving || passageTextSaving) return;
-  if (
-    !event.target.matches(
-      "textarea, [data-timing-text], [data-timing-start], [data-timing-end]",
-    )
-  )
-    return;
+  // Word-time boxes refresh the draft from their own handler (word_times.js).
+  if (!event.target.matches("textarea")) return;
   const segment = segmentFromNode(event.target);
   const editor = event.target.closest(".passage-editor");
   if (event.target.matches(".passage-text-surface textarea"))
@@ -7587,44 +7691,17 @@ $("#transcript").addEventListener(
     if (!editor) return;
     const segment = segmentFromNode(target);
     if (!segment) return;
-    if (target.matches("[data-editor-realign]")) {
+    if (target.matches("[data-editor-realign]"))
       passageRealignChoice = target.checked;
-    } else if (target.matches("[data-editor-mode]")) {
-      editor.querySelector('[data-editor-pane="text"]').hidden =
-        target.value !== "text";
-      const timing = editor.querySelector('[data-editor-pane="timing"]');
-      editor.querySelector(".editor-playback-preview").hidden =
-        !timing || target.value !== "timing";
-      if (timing) {
-        timing.hidden = target.value !== "timing";
-        if (target.value === "timing")
-          populateTimedWordChoices(segment, editor);
-      }
-      if (typeof refreshSpellingEditor === "function") refreshSpellingEditor();
-    } else if (target.matches("[data-timing-word]")) {
-      changeTimedWord(
-        segment,
-        editor,
-        target.value === "" ? NaN : Number(target.value) - 1,
-      );
-    }
   }),
 );
-$("#transcript").addEventListener("focusin", (event) => {
-  if (!event.target.matches("[data-timing-word]")) return;
-  const segment = segmentFromNode(event.target);
-  if (segment)
-    populateTimedWordChoices(segment, event.target.closest(".passage-editor"));
-});
 function segmentFromNode(node) {
   return state.recording.segments.find(
     (s) => s.id === node.closest("[data-segment]")?.dataset.segment,
   );
 }
 $("#transcript").addEventListener("mousedown", (event) => {
-  const replay = event.target.closest(
-    '[data-action="editor-replay"], .editor-playback-preview [data-word]',
-  );
+  const replay = event.target.closest('[data-action="editor-replay"]');
   const editor = replay?.closest(".passage-editor");
   // Keep a text selection when replay is clicked with a pointer; keyboard
   // activation keeps focus on the button as usual.
@@ -7634,27 +7711,25 @@ $("#transcript").addEventListener("mousedown", (event) => {
   )
     event.preventDefault();
 });
-async function patchPassage(
-  segment,
-  values,
-  context = recordingContext(),
-  options = {},
-) {
+async function patchPassage(segment, values, context = recordingContext()) {
   if (!sameRecordingView(context)) return false;
   const input = $(`#passage-${segment.id} textarea`);
   if (input) input.disabled = true;
   saved("Saving…");
+  // Typed word times save with the text as one version (ADR 0195); never realigned.
   const editVersionPath =
     values.mode === "free"
-      ? values.realign === true
-        ? "/edit-v1"
-        : "/edit-v3"
+      ? values.word_times?.length
+        ? "/edit-v4"
+        : values.realign === true
+          ? "/edit-v1"
+          : "/edit-v3"
       : "";
   const body = {
     revision: context.revision ?? state.recording.revision,
     ...values,
   };
-  if (editVersionPath === "/edit-v3") delete body.realign;
+  if (editVersionPath !== "/edit-v1") delete body.realign;
   try {
     const recording = await api(
       `/recordings/${context.id}/segments/${segment.id}${editVersionPath}`,
@@ -7664,46 +7739,9 @@ async function patchPassage(
       },
     );
     if (!acceptRecording(context, recording)) return false;
-    const originalEditor = options.editor;
-    const keepFocus =
-      originalEditor &&
-      (document.activeElement === document.body ||
-        originalEditor.contains(document.activeElement));
-    const resumed =
-      originalEditor &&
-      state.editing === segment.id &&
-      recording.segments.find((item) => item.id === segment.id);
-    const realignChoice = originalEditor?.querySelector(
-      "[data-editor-realign]",
-    )?.checked;
-    const correctionVisible =
-      originalEditor?.querySelector("[data-word-correction]")?.hidden === false;
     clearEdit();
     renderEditorDetails();
-    if (resumed && editableTimedWords(resumed)) {
-      state.editing = resumed.id;
-      passageRealignChoice = realignChoice ?? null;
-    }
     renderTranscript();
-    if (state.editing === segment.id) {
-      const editor = document
-        .getElementById(`passage-${segment.id}`)
-        ?.querySelector(".passage-editor");
-      if (editor && realignChoice !== undefined)
-        editor.querySelector("[data-editor-realign]").checked = realignChoice;
-      showTimedWordEditor(
-        resumed,
-        editor,
-        options.wordIndex,
-        keepFocus && correctionVisible,
-        options.selection,
-      );
-      if (editor) {
-        showWordCorrection(editor, correctionVisible);
-        if (keepFocus && !correctionVisible)
-          editor.querySelector("[data-timing-word]").focus();
-      }
-    }
     const warning =
       recording.timing_retention_warning || recording.realign_warning;
     if (typeof warning === "string" && warning) {
@@ -7770,6 +7808,7 @@ $("#transcript").addEventListener(
       if (!(await workingEditChoice(target, true))) return;
       await changePassageStructure(segment, action, {});
     }
+    if (action === "passage-steps") return openPassageChangeSteps(segment.id);
     if (action === "retranscribe") await retranscribeNow([segment.id]);
     if (action === "seek") seekTo(segment.start);
     if (action === "speaker" && canDiscardPassage()) {
@@ -7804,106 +7843,6 @@ $("#transcript").addEventListener(
         await media().play();
       }
       updatePlaybackButtons();
-    }
-    if (action === "reset-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const select = editor.querySelector("[data-timing-word]");
-      resetTimedWord(segment, editor, Number(select.dataset.selected));
-      refreshPassageDraft(segment, editor);
-    }
-    if (action === "edit-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const visible = editor.querySelector("[data-word-correction]").hidden;
-      showWordCorrection(editor, visible);
-      if (visible) {
-        const input = editor.querySelector("[data-timing-text]");
-        input.focus();
-        input.select();
-      }
-    }
-    if (action === "previous-timed-word" || action === "next-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const current = Number(
-        editor.querySelector("[data-timing-word]").dataset.selected,
-      );
-      changeTimedWord(
-        segment,
-        editor,
-        current + (action === "next-timed-word" ? 1 : -1),
-      );
-    }
-    if (action === "save-timed-word") {
-      const editor = event.target.closest(".passage-editor");
-      const textarea = editor.querySelector("textarea");
-      if (passageEditText(segment, textarea) !== segment.text) {
-        toast("Save or cancel the passage text draft first.", true);
-        return;
-      }
-      const select = editor.querySelector("[data-timing-word]");
-      const text = editor.querySelector("[data-timing-text]");
-      const start = editor.querySelector("[data-timing-start]");
-      const end = editor.querySelector("[data-timing-end]");
-      const index = Number(select.dataset.selected),
-        original = segment.words[index];
-      if (!original || !text.value.trim()) {
-        toast("Enter a word before saving.", true);
-        return;
-      }
-      const startValue = start.value === "" ? null : Number(start.value),
-        endValue = end.value === "" ? null : Number(end.value),
-        oldStart = Number.isFinite(original.start) ? original.start : null,
-        oldEnd = Number.isFinite(original.end) ? original.end : null,
-        timingChanged = startValue !== oldStart || endValue !== oldEnd;
-      if (!timingChanged && text.value === original.word) {
-        toast("There are no word changes to save.");
-        return;
-      }
-      let values;
-      if (!timingChanged) {
-        values = {
-          mode: segment.word_timing ? "word" : "mapped_word",
-          word_index: index,
-          text: text.value,
-        };
-      } else {
-        if (!Number.isFinite(startValue) || !Number.isFinite(endValue)) {
-          toast("Enter valid start and end times before saving.", true);
-          return;
-        }
-        values = {
-          mode: "timed_word",
-          word_index: index,
-          text: text.value,
-          start: startValue,
-          end: endValue,
-        };
-      }
-      const context = {
-        ...recordingContext(),
-        revision: state.recording.revision,
-      };
-      const controls = [
-        ...editor.querySelectorAll("textarea, input, select, button"),
-      ].filter((control) => !control.matches('[data-action="editor-replay"]'));
-      const disabled = controls.map((control) => control.disabled);
-      timedWordSaving = true;
-      controls.forEach((control) => (control.disabled = true));
-      try {
-        await patchPassage(segment, values, context, {
-          editor,
-          wordIndex: index,
-          selection: [text.selectionStart, text.selectionEnd],
-        });
-      } finally {
-        timedWordSaving = false;
-        if (typeof refreshSpellingEditor === "function")
-          refreshSpellingEditor(true);
-        controls.forEach((control, index) => {
-          if (control.isConnected) control.disabled = disabled[index];
-        });
-        if (typeof refreshManualReviewControls === "function")
-          refreshManualReviewControls();
-      }
     }
     if (action === "edit") {
       if (!canDiscardPassage()) return;
@@ -7948,15 +7887,15 @@ $("#transcript").addEventListener(
     if (action === "save-edit") {
       const button = event.target;
       const editor = button.closest(".passage-editor");
-      if (
-        passageEditText(segment, editor.querySelector("textarea")) ===
-        segment.text
-      )
-        return;
-      if (timedWordDraftChanged(segment, editor)) {
-        toast("Save or reset the word changes first.", true);
-        return;
-      }
+      const text = passageEditText(segment, editor.querySelector("textarea"));
+      // Typed word times save with the text in one request; invalid times are
+      // refused here with the word named, before anything is sent (ADR 0195).
+      const wordTimes =
+        typeof wordTimesPayload === "function"
+          ? wordTimesPayload(segment, editor, text)
+          : [];
+      if (text === segment.text && !wordTimes.length) return;
+      const realign = editor.querySelector("[data-editor-realign]").checked;
       const controls = [
         ...editor.querySelectorAll("textarea, input, select, button"),
       ].filter((control) => !control.matches('[data-action="editor-replay"]'));
@@ -7964,11 +7903,18 @@ $("#transcript").addEventListener(
       passageTextSaving = true;
       controls.forEach((control) => (control.disabled = true));
       try {
-        await patchPassage(segment, {
-          mode: "free",
-          text: passageEditText(segment, $(`#passage-${segment.id} textarea`)),
-          realign: editor.querySelector("[data-editor-realign]").checked,
-        });
+        const values = wordTimes.length
+          ? { mode: "free", text, word_times: wordTimes }
+          : { mode: "free", text, realign };
+        if (
+          (await patchPassage(segment, values)) &&
+          wordTimes.length &&
+          realign &&
+          featureOn("editor_realign")
+        )
+          toast(
+            "Passage saved. It was not realigned, because you typed word times.",
+          );
       } finally {
         passageTextSaving = false;
         if (typeof refreshSpellingEditor === "function")
@@ -7992,7 +7938,6 @@ $("#transcript").addEventListener(
       state.dirty
     )
       return;
-    if (event.target.closest(".editor-playback-preview")) return;
     const word = event.target.closest("[data-word]");
     if (!word) return;
     const segment = segmentFromNode(word);
@@ -8010,7 +7955,6 @@ $("#transcript").addEventListener(
     const editor = document
       .getElementById(`passage-${segment.id}`)
       .querySelector(".passage-editor");
-    editor.querySelector("[data-editor-mode]").value = "text";
     const input = editor.querySelector("textarea");
     input.focus();
     const clicked = segment.words?.[Number(word.dataset.word)];
@@ -9126,6 +9070,8 @@ function showProviderTab(tab) {
   $("#hf-panel").disabled = true;
   $("#processing-panel").hidden = true;
   $("#processing-panel").disabled = true;
+  $("#spelling-panel").hidden = true;
+  $("#spelling-panel").disabled = true;
   $("#provider-fields").hidden = false;
   $("#provider-fields").disabled = false;
   $("#provider-fields").setAttribute("aria-labelledby", `tab-${tab}`);
@@ -9378,6 +9324,8 @@ async function showHuggingFaceTab() {
   $("#provider-fields").disabled = true;
   $("#processing-panel").hidden = true;
   $("#processing-panel").disabled = true;
+  $("#spelling-panel").hidden = true;
+  $("#spelling-panel").disabled = true;
   $("#hf-panel").hidden = false;
   $("#hf-panel").disabled = true;
   $("#hf-settings-token").value = "";
@@ -9573,7 +9521,7 @@ async function showProcessingTab() {
     button.setAttribute("aria-selected", String(selected));
     button.tabIndex = selected ? 0 : -1;
   });
-  for (const id of ["#provider-fields", "#hf-panel"]) {
+  for (const id of ["#provider-fields", "#hf-panel", "#spelling-panel"]) {
     $(id).hidden = true;
     $(id).disabled = true;
   }
@@ -9615,7 +9563,6 @@ async function showProcessingTab() {
   if (local.status) renderLocalRuntime(local.status);
   else checkLocalRuntime().catch(() => {});
   loadLocalConcurrency().catch(() => {});
-  if (typeof loadSpellingSettings === "function") loadSpellingSettings();
   await renderCloudEnhancementStatus().catch(() => null);
 }
 // Parallel local tasks per step (ADR 0146): a value equal to this computer's automatic
@@ -9949,6 +9896,10 @@ for (const [id, field] of Object.entries(NATIVE_LIMIT_FIELDS)) {
 function switchProviderTab(tab) {
   if (tab === "huggingface") return showHuggingFaceTab();
   if (tab === "processing") return showProcessingTab();
+  // Settings → Spelling (ADR 0187) lives in spelling.js; a hidden feature never opens it.
+  if (tab === "spelling" && featureOn("spelling")) return showSpellingTab();
+  // Settings → Backup (ADR 0192) lives in backup_tasks.js.
+  if (tab === "backup") return CBSBackupTasks.showTab();
   if (tab !== "ucloud") tab = "ucloud";
   showProviderTab(tab);
   const existing = state.providers.find(
@@ -10470,7 +10421,7 @@ function capabilityHelp() {
   providerSummary();
   if (state.settingsTab === "ucloud") {
     $("#capability-help").textContent =
-      "Imports word timing and speaker labels when supplied by the Batch application. Presets depend on the selected app version; unsupported models are rejected before upload.";
+      "Word timing and speaker labels are imported when UCloud returns them. A model the UCloud app does not support is refused before any upload.";
     return;
   }
   $("#capability-help").textContent = {
@@ -12153,6 +12104,8 @@ async function runJobCancel(button) {
 }
 function jobActions(job) {
   if (job.kind === "hf_setup") return hfSetupActions(job);
+  // Dictionary downloads (ADR 0187) render their own Retry/Dismiss; never queue controls.
+  if (job.kind === "spelling_dictionary") return "";
   if (job.runtime_preparation_id) return runtimePreparationActions(job);
   if (job.local_deletion) {
     const item = job.local_deletion;
@@ -12160,14 +12113,14 @@ function jobActions(job) {
     return `<button class="button" data-local-delete="${h(item.id)}" ${item.busy || pendingLocalCleanup.has(item.id) ? "disabled" : ""}>${item.committed ? "Retry local cleanup" : "Retry file recovery"}</button>`;
   }
   if (job.input_preparation) return inputPreparationActions(job);
-  if (job.remote_release?.kind === "deletion") return remoteReleaseActions(job);
+  if (job.remote_release) return remoteReleaseActions(job);
   if (job.runtime_batch) return runtimeBatchActions(job);
   let actions = "";
   if (
-    job.ucloud_cleanup_state === "pending" &&
+    (job.ucloud_cleanup_state === "pending" || job.ucloud_batch_discardable) &&
     !["queued", "running"].includes(job.state)
   )
-    actions += `<p class="settings-note">Remote cleanup is pending${job.ucloud_cleanup_error ? `: ${h(job.ucloud_cleanup_error)}` : "; removal could not be verified."}</p><button class="button" data-cleanup="${job.id}">Retry remote cleanup</button>`;
+    actions += `<p class="settings-note">${job.ucloud_cleanup_state === "pending" ? `Remote cleanup is pending${job.ucloud_cleanup_error ? `: ${h(job.ucloud_cleanup_error)}` : "; removal could not be verified."}` : "Some transcripts have not been saved."}</p><button class="button" data-cleanup="${job.id}"${job.ucloud_batch_id ? " data-native-cleanup" : ""}>Retry remote cleanup</button>`;
   if (job.ucloud_cleanup_state === "trashed")
     actions +=
       '<span class="field-note">UCloud run files moved to UCloud Trash. Empty Trash in UCloud to free the space.</span>';
@@ -12205,7 +12158,7 @@ function remoteReleaseActions(job) {
       `<button class="button" data-release-action="${action}" data-release-kind="${h(release.owner_kind)}" data-release-owner="${h(release.id)}">${label}</button>`;
   if (["trashed", "deleted"].includes(release.cleanup_state))
     return '<span class="field-note">UCloud run files moved to UCloud Trash. Empty Trash in UCloud to free the space.</span>';
-  let actions = `<p class="settings-note">${h(job.ucloud_cleanup_error || (release.waiting_for_stop ? "Waiting for the UCloud job to stop before cleanup." : "Local data deleted; UCloud cleanup is pending."))}</p>`;
+  let actions = `<p class="settings-note">${h(job.ucloud_cleanup_error || (release.waiting_for_stop ? "Waiting for the UCloud job to stop before cleanup." : release.kind === "discard" ? "Batch discarded. UCloud cleanup is pending." : "Local data deleted; UCloud cleanup is pending."))}</p>`;
   if (release.can_retry) actions += button("retry", "Retry remote cleanup");
   if (release.submission_uncertain)
     actions +=
@@ -12441,6 +12394,15 @@ function activityJobs(jobs) {
   });
 }
 function needsActivityAttention(job) {
+  if (job.kind === "backup")
+    return (
+      typeof CBSBackupTasks !== "undefined" && CBSBackupTasks.attention(job)
+    );
+  if (job.kind === "project-delete")
+    return (
+      typeof CBSProjectDeletions !== "undefined" &&
+      CBSProjectDeletions.attention(job)
+    );
   if (job.kind === "hf_setup")
     return (
       ["failed", "interrupted"].includes(job.state) ||
@@ -12449,6 +12411,8 @@ function needsActivityAttention(job) {
       )
     );
   if (job.kind === "export") return !["queued", "running"].includes(job.state);
+  if (job.kind === "spelling_dictionary")
+    return ["failed", "interrupted"].includes(job.state);
   if (job.runtime_preparation_id)
     return !runtimePreparationId(job) || job.needs_attention === true;
   if (job.local_deletion) return true;
@@ -12515,7 +12479,19 @@ function runtimeBatchProgress(job) {
 }
 function activityCard(job, expanded) {
   if (job.kind === "hf_setup") return hfSetupCard(job);
+  if (job.kind === "project-delete")
+    return typeof CBSProjectDeletions === "undefined"
+      ? ""
+      : CBSProjectDeletions.card(job);
+  if (job.kind === "backup")
+    return typeof CBSBackupTasks === "undefined"
+      ? ""
+      : CBSBackupTasks.card(job);
   if (job.kind === "export") return CBSBackgroundExports.card(job);
+  if (job.kind === "spelling_dictionary")
+    return typeof spellingDictionaryCard === "function"
+      ? spellingDictionaryCard(job)
+      : "";
   if (job.runtime_preparation_id) {
     const identifier = runtimePreparationId(job),
       progress = Number.isFinite(job.progress)
@@ -12546,7 +12522,8 @@ function activityCard(job, expanded) {
         })
         .join("")}</ul></details>`
     : "";
-  return `<article class="job" ${job.ucloud_batch_id ? `data-activity-batch="${h(job.ucloud_batch_id)}"` : ""}>${activityCardHead(job, job.kind === "media" ? "Media preparation" : h(configurationLabel(job.provider_name, job.model) || "API transcription"))}<h3>${h(job.recording_name)}</h3><p>${h(job.message || "Waiting in the local queue")}</p>${job.inspection_stage ? `<p>${h(job.inspection_stage)}</p>` : ""}${activityJobDetails(job)}${runtimeBatchProgress(job) || `<progress value="${job.progress}" max="1" aria-label="Job progress"></progress>`}${outcomes}${activityRemovalNote(job)}<div class="job-footer"><span class="badge ${["queued", "running"].includes(job.state) ? "working" : ["failed", "interrupted"].includes(job.state) ? "failed" : ""}">${h(job.state)}</span>${jobActions(job)}</div></article>`;
+  const timing = timingActivityOutcome(job);
+  return `<article class="job" ${job.ucloud_batch_id ? `data-activity-batch="${h(job.ucloud_batch_id)}"` : ""}>${activityCardHead(job, job.kind === "media" ? "Media preparation" : h(configurationLabel(job.provider_name, job.model) || "API transcription"))}<h3>${h(job.recording_name)}</h3>${timing ? `<p class="timing-outcome" data-timing-outcome="${timing.kind}">${h(timing.text)}</p>` : ""}${timing?.kind === "none" ? "" : `<p>${h(job.message || "Waiting in the local queue")}</p>`}${job.inspection_stage ? `<p>${h(job.inspection_stage)}</p>` : ""}${activityJobDetails(job)}${runtimeBatchProgress(job) || `<progress value="${job.progress}" max="1" aria-label="Job progress"></progress>`}${outcomes}${activityRemovalNote(job)}<div class="job-footer"><span class="badge ${["queued", "running"].includes(job.state) ? "working" : ["failed", "interrupted"].includes(job.state) ? "failed" : ""}">${h(job.state)}</span>${jobActions(job)}</div></article>`;
 }
 let jobsPollSequence = 0,
   jobsRenderedSequence = 0;
@@ -12567,20 +12544,26 @@ async function pollJobs() {
   jobsRenderedSequence = sequence;
   state.jobs = latest;
   CBSBackgroundExports.observe(latest);
+  // Inactive projects follow their server-owned deletion (ADR 0190).
+  if (typeof CBSProjectDeletions !== "undefined")
+    CBSProjectDeletions.observe(latest);
+  // Settings → Backup follows its server-owned backup (ADR 0192).
+  if (typeof CBSBackupTasks !== "undefined") CBSBackupTasks.observe(latest);
+  // An open editor waiting for its dictionary checks again once Activity says it is ready.
+  if (typeof observeSpellingDictionaries === "function")
+    observeSpellingDictionaries(latest);
   refreshPassageRepairs();
   const activities = activityJobs(state.jobs);
   $("#job-count").textContent = activities.filter((job) =>
     ["queued", "running"].includes(job.state),
   ).length;
-  // Finished realignments of edited passages are routine; Activity keeps the rest.
-  const listed = activities.filter(
-    (job) =>
-      !(job.realign && job.state === "completed" && !job.input_preparation),
-  );
+  // Finished word timing stays listed with its outcome until cleared (ADR 0191).
+  const listed = activities;
   // V105/V162: only the rendered list is filtered; state.jobs stays complete.
   const shown = listed.filter(
     (job) => !clearedFromActivity(job) && !removedFromActivity(job),
   );
+  updateRecordingFailures(shown);
   const expanded = new Set(
     [...document.querySelectorAll("[data-batch-members][open]")].map(
       (details) => details.dataset.batchMembers,
@@ -12631,7 +12614,17 @@ function mergeActivityHidden(value) {
     if (typeof updated === "string") activityHidden.set(id, updated);
 }
 function activityRemovable(job) {
-  if (["export", "hf_setup"].includes(job.kind)) return false;
+  // Server-lifetime cards have their own Discard/Dismiss controls.
+  if (
+    [
+      "export",
+      "hf_setup",
+      "spelling_dictionary",
+      "project-delete",
+      "backup",
+    ].includes(job.kind)
+  )
+    return false;
   if (job.runtime_preparation_id)
     return !!runtimePreparationId(job) && job.can_remove === true;
   if (job.local_deletion) return false;
@@ -12974,10 +12967,26 @@ $("#jobs").addEventListener(
       absent = event.target.closest("[data-no-allocation]"),
       cleanup = event.target.closest("[data-cleanup]");
     if (cleanup) {
-      const result = await api(
-        `/jobs/${cleanup.dataset.cleanup}/cleanup-ucloud`,
-        { method: "POST" },
-      );
+      const path = `/jobs/${cleanup.dataset.cleanup}/cleanup-ucloud`;
+      let result = await api(path, {
+        method: "POST",
+        ...(cleanup.hasAttribute("data-native-cleanup") ? { body: {} } : {}),
+      });
+      const preview = result.discard_preview;
+      if (preview) {
+        if (
+          !confirm(
+            `Discard unsaved outputs for ${preview.unsaved_count} of ${preview.unsaved_count + preview.saved_count} recordings? ` +
+              `The working folder for UCloud job ${preview.remote_job_id} will move to Trash. ` +
+              "Saved transcripts and original recordings on this computer will be kept.",
+          )
+        )
+          return;
+        result = await api(path, {
+          method: "POST",
+          body: { discard_fingerprint: preview.fingerprint },
+        });
+      }
       toast(
         result.cleanup_state === "pending"
           ? "Remote cleanup is pending; see Activity for the reason."
@@ -13014,7 +13023,7 @@ $("#jobs").addEventListener(
       (state.jobs.find((job) => job.id === retry.dataset.retry)?.kind ===
         "enhance" ||
         confirm(
-          "Retry using this job’s original provider settings? Completed chunks are kept and a separate result will be saved. Provider charges may apply.",
+          "Retry with this job’s original settings? Completed parts are kept and the result is saved separately. Provider charges may apply.",
         ))
     )
       await api(`/jobs/${retry.dataset.retry}/retry`, {

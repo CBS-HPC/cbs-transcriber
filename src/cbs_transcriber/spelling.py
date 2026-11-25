@@ -26,11 +26,11 @@ from . import language_preferences
 # preview's rows moved to 12 (operational preferences) and 13 (private vocabulary, ADR 0185).
 SETTINGS_ID, VOCABULARY_ID = 12, 13
 MAX_VOCABULARY_BYTES = 4 * 1024 * 1024
-MAX_WORDS, MAX_PROJECTS, MAX_WORD = 5000, 1024, 128
+MAX_WORDS, MAX_PROJECTS, MAX_RECORDINGS, MAX_WORD = 5000, 1024, 4096, 128
 MAX_TEXT, MAX_TOKENS, MAX_FLAGS = 20_000, 2048, 100
 MAX_DICTIONARY_BYTES = 16 * 1024 * 1024
 CONNECTORS = frozenset("'’-‐‑")
-_PROJECT = re.compile(r"[0-9a-f]{32}\Z")
+_PROJECT = _RECORDING = re.compile(r"[0-9a-f]{32}\Z")
 _SKIP = re.compile(
     r"https?://[^\s]+|www\.[^\s]+|[^\s@]{1,256}@[^\s@.]{1,128}(?:\.[^\s@.]{1,64})+|\[[^\]\r\n]*\]"
     r"|(?im:^[ \t]*speaker[ _-]*\d+[ \t]*:)"
@@ -43,6 +43,10 @@ class Conflict(ValueError):
 
 class AdditionsDisabled(Exception):
     """A hidden spelling feature may remove private words but never add new ones."""
+
+
+class CacheNeedsRemoval(ValueError):
+    """An unverified dictionary folder must be removed before downloading again."""
 
 
 def default_cache_dir():
@@ -129,35 +133,57 @@ def _preferences(db):
     return value
 
 
+def _empty():
+    return {"revision": 0, "words": []}
+
+
+def _owned(db, table, scopes, pattern, message):
+    for identifier, scope in scopes.items():
+        if not isinstance(identifier, str) or not pattern.fullmatch(identifier):
+            raise ValueError(message)
+        _scope(scope)
+    if scopes:
+        live = {
+            row[0]
+            for row in db.execute(
+                f"SELECT id FROM {table} WHERE id IN (SELECT value FROM json_each(?))",
+                (json.dumps(list(scopes)),),
+            )
+        }
+        if live != set(scopes):
+            raise ValueError("A saved spelling vocabulary has no owner.")
+
+
 def _vocabularies(db):
+    """Schema 1 has no recording words; schema 2 adds a non-empty map (ADR 0186).
+
+    The returned value always carries ``recordings``; ``_store`` writes schema 1 whenever that
+    map is empty, so an earlier v2 build keeps reading a library without recording words.
+    """
     value = _setting(db, VOCABULARY_ID, MAX_VOCABULARY_BYTES)
     if value is None:
-        return {"schema": 1, "personal": {"revision": 0, "words": []}, "projects": {}}
+        return {"schema": 1, "personal": _empty(), "projects": {}, "recordings": {}}
+    schema = value.get("schema") if type(value) is dict else None
+    keys = {"schema", "personal", "projects"}
     if (
-        type(value) is not dict
-        or set(value) != {"schema", "personal", "projects"}
-        or type(value["schema"]) is not int
-        or value["schema"] != 1
+        type(schema) is not int
+        or schema not in {1, 2}
+        or set(value) != (keys if schema == 1 else keys | {"recordings"})
         or type(value["projects"]) is not dict
         or len(value["projects"]) > MAX_PROJECTS
     ):
         raise ValueError("The saved spelling vocabulary is invalid.")
+    recordings = value.get("recordings", {})
+    if (
+        type(recordings) is not dict
+        or (schema == 2 and not recordings)
+        or len(recordings) > MAX_RECORDINGS
+    ):
+        raise ValueError("The saved spelling vocabulary is invalid.")
     _scope(value["personal"])
-    for identifier, scope in value["projects"].items():
-        if not isinstance(identifier, str) or not _PROJECT.fullmatch(identifier):
-            raise ValueError("The saved project vocabulary is invalid.")
-        _scope(scope)
-    if value["projects"]:
-        placeholders = ",".join("?" for _ in value["projects"])
-        live = {
-            row[0]
-            for row in db.execute(
-                f"SELECT id FROM projects WHERE id IN ({placeholders})", tuple(value["projects"])
-            )
-        }
-        if live != set(value["projects"]):
-            raise ValueError("A saved spelling vocabulary has no owning project.")
-    return value
+    _owned(db, "projects", value["projects"], _PROJECT, "The saved project vocabulary is invalid.")
+    _owned(db, "recordings", recordings, _RECORDING, "The saved recording vocabulary is invalid.")
+    return {**value, "recordings": recordings}
 
 
 def _write(db, identifier, value):
@@ -171,15 +197,46 @@ def _write(db, identifier, value):
     )
 
 
+def _store(db, value):
+    stored = {"schema": 1, "personal": value["personal"], "projects": value["projects"]}
+    if value["recordings"]:
+        stored.update(schema=2, recordings=value["recordings"])
+    _write(db, VOCABULARY_ID, stored)
+
+
 def project_vocabulary_revision(db, project_id):
-    return _vocabularies(db)["projects"].get(project_id, {"revision": 0})["revision"]
+    return _vocabularies(db)["projects"].get(project_id, _empty())["revision"]
+
+
+def recording_vocabulary_revisions(db, recording_ids):
+    """Delete fences each recording's own revision (0 when it has no words)."""
+    recordings = _vocabularies(db)["recordings"]
+    return {rid: recordings.get(rid, _empty())["revision"] for rid in recording_ids}
+
+
+def remove_owned_vocabulary(db, *, project_id=None, recording_ids=()):
+    """Call inside the logical Delete's writer transaction, before its row deletions.
+
+    A project Delete also removes the words of every recording that still belongs to it.
+    A row that changes nothing is left byte-identical.
+    """
+    value = _vocabularies(db)
+    owned = set(recording_ids)
+    if project_id is not None:
+        owned.update(
+            row[0]
+            for row in db.execute("SELECT id FROM recordings WHERE project_id=?", (project_id,))
+        )
+    changed = project_id is not None and value["projects"].pop(project_id, None) is not None
+    for identifier in owned:
+        changed = value["recordings"].pop(identifier, None) is not None or changed
+    if changed:
+        _store(db, value)
 
 
 def remove_project_vocabulary(db, project_id):
     """Call inside the same writer transaction as logical project deletion."""
-    value = _vocabularies(db)
-    if value["projects"].pop(project_id, None) is not None:
-        _write(db, VOCABULARY_ID, value)
+    remove_owned_vocabulary(db, project_id=project_id)
 
 
 def tokens(text):
@@ -513,36 +570,50 @@ class SpellingService:
             _write(db, SETTINGS_ID, value)
         return value
 
-    def vocabulary(self, project_id=None):
+    @staticmethod
+    def _owner(db, project_id, recording_id):
+        """The live owner, read in the caller's transaction; None for personal words."""
+        if project_id is not None and recording_id is not None:
+            raise ValueError("Choose one spelling vocabulary.")
+        if project_id is not None:
+            if not db.execute("SELECT 1 FROM projects WHERE id=?", (project_id,)).fetchone():
+                raise KeyError(project_id)
+            return "projects", project_id, None
+        if recording_id is not None:
+            row = db.execute(
+                "SELECT project_id FROM recordings WHERE id=?", (recording_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(recording_id)
+            return "recordings", recording_id, row[0]
+        return None
+
+    def vocabulary(self, project_id=None, recording_id=None):
+        """One scope; a recording also returns its inherited project words read-only."""
         with self.store.connection() as db:
             db.execute("BEGIN")
-            if (
-                project_id is not None
-                and not db.execute("SELECT 1 FROM projects WHERE id=?", (project_id,)).fetchone()
-            ):
-                raise KeyError(project_id)
+            owner = self._owner(db, project_id, recording_id)
             value = _vocabularies(db)
-            return (
-                value["personal"]
-                if project_id is None
-                else value["projects"].get(project_id, {"revision": 0, "words": []})
-            )
+            if owner is None:
+                return value["personal"]
+            table, identifier, parent = owner
+            scope = value[table].get(identifier, _empty())
+            if parent is None:
+                return scope
+            return {**scope, "project": {"id": parent, **value["projects"].get(parent, _empty())}}
 
-    def save_vocabulary(self, revision, words, project_id=None, *, additions=True):
+    def save_vocabulary(
+        self, revision, words, project_id=None, recording_id=None, *, additions=True
+    ):
         """CAS-save one scope; ``additions=False`` (hidden feature) permits removals only."""
         _scope({"revision": revision, "words": words})
         with self.store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            if (
-                project_id is not None
-                and not db.execute("SELECT 1 FROM projects WHERE id=?", (project_id,)).fetchone()
-            ):
-                raise KeyError(project_id)
+            # The owner is checked live in the same writer transaction as the CAS.
+            owner = self._owner(db, project_id, recording_id)
             value = _vocabularies(db)
             current = (
-                value["personal"]
-                if project_id is None
-                else value["projects"].get(project_id, {"revision": 0, "words": []})
+                value["personal"] if owner is None else value[owner[0]].get(owner[1], _empty())
             )
             if current["revision"] != revision:
                 raise Conflict("Spelling vocabulary changed. Read it again.")
@@ -552,13 +623,14 @@ class SpellingService:
             }:
                 raise AdditionsDisabled()
             scope = {"revision": _revision(revision + 1), "words": sorted(words, key=_key)}
-            if project_id is None:
+            if owner is None:
                 value["personal"] = scope
             else:
-                value["projects"][project_id] = scope
-                if len(value["projects"]) > MAX_PROJECTS:
-                    raise ValueError("The project vocabulary count exceeds its supported limit.")
-            _write(db, VOCABULARY_ID, value)
+                value[owner[0]][owner[1]] = scope
+                limit = MAX_PROJECTS if owner[0] == "projects" else MAX_RECORDINGS
+                if len(value[owner[0]]) > limit:
+                    raise ValueError("The vocabulary count exceeds its supported limit.")
+            _store(db, value)
         return scope
 
     def _context(self, recording_id):
@@ -581,18 +653,23 @@ class SpellingService:
             selected = language_preferences.selected(language_guard)
             vocab = _vocabularies(db)
             personal = vocab["personal"]
-            project = vocab["projects"].get(row["project_id"], {"revision": 0, "words": []})
+            project = vocab["projects"].get(row["project_id"], _empty())
+            recording = vocab["recordings"].get(recording_id, _empty())
             return {
                 "recording_id": recording_id,
                 "project_id": row["project_id"],
                 "language": selected["language"] if selected else None,
                 "language_guard": language_guard,
                 "preferences": _preferences(db),
+                # Library (personal), project and recording words are one union (ADR 0186).
                 "vocabulary_revision": {
                     "personal": personal["revision"],
                     "project": project["revision"],
+                    "recording": recording["revision"],
                 },
-                "words": {_key(w) for w in [*personal["words"], *project["words"]]},
+                "words": {
+                    _key(w) for w in [*personal["words"], *project["words"], *recording["words"]]
+                },
             }
 
     def _current(self, context):
@@ -648,6 +725,27 @@ class SpellingService:
     def dictionaries(self):
         return {"dictionaries": [self._metadata(entry) for entry in self.catalog.values()]}
 
+    def selected_languages(self):
+        """Dictionary languages chosen as a project default or a recording override."""
+        with self.store.connection() as db:
+            rows = db.execute(
+                "SELECT default_language FROM projects WHERE default_language IS NOT NULL "
+                "UNION SELECT language_override FROM recordings "
+                "WHERE language_override IS NOT NULL"
+            ).fetchall()
+        return sorted({row[0] for row in rows} & set(self.catalog))
+
+    def recording_language(self, recording_id):
+        """The recording's effective language; a missing recording raises KeyError."""
+        return self._context(recording_id)["language"]
+
+    def dictionary_name(self, language):
+        return self.catalog[language]["name"]
+
+    def ready(self, language):
+        entry = self.catalog.get(language)
+        return entry is not None and self._ready(entry)
+
     def install(self, recording_id, settings_revision, consent=False):
         context = self._context(recording_id)
         _revision(settings_revision)
@@ -662,6 +760,33 @@ class SpellingService:
             raise ValueError("No pinned dictionary is available for the recording language.")
         if not self.cache_lock.acquire(blocking=False):
             return {"status": "busy"}
+        return self._install_locked(entry, lambda: self._current(context))
+
+    def _permitted(self, consent):
+        preferences = self.settings()
+        if not consent and not (preferences["enabled"] and preferences["auto_download"]):
+            raise Conflict("Automatic spelling dictionary downloads are off.")
+
+    def install_language(self, language, *, consent, guard=lambda: None, progress=None):
+        """One Activity download (ADR 0187): waits for the shared cache lock, never text.
+
+        Without explicit consent, the saved preferences must still enable checking and
+        automatic downloads when the verified files are published.
+        """
+        entry = self.catalog.get(language)
+        if entry is None:
+            raise ValueError("No pinned dictionary is available for this language.")
+        self._permitted(consent)
+        while not self.cache_lock.acquire(timeout=0.2):
+            if self.closed:
+                raise ValueError("The spelling service is closing.")
+            guard()
+        return self._install_locked(
+            entry, lambda: self._permitted(consent), guard=guard, progress=progress
+        )
+
+    def _install_locked(self, entry, current, *, guard=lambda: None, progress=None):
+        """The caller holds ``cache_lock``; it is always released here."""
         staging = None
         try:
             if self.closed:
@@ -670,7 +795,9 @@ class SpellingService:
                 return self._metadata(entry)
             folder = self._folder(entry)
             if folder.exists():
-                raise ValueError("Remove the unverified dictionary cache before installing again.")
+                raise CacheNeedsRemoval(
+                    "Remove the unverified dictionary cache before installing again."
+                )
             # Constructor/status/check never create storage; explicit retrieval alone does.
             for parent in (*reversed(self.cache.parents), self.cache):
                 if parent.exists():
@@ -680,21 +807,25 @@ class SpellingService:
             staging = folder.parent / ("." + uuid.uuid4().hex + ".partial")
             staging.mkdir()
 
-            def guard():
+            def checked():
                 if self.closed:
                     raise ValueError("The spelling service is closing.")
+                guard()
 
-            for kind, name in (
+            files = (
                 ("aff", "dictionary.aff"),
                 ("dic", "dictionary.dic"),
                 ("license", "license.txt"),
-            ):
-                guard()
+            )
+            for index, (kind, name) in enumerate(files):
+                checked()
                 target = staging / name
-                _download_file(entry["files"][kind], target, guard=guard)
+                _download_file(entry["files"][kind], target, guard=checked)
                 _verified(target, entry["files"][kind])
-            self._current(context)
-            guard()
+                if progress is not None:
+                    progress((index + 1) / len(files))
+            current()
+            checked()
             marker = staging / "installed.json"
             with marker.open("x", encoding="utf-8") as stream:
                 json.dump(

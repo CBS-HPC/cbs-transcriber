@@ -29,6 +29,11 @@ in `full`, hidden in `mvp`, where the per-passage buttons and Deleted passages s
   passage writers (ADR 0135/0147/0157) with the same Working choice and structure lock, so
   later edits elsewhere are kept. With the feature on, the transcript no longer shows per-
   passage Undo merge/Undo split buttons or the Deleted passages section.
+- **Amended 20 November 2026 (user, testing MVP v2).** The per-passage Undo merge/Undo split
+  buttons and the Deleted passages section stay in the transcript alongside the History
+  change list and Undo last change; both routes call the same revision-fenced writers. Undo
+  last change/Redo moved from under Versions into the transcript panel, above the scrolling
+  passages, so they stay visible. MVP v2 shows the feature (ADR 0180).
 
 ## Consequences
 
